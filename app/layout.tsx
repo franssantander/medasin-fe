@@ -3,6 +3,7 @@ import { EB_Garamond, Manrope } from "next/font/google";
 import "./globals.css";
 import { cn } from "@/lib/utils";
 import { QueryProvider } from "@/providers/query-provider";
+import { ThemeProvider } from "@/providers/theme-provider";
 
 const manrope = Manrope({ subsets: ["latin"], variable: "--font-sans" });
 
@@ -20,16 +21,18 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="en"
-      className={cn(
-        "h-full",
-        "antialiased",
-        ebGaramond.variable,
-        "font-sans",
-        manrope.variable,
-      )}
+      className={`${ebGaramond.variable} ${manrope.variable}`}
+      suppressHydrationWarning
     >
       <body>
-        <QueryProvider>{children}</QueryProvider>
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="light"
+          enableSystem
+          disableTransitionOnChange
+        >
+          <QueryProvider>{children}</QueryProvider>
+        </ThemeProvider>
       </body>
     </html>
   );
