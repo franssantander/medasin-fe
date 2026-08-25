@@ -26,7 +26,7 @@ export function useLogin() {
   const onSubmit: SubmitHandler<LoginFormValues> = (data) => {
     loginFn(data, {
       onSuccess: () => {
-        router.push("/dashboard");
+        router.push("/home");
       },
       onError: (error) => {
         if (error instanceof ApiError && error.validationErrors) {
