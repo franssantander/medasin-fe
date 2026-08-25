@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import Image from "next/image";
-
 import {
   Card,
   CardContent,
@@ -19,8 +18,21 @@ export default function LoginPage() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Welcome back</CardTitle>
-        <CardDescription>Sign in to your ActaMind workspace.</CardDescription>
+        <Link href="/" className="flex flex-col items-center">
+          <Image
+            src="/images/medasin-logo.svg"
+            alt="Medasin Logo"
+            width={46}
+            height={46}
+            priority
+          />
+        </Link>
+        <CardTitle className="font-bold text-center text-lg">
+          Welcome back
+        </CardTitle>
+        <CardDescription className="text-center">
+          Sign in to your Medasin workspace.
+        </CardDescription>
       </CardHeader>
       <CardContent>
         {/* <GoogleSignInButton /> */}
