@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { EB_Garamond, Manrope } from "next/font/google";
+import { EB_Garamond, Spectral, Manrope } from "next/font/google";
 import "./globals.css";
 import { QueryProvider } from "@/providers/query-provider";
 import { ThemeProvider } from "@/providers/theme-provider";
@@ -10,6 +10,12 @@ const manrope = Manrope({ subsets: ["latin"], variable: "--font-sans" });
 const ebGaramond = EB_Garamond({
   variable: "--font-garamond-sans",
   subsets: ["latin"],
+});
+
+const spectral = Spectral({
+  variable: "--font-spectral-sans",
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700", "800"],
 });
 
 export const metadata: Metadata = {
@@ -37,7 +43,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${ebGaramond.variable} ${manrope.variable}`}
+      className={`${ebGaramond.variable}  ${spectral.variable} ${manrope.variable}`}
       suppressHydrationWarning
     >
       <body>

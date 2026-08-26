@@ -21,7 +21,7 @@ export function HeroSection() {
             A connected system for a thoughtful life.
           </span>
 
-          <h1 className="mt-4 text-4xl font-bold font-mono tracking-tight sm:text-5xl lg:text-6xl">
+          <h1 className="mt-4 text-4xl font-bold font-spectral tracking-tight sm:text-5xl lg:text-6xl">
             Your mind is at war when your ideas have nowhere to go.
           </h1>
 
