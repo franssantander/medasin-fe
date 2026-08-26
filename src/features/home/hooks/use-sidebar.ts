@@ -1,16 +1,32 @@
 "use client";
 
-import { useState } from "react";
+import { useSyncExternalStore } from "react";
 
 const SIDEBAR_COLLAPSED_STORAGE_KEY = "renthaven.sidebar-collapsed";
+const SIDEBAR_STORAGE_EVENT = "medasin:sidebar-state-change";
 
-function readStoredCollapsed(): boolean {
-  if (typeof window === "undefined") return false;
+function getStoredCollapsed(): boolean {
   try {
     return window.localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY) === "1";
   } catch {
     return false;
   }
+}
+
+function subscribeToSidebarState(onStoreChange: () => void) {
+  const handleStorage = (event: StorageEvent) => {
+    if (event.key === SIDEBAR_COLLAPSED_STORAGE_KEY) {
+      onStoreChange();
+    }
+  };
+
+  window.addEventListener("storage", handleStorage);
+  window.addEventListener(SIDEBAR_STORAGE_EVENT, onStoreChange);
+
+  return () => {
+    window.removeEventListener("storage", handleStorage);
+    window.removeEventListener(SIDEBAR_STORAGE_EVENT, onStoreChange);
+  };
 }
 
 function writeStoredCollapsed(value: boolean): void {
@@ -19,20 +35,21 @@ function writeStoredCollapsed(value: boolean): void {
       SIDEBAR_COLLAPSED_STORAGE_KEY,
       value ? "1" : "0",
     );
+    window.dispatchEvent(new Event(SIDEBAR_STORAGE_EVENT));
   } catch {
-    // localStorage unavailable (private mode, disabled storage) — in-memory state still works
+    // The sidebar remains usable when browser storage is unavailable.
   }
 }
 
 export function useSidebar() {
-  const [isCollapsed, setIsCollapsed] = useState<boolean>(readStoredCollapsed);
+  const isCollapsed = useSyncExternalStore(
+    subscribeToSidebarState,
+    getStoredCollapsed,
+    () => false,
+  );
 
   const toggleSidebar = () => {
-    setIsCollapsed((prev) => {
-      const next = !prev;
-      writeStoredCollapsed(next);
-      return next;
-    });
+    writeStoredCollapsed(!isCollapsed);
   };
 
   return { isCollapsed, toggleSidebar };
