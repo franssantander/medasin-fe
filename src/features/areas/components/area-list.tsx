@@ -131,7 +131,7 @@ function AreaCard({ area, onEdit }: { area: Area; onEdit: () => void }) {
           <div className="-mt-6 mb-1 flex size-12 items-center justify-center rounded-xl text-xl shadow-md ring-4 ring-card" style={areaBadgeStyle(area.background)}>
             <AreaIcon name={area.icon} className="size-5" />
           </div>
-          <CardTitle>
+          <CardTitle className="font-black">
             {area.name}
           </CardTitle>
           <CardDescription className="line-clamp-2 min-h-10">

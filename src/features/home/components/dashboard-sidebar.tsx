@@ -13,6 +13,8 @@ import {
 } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import {
+  dashboardHomeItem,
+  dashboardNavigationGroups,
   dashboardNavigationItems,
   isActiveDashboardRoute,
 } from "./dashboard-navigation";
@@ -56,34 +58,49 @@ function DashboardNavigation({
   collapsed?: boolean;
   onNavigate?: () => void;
 }) {
+  const renderNavigationItem = (
+    item: (typeof dashboardNavigationItems)[number],
+  ) => {
+    const active = isActiveDashboardRoute(pathname, item.href);
+    const Icon = item.icon;
+
+    return (
+      <Link
+        key={item.href}
+        href={item.href}
+        onClick={onNavigate}
+        aria-current={active ? "page" : undefined}
+        aria-label={collapsed ? item.label : undefined}
+        title={collapsed ? item.label : undefined}
+        className={cn(
+          buttonVariants({ variant: "ghost", size: "sm" }),
+          "group relative w-full justify-start gap-2.5 overflow-hidden rounded-lg px-2.5 text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+          active &&
+            "bg-background font-bold text-sidebar-accent-foreground border border-neutral hover:bg-background",
+          collapsed && "justify-center self-center px-0",
+        )}
+      >
+        <Icon className="size-4" aria-hidden="true" />
+
+        {!collapsed && <span className="truncate">{item.label}</span>}
+      </Link>
+    );
+  };
+
   return (
-    <nav aria-label="Dashboard navigation" className="flex flex-col gap-1.5">
-      {dashboardNavigationItems.map((item) => {
-        const active = isActiveDashboardRoute(pathname, item.href);
-        const Icon = item.icon;
+    <nav aria-label="Dashboard navigation" className="flex flex-col">
+      {renderNavigationItem(dashboardHomeItem)}
 
-        return (
-          <Link
-            key={item.href}
-            href={item.href}
-            onClick={onNavigate}
-            aria-current={active ? "page" : undefined}
-            aria-label={collapsed ? item.label : undefined}
-            title={collapsed ? item.label : undefined}
-            className={cn(
-              buttonVariants({ variant: "ghost", size: "sm" }),
-              "group relative w-full justify-start gap-2.5 overflow-hidden rounded-lg px-2.5 text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-              active &&
-                "bg-background font-semibold text-sidebar-accent-foreground border border-neutral hover:bg-background",
-              collapsed && "justify-center self-center px-0",
-            )}
-          >
-            <Icon className="size-4" aria-hidden="true" />
-
-            {!collapsed && <span className="truncate">{item.label}</span>}
-          </Link>
-        );
-      })}
+      {dashboardNavigationGroups.map((group) => (
+        <div key={group.label} className="mt-4 flex flex-col gap-1.5 pt-3">
+          {!collapsed && (
+            <p className="px-2.5 text-xs font-semibold uppercase tracking-wider text-sidebar-foreground/40">
+              {group.label}
+            </p>
+          )}
+          {group.items.map(renderNavigationItem)}
+        </div>
+      ))}
     </nav>
   );
 }
