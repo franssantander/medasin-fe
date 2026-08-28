@@ -13,7 +13,9 @@ export function FormField({
     <label className="grid gap-1.5 text-sm font-medium">
       {label}
       {children}
-      {error && <span className="text-xs font-normal text-destructive">{error}</span>}
+      {error && (
+        <span className="text-xs font-normal text-destructive">{error}</span>
+      )}
     </label>
   );
 }

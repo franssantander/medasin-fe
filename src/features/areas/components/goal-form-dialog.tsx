@@ -5,9 +5,22 @@ import { Target } from "lucide-react";
 import { useEffect } from "react";
 import { Controller, useForm, useWatch } from "react-hook-form";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { ApiError } from "@/lib/axios";
 import { goalSchema, type GoalFormValues } from "../schemas/area-schema";
@@ -82,21 +95,42 @@ export function GoalFormDialog({
   });
 
   return (
-    <Dialog open={open} onOpenChange={(nextOpen) => { if (!isPending) onOpenChange(nextOpen); }}>
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!isPending) onOpenChange(nextOpen);
+      }}
+    >
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <div className="mb-2 flex size-10 items-center justify-center rounded-xl bg-primary text-primary-foreground"><Target className="size-5" /></div>
+          <div className="mb-2 flex size-10 items-center justify-center rounded-xl bg-primary text-primary-foreground">
+            <Target className="size-5" />
+          </div>
           <DialogTitle>{goal ? "Edit goal" : "Add goal"}</DialogTitle>
-          <DialogDescription>{goal ? "Update the goal details and keep its progress accurate." : "Define a clear outcome and give it a realistic timeline."}</DialogDescription>
+          <DialogDescription>
+            {goal
+              ? "Update the goal details and keep its progress accurate."
+              : "Define a clear outcome and give it a realistic timeline."}
+          </DialogDescription>
         </DialogHeader>
 
         <form id="goal-form" onSubmit={submit} className="grid gap-5">
           <FormField label="Title" error={errors.title?.message}>
-            <Input {...register("title")} autoFocus placeholder="What do you want to accomplish?" aria-invalid={Boolean(errors.title)} />
+            <Input
+              {...register("title")}
+              autoFocus
+              placeholder="What do you want to accomplish?"
+              aria-invalid={Boolean(errors.title)}
+            />
           </FormField>
 
           <FormField label="Description" error={errors.description?.message}>
-            <Textarea {...register("description")} className="min-h-24 resize-y" placeholder="Add context, motivation, or a definition of success…" aria-invalid={Boolean(errors.description)} />
+            <Textarea
+              {...register("description")}
+              className="min-h-24 resize-y"
+              placeholder="Add context, motivation, or a definition of success…"
+              aria-invalid={Boolean(errors.description)}
+            />
           </FormField>
 
           <div className="grid gap-4 sm:grid-cols-2">
@@ -105,10 +139,23 @@ export function GoalFormDialog({
                 control={control}
                 name="status"
                 render={({ field }) => (
-                  <Select items={goalStatuses} value={field.value} onValueChange={(value) => value && field.onChange(value)}>
-                    <SelectTrigger className="w-full" aria-invalid={Boolean(errors.status)}><SelectValue placeholder="Choose a status" /></SelectTrigger>
+                  <Select
+                    items={goalStatuses}
+                    value={field.value}
+                    onValueChange={(value) => value && field.onChange(value)}
+                  >
+                    <SelectTrigger
+                      className="w-full"
+                      aria-invalid={Boolean(errors.status)}
+                    >
+                      <SelectValue placeholder="Choose a status" />
+                    </SelectTrigger>
                     <SelectContent align="start">
-                      {goalStatuses.map((status) => <SelectItem key={status.value} value={status.value}>{status.label}</SelectItem>)}
+                      {goalStatuses.map((status) => (
+                        <SelectItem key={status.value} value={status.value}>
+                          {status.label}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 )}
@@ -117,20 +164,40 @@ export function GoalFormDialog({
 
             <div className="grid grid-cols-2 gap-3">
               <FormField label="Start date" error={errors.start_date?.message}>
-                <Input {...register("start_date")} type="date" aria-invalid={Boolean(errors.start_date)} />
+                <Input
+                  {...register("start_date")}
+                  type="date"
+                  aria-invalid={Boolean(errors.start_date)}
+                />
               </FormField>
               <FormField label="Due date" error={errors.due_date?.message}>
-                <Input {...register("due_date")} type="date" min={startDate || undefined} aria-invalid={Boolean(errors.due_date)} />
+                <Input
+                  {...register("due_date")}
+                  type="date"
+                  min={startDate || undefined}
+                  aria-invalid={Boolean(errors.due_date)}
+                />
               </FormField>
             </div>
           </div>
 
-          {errors.root?.message && <p className="text-sm text-destructive">{errors.root.message}</p>}
+          {errors.root?.message && (
+            <p className="text-sm text-destructive">{errors.root.message}</p>
+          )}
         </form>
 
         <DialogFooter>
-          <Button type="button" variant="outline" disabled={isPending} onClick={() => onOpenChange(false)}>Cancel</Button>
-          <Button form="goal-form" type="submit" disabled={isPending}>{isPending ? "Saving…" : goal ? "Save changes" : "Add goal"}</Button>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={isPending}
+            onClick={() => onOpenChange(false)}
+          >
+            Cancel
+          </Button>
+          <Button form="goal-form" type="submit" disabled={isPending}>
+            {isPending ? "Saving…" : goal ? "Save changes" : "Add goal"}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
