@@ -6,7 +6,7 @@ export const areaSchema = z.object({
   name: z.string().trim().min(1, "Name is required.").max(120),
   description: nullableText,
   icon: z.string().trim().max(50).optional().transform((value) => value || null),
-  background: z.string().trim().max(32).optional().transform((value) => value || null),
+  background: z.string().trim().regex(/^#[0-9a-f]{6}$/i, "Enter a valid 6-digit hex color.").optional().transform((value) => value || null),
   background_image: z.custom<File>((value) => value instanceof File, "Choose a valid image file.").nullable().optional(),
 });
 
