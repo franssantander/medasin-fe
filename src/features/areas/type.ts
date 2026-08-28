@@ -55,6 +55,7 @@ export type Goal = {
   uuid: string;
   area_id: number;
   title: string;
+  icon: string;
   description: string | null;
   status: GoalStatus;
   start_date: string | null;
@@ -140,6 +141,7 @@ export type AreaInput = {
 
 export type GoalInput = {
   title: string;
+  icon: string;
   description?: string | null;
   status: GoalStatus;
   start_date?: string | null;

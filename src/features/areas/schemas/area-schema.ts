@@ -33,6 +33,7 @@ export const areaSchema = z.object({
 export const goalSchema = z
   .object({
     title: z.string().trim().min(1, "Title is required.").max(120),
+    icon: z.string().trim().min(1).max(50).default("Target"),
     description: nullableText,
     status: z.enum(["pending", "in_progress", "completed", "cancelled"]),
     start_date: z

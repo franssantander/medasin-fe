@@ -1,8 +1,8 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Target } from "lucide-react";
-import { useEffect } from "react";
+import { Search } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import { Controller, useForm, useWatch } from "react-hook-form";
 import { Button } from "@/components/ui/button";
 import {
@@ -25,6 +25,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { ApiError } from "@/lib/axios";
 import { goalSchema, type GoalFormValues } from "../schemas/area-schema";
 import type { Goal, GoalInput, GoalStatus } from "../type";
+import { AREA_ICONS, AreaIcon } from "./area-icons";
 import { FormField } from "./form-field";
 
 const goalStatuses: { value: GoalStatus; label: string }[] = [
@@ -47,17 +48,20 @@ export function GoalFormDialog({
   isPending: boolean;
   onSubmit: (input: GoalInput) => Promise<void>;
 }) {
+  const [iconSearch, setIconSearch] = useState("");
   const {
     control,
     register,
     handleSubmit,
     reset,
     setError,
+    setValue,
     formState: { errors },
   } = useForm<GoalFormValues, unknown, GoalInput>({
     resolver: zodResolver(goalSchema),
     defaultValues: {
       title: "",
+      icon: "Target",
       description: "",
       status: "pending",
       start_date: "",
@@ -65,11 +69,19 @@ export function GoalFormDialog({
     },
   });
   const startDate = useWatch({ control, name: "start_date" });
+  const selectedIcon = useWatch({ control, name: "icon" });
+  const filteredIcons = useMemo(() => {
+    const query = iconSearch.trim().toLowerCase();
+    return query
+      ? AREA_ICONS.filter(({ name }) => name.toLowerCase().includes(query))
+      : AREA_ICONS;
+  }, [iconSearch]);
 
   useEffect(() => {
     if (open) {
       reset({
         title: goal?.title ?? "",
+        icon: goal?.icon || "Target",
         description: goal?.description ?? "",
         status: goal?.status ?? "pending",
         start_date: goal?.start_date?.slice(0, 10) ?? "",
@@ -80,7 +92,7 @@ export function GoalFormDialog({
 
   const submit = handleSubmit(async (values) => {
     try {
-      await onSubmit(values);
+      await onSubmit({ ...values, icon: values.icon || "Target" });
       onOpenChange(false);
     } catch (error) {
       if (error instanceof ApiError && error.validationErrors) {
@@ -104,7 +116,7 @@ export function GoalFormDialog({
       <DialogContent className="max-w-2xl">
         <DialogHeader>
           <div className="mb-2 flex size-10 items-center justify-center rounded-xl bg-primary text-primary-foreground">
-            <Target className="size-5" />
+            <AreaIcon name={selectedIcon || "Target"} className="size-5" />
           </div>
           <DialogTitle>{goal ? "Edit goal" : "Add goal"}</DialogTitle>
           <DialogDescription>
@@ -122,6 +134,53 @@ export function GoalFormDialog({
               placeholder="What do you want to accomplish?"
               aria-invalid={Boolean(errors.title)}
             />
+          </FormField>
+
+          <FormField label="Icon" error={errors.icon?.message}>
+            <div className="overflow-hidden rounded-xl border">
+              <div className="flex items-center gap-3 border-b p-3">
+                <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+                  <AreaIcon
+                    name={selectedIcon || "Target"}
+                    className="size-4"
+                  />
+                </div>
+                <div className="relative min-w-0 flex-1">
+                  <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    value={iconSearch}
+                    onChange={(event) => setIconSearch(event.target.value)}
+                    placeholder={`Search ${AREA_ICONS.length} Lucide icons…`}
+                    className="pl-9"
+                  />
+                </div>
+              </div>
+              <div className="grid max-h-48 grid-cols-7 gap-1 overflow-y-auto p-3 sm:grid-cols-9">
+                {filteredIcons.map(({ name, icon: Icon }) => (
+                  <button
+                    key={name}
+                    type="button"
+                    title={name}
+                    aria-label={`Use ${name} icon`}
+                    aria-pressed={(selectedIcon || "Target") === name}
+                    className="flex aspect-square items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground aria-pressed:bg-primary aria-pressed:text-primary-foreground"
+                    onClick={() =>
+                      setValue("icon", name, {
+                        shouldDirty: true,
+                        shouldValidate: true,
+                      })
+                    }
+                  >
+                    <Icon className="size-4" />
+                  </button>
+                ))}
+              </div>
+              {filteredIcons.length === 0 && (
+                <p className="px-3 pb-4 text-center text-sm text-muted-foreground">
+                  No icons match “{iconSearch}”.
+                </p>
+              )}
+            </div>
           </FormField>
 
           <FormField label="Description" error={errors.description?.message}>

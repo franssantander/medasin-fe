@@ -36,6 +36,7 @@ import {
 import { toast } from "@/components/ui/toast";
 import { areaService } from "../services/area-service";
 import type { Goal, GoalFilter, GoalStatus, Paginated } from "../type";
+import { AreaIcon } from "./area-icons";
 
 const goalFilters: { value: GoalFilter; label: string }[] = [
   { value: "all", label: "All" },
@@ -163,35 +164,40 @@ export function GoalTracker({
                 key={goal.uuid}
                 className="grid gap-3 px-4 py-4 sm:grid-cols-[1fr_auto_auto] sm:items-center"
               >
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <h3 className="truncate font-medium">{goal.title}</h3>
-                    {overdue && <Badge variant="destructive">Overdue</Badge>}
+                <div className="flex min-w-0 items-start gap-3">
+                  <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                    <AreaIcon name={goal.icon || "Target"} className="size-4" />
                   </div>
-                  {goal.description && (
-                    <p className="mt-1 line-clamp-1 text-sm text-muted-foreground">
-                      {goal.description}
-                    </p>
-                  )}
-                  <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                    {goal.start_date && (
-                      <span className="flex items-center gap-1">
-                        <CalendarDays className="size-3.5" />
-                        Started {formatDate(goal.start_date)}
-                      </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <h3 className="truncate font-medium">{goal.title}</h3>
+                      {overdue && <Badge variant="destructive">Overdue</Badge>}
+                    </div>
+                    {goal.description && (
+                      <p className="mt-1 line-clamp-1 text-sm text-muted-foreground">
+                        {goal.description}
+                      </p>
                     )}
-                    {goal.due_date && (
-                      <span
-                        className={
-                          overdue ? "font-medium text-destructive" : ""
-                        }
-                      >
-                        Due {formatDate(goal.due_date)}
-                      </span>
-                    )}
-                    {!goal.start_date && !goal.due_date && (
-                      <span>No dates set</span>
-                    )}
+                    <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                      {goal.start_date && (
+                        <span className="flex items-center gap-1">
+                          <CalendarDays className="size-3.5" />
+                          Started {formatDate(goal.start_date)}
+                        </span>
+                      )}
+                      {goal.due_date && (
+                        <span
+                          className={
+                            overdue ? "font-medium text-destructive" : ""
+                          }
+                        >
+                          Due {formatDate(goal.due_date)}
+                        </span>
+                      )}
+                      {!goal.start_date && !goal.due_date && (
+                        <span>No dates set</span>
+                      )}
+                    </div>
                   </div>
                 </div>
                 <Select
