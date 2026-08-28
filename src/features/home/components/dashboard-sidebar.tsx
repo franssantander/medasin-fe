@@ -4,11 +4,11 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  ChevronLeft,
-  ChevronRight,
   ChevronsUpDown,
   LoaderCircle,
   LogOut,
+  PanelLeft,
+  PanelRight,
   Settings,
   UserRound,
 } from "lucide-react";
@@ -55,7 +55,7 @@ function Brand() {
     <Link
       href="/home"
       aria-label="Medasin home"
-      className="flex h-10 min-w-0 items-center gap-2 overflow-hidden rounded-md outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
+      className="flex h-10 min-w-0 items-center gap-1 overflow-hidden rounded-md outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
     >
       <Image
         src="/images/medasin-logo.svg"
@@ -65,7 +65,7 @@ function Brand() {
         className="size-8 shrink-0"
         priority
       />
-      <span className="truncate text-xl font-garamond">Medasin</span>
+      <span className="truncate text-xl font-garamond font-semibold">Medasin</span>
     </Link>
   );
 }
@@ -212,12 +212,12 @@ export function DashboardSidebar({
       <aside
         className={cn(
           "hidden h-full shrink-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground transition-[width] duration-200 md:flex",
-          isCollapsed ? "w-16" : "w-64",
+          isCollapsed ? "w-16" : "w-60",
         )}
       >
         <div
           className={cn(
-            "flex h-14 items-center gap-2 px-3",
+            "flex h-14 items-center gap-2 px-3 border-b",
             isCollapsed && "justify-center",
           )}
         >
@@ -235,7 +235,7 @@ export function DashboardSidebar({
             aria-expanded={!isCollapsed}
             title={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
           >
-            {isCollapsed ? <ChevronRight /> : <ChevronLeft />}
+            {isCollapsed ? <PanelLeft /> : <PanelRight />}
           </Button>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto px-3 py-4">
