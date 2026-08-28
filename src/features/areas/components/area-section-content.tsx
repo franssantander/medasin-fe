@@ -40,6 +40,7 @@ import type {
   EditableAreaRecordKind,
 } from "./area-detail-types";
 import { GoalTracker } from "./goal-tracker";
+import { HabitTracker } from "./habit-tracker";
 
 type AreaRecord = Goal | Habit | Note | Project | Resource;
 
@@ -109,7 +110,23 @@ export function AreaSectionContent({
     );
   }
 
-  const singular = tab === "habits" ? "habit" : "note";
+  if (tab === "habits") {
+    return (
+      <HabitTracker
+        habits={records as Habit[]}
+        pagination={data as Paginated<Habit> | undefined}
+        archived={archived}
+        areaUuid={areaUuid}
+        page={page}
+        setPage={setPage}
+        onAdd={() => onAdd("habit")}
+        onEdit={(habit) => onEdit("habit", habit)}
+        onDelete={(uuid) => onDelete("habit", uuid)}
+      />
+    );
+  }
+
+  const singular = "note";
   return (
     <div className="grid gap-4">
       <div className="flex items-center justify-between gap-3">
@@ -119,7 +136,7 @@ export function AreaSectionContent({
             {data?.total ?? 0} connected
           </p>
         </div>
-        {!archived && (tab === "habits" || tab === "notes") && (
+        {!archived && tab === "notes" && (
           <Button size="sm" onClick={() => onAdd(singular)}>
             <Plus />
             Add {singular}

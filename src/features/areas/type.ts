@@ -20,6 +20,18 @@ export type GoalStatus =
   | "cancelled";
 export type GoalFilter = "all" | "active" | "completed" | "cancelled";
 export type HabitFrequency = "daily" | "weekly" | "monthly" | "custom";
+export type HabitWeekday =
+  | "sunday"
+  | "monday"
+  | "tuesday"
+  | "wednesday"
+  | "thursday"
+  | "friday"
+  | "saturday";
+export type HabitSchedule = {
+  days?: HabitWeekday[];
+  dates?: number[];
+};
 
 export type Area = {
   id: number;
@@ -62,12 +74,27 @@ export type Habit = {
   uuid: string;
   area_id: number;
   name: string;
+  icon: string;
   description: string | null;
   frequency: HabitFrequency;
-  schedule: unknown[] | null;
+  schedule: HabitSchedule | null;
   is_active: boolean;
   created_at: string;
   updated_at: string;
+};
+
+export type HabitCheckIn = {
+  date: string;
+  completed: boolean;
+};
+
+export type HabitHistory = {
+  check_ins: HabitCheckIn[];
+  current_streak: number;
+  best_streak: number;
+  scheduled_count: number;
+  completed_count: number;
+  completion_rate: number;
 };
 
 export type Note = {
@@ -121,8 +148,10 @@ export type GoalInput = {
 
 export type HabitInput = {
   name: string;
+  icon: string;
   description?: string | null;
   frequency: HabitFrequency;
+  schedule: HabitSchedule | null;
   is_active: boolean;
 };
 

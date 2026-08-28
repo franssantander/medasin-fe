@@ -50,8 +50,10 @@ export function RecordFormSheet({
       if (kind === "habit")
         input = {
           name: String(form.name),
+          icon: "Repeat2",
           description: String(form.description) || null,
           frequency: form.frequency as HabitInput["frequency"],
+          schedule: null,
           is_active: Boolean(form.is_active),
         };
       else

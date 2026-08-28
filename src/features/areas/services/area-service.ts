@@ -9,6 +9,7 @@ import type {
   GoalInput,
   GoalTrackerData,
   Habit,
+  HabitHistory,
   HabitInput,
   Note,
   NoteInput,
@@ -76,6 +77,12 @@ export const areaService = {
   },
   removeHabit(areaUuid: string, habitUuid: string) {
     return unwrap(axiosClient.delete<ApiResponse<null>>(`/area/${areaUuid}/habits/${habitUuid}`));
+  },
+  habitHistory(areaUuid: string, habitUuid: string, startDate: string, endDate: string, timezone = "UTC") {
+    return unwrap(axiosClient.get<ApiResponse<HabitHistory>>(`/area/${areaUuid}/habits/${habitUuid}/history`, { params: { start_date: startDate, end_date: endDate, timezone } }));
+  },
+  checkInHabit(areaUuid: string, habitUuid: string, date: string, completed: boolean, timezone = "UTC") {
+    return unwrap(axiosClient.put<ApiResponse<HabitHistory>>(`/area/${areaUuid}/habits/${habitUuid}/check-ins/${date}`, { completed, timezone }));
   },
   notes(areaUuid: string, page = 1) {
     return unwrap(axiosClient.get<ApiResponse<Paginated<Note>>>(`/area/${areaUuid}/notes`, { params: { page } }));

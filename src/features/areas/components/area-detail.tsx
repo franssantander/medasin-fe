@@ -41,6 +41,7 @@ import { AreaDetailHeader } from "./area-detail-header";
 import { AreaFormDialog } from "./area-form-dialog";
 import { AreaSectionContent } from "./area-section-content";
 import { GoalFormDialog } from "./goal-form-dialog";
+import { HabitFormDialog } from "./habit-form-dialog";
 import { RecordFormSheet } from "./record-form-sheet";
 
 const tabs: { value: AreaTab; label: string; icon: typeof FolderKanban }[] = [
@@ -257,7 +258,20 @@ export function AreaDetail() {
           goalMutation.mutateAsync(input).then(() => undefined)
         }
       />
-      {recordForm && (
+      {recordForm?.kind === "habit" && (
+        <HabitFormDialog
+          open
+          habit={recordForm.value as Habit | undefined}
+          onOpenChange={(open) => {
+            if (!open) setRecordForm(undefined);
+          }}
+          isPending={recordMutation.isPending}
+          onSubmit={(input) =>
+            recordMutation.mutateAsync(input).then(() => undefined)
+          }
+        />
+      )}
+      {recordForm?.kind === "note" && (
         <RecordFormSheet
           kind={recordForm.kind}
           value={recordForm.value}
