@@ -4,8 +4,10 @@ import type {
   Area,
   AreaInput,
   AreaStatusFilter,
+  GoalFilter,
   Goal,
   GoalInput,
+  GoalTrackerData,
   Habit,
   HabitInput,
   Note,
@@ -51,13 +53,13 @@ export const areaService = {
   restore(areaUuid: string) {
     return unwrap(axiosClient.post<ApiResponse<Area>>(`/area/${areaUuid}/restore`));
   },
-  goals(areaUuid: string, page = 1) {
-    return unwrap(axiosClient.get<ApiResponse<Paginated<Goal>>>(`/area/${areaUuid}/goals`, { params: { page } }));
+  goals(areaUuid: string, page = 1, filter: GoalFilter = "all") {
+    return unwrap(axiosClient.get<ApiResponse<GoalTrackerData>>(`/area/${areaUuid}/goals`, { params: { page, filter } }));
   },
   createGoal(areaUuid: string, input: GoalInput) {
     return unwrap(axiosClient.post<ApiResponse<Goal>>(`/area/${areaUuid}/goals`, input));
   },
-  updateGoal(areaUuid: string, goalUuid: string, input: GoalInput) {
+  updateGoal(areaUuid: string, goalUuid: string, input: Partial<GoalInput>) {
     return unwrap(axiosClient.put<ApiResponse<Goal>>(`/area/${areaUuid}/goals/${goalUuid}`, input));
   },
   removeGoal(areaUuid: string, goalUuid: string) {

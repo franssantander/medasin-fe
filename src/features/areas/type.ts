@@ -18,6 +18,7 @@ export type GoalStatus =
   | "in_progress"
   | "completed"
   | "cancelled";
+export type GoalFilter = "all" | "active" | "completed" | "cancelled";
 export type HabitFrequency = "daily" | "weekly" | "monthly" | "custom";
 
 export type Area = {
@@ -49,6 +50,11 @@ export type Goal = {
   completed_at: string | null;
   created_at: string;
   updated_at: string;
+};
+
+export type GoalTrackerData = {
+  items: Paginated<Goal>;
+  counts: Record<GoalFilter, number>;
 };
 
 export type Habit = {

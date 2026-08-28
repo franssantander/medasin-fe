@@ -7,8 +7,8 @@ export const areaKeys = {
   all: ["areas"] as const,
   list: (status: AreaStatusFilter) => ["areas", "list", status] as const,
   detail: (uuid: string) => ["areas", "detail", uuid] as const,
-  section: (uuid: string, section: string, page = 1) =>
-    ["areas", "detail", uuid, section, page] as const,
+  section: (uuid: string, section: string, page = 1, filter?: string) =>
+    ["areas", "detail", uuid, section, page, filter] as const,
 };
 
 export function useAreasQuery(status: AreaStatusFilter = "active") {
