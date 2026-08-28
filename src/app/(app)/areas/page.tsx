@@ -1,10 +1,5 @@
-import PageHeader from "@/components/shared/page-header";
-import { Button } from "@/components/ui/button";
+import { AreaList } from "@/features/areas/components/area-list";
 
-export default function page() {
-  return (
-    <div className="w-full">
-      <PageHeader title="Areas" />
-    </div>
-  );
+export default function AreasPage() {
+  return <AreaList />;
 }

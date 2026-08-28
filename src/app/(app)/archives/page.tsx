@@ -1,13 +1,5 @@
-import React from "react";
+import { AreaArchives } from "@/features/areas/components/area-archives";
 
-export default function page() {
-  return (
-    <>
-      <div className="w-full">
-        <div>
-          <h1 className="font-bold text-lg">Archives</h1>
-        </div>
-      </div>
-    </>
-  );
+export default function ArchivesPage() {
+  return <AreaArchives />;
 }
