@@ -1,11 +1,10 @@
-import React from "react";
+import PageHeader from "@/components/shared/page-header";
+import { Button } from "@/components/ui/button";
 
 export default function page() {
   return (
     <div className="w-full">
-      <div>
-        <h1 className="font-bold text-lg">Areas</h1>
-      </div>
+      <PageHeader title="Areas" />
     </div>
   );
 }

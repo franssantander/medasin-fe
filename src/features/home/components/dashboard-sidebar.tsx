@@ -2,34 +2,15 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import {
-  ChevronsUpDown,
-  LoaderCircle,
-  LogOut,
-  PanelLeft,
-  PanelRight,
-  Settings,
-  UserRound,
-} from "lucide-react";
+import { PanelLeft, PanelRight } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { Button, buttonVariants } from "@/components/ui/button";
 import {
   Sheet,
   SheetContent,
   SheetDescription,
   SheetTitle,
 } from "@/components/ui/sheet";
-import { toast } from "@/components/ui/toast";
-import { useLogoutMutation } from "@/features/auth/queries/auth-query";
-import type { CurrentUser } from "@/features/auth/type";
 import { cn } from "@/lib/utils";
 import {
   dashboardNavigationItems,
@@ -38,17 +19,11 @@ import {
 
 type DashboardSidebarProps = {
   pathname: string;
-  currentUser?: CurrentUser;
   isCollapsed: boolean;
   onToggle: () => void;
   isMobileOpen: boolean;
   onMobileOpenChange: (open: boolean) => void;
 };
-
-function getInitials(user?: CurrentUser) {
-  const initials = `${user?.first_name?.[0] ?? ""}${user?.last_name?.[0] ?? ""}`;
-  return initials || user?.username?.[0]?.toUpperCase() || "U";
-}
 
 function Brand() {
   return (
@@ -82,7 +57,7 @@ function DashboardNavigation({
   onNavigate?: () => void;
 }) {
   return (
-    <nav aria-label="Dashboard navigation" className="flex flex-col gap-1">
+    <nav aria-label="Dashboard navigation" className="flex flex-col gap-1.5">
       {dashboardNavigationItems.map((item) => {
         const active = isActiveDashboardRoute(pathname, item.href);
         const Icon = item.icon;
@@ -96,14 +71,16 @@ function DashboardNavigation({
             aria-label={collapsed ? item.label : undefined}
             title={collapsed ? item.label : undefined}
             className={cn(
-              "flex h-10 items-center gap-2 rounded-md px-3 text-sm font-medium text-sidebar-foreground/50 transition-colors outline-none hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring",
+              buttonVariants({ variant: "ghost", size: "sm" }),
+              "group relative w-full justify-start gap-2.5 overflow-hidden rounded-lg px-2.5 text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
               active &&
-                "bg-white border text-sidebar-accent-foreground hover:text-sidebar-accent-foreground hover:bg-white font-semibold",
-              collapsed && "justify-center px-0",
+                "bg-background font-semibold text-sidebar-accent-foreground border border-neutral hover:bg-background",
+              collapsed && "justify-center self-center px-0",
             )}
           >
-            <Icon className="size-4.5 shrink-0" aria-hidden="true" />
-            {!collapsed && <span>{item.label}</span>}
+            <Icon className="size-4" aria-hidden="true" />
+
+            {!collapsed && <span className="truncate">{item.label}</span>}
           </Link>
         );
       })}
@@ -111,100 +88,8 @@ function DashboardNavigation({
   );
 }
 
-function ProfileMenu({
-  user,
-  collapsed = false,
-}: {
-  user?: CurrentUser;
-  collapsed?: boolean;
-}) {
-  const router = useRouter();
-  const { mutate: logout, isPending } = useLogoutMutation();
-  const displayName = user?.full_name || user?.username || "User";
-
-  const handleLogout = () => {
-    logout(undefined, {
-      onSuccess: () => {
-        toast.add({
-          type: "success",
-          description: "You have been logged out.",
-        });
-        router.replace("/login");
-        router.refresh();
-      },
-      onError: (error) => {
-        toast.add({
-          type: "error",
-          description: error.message || "Unable to log out. Please try again.",
-        });
-      },
-    });
-  };
-
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger
-        aria-label={`Open account menu for ${displayName}`}
-        className={cn(
-          "flex w-full items-center gap-3 rounded-md px-2 text-left outline-none transition-colors hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-sidebar-ring data-popup-open:bg-sidebar-accent",
-          collapsed && "justify-center px-0",
-        )}
-      >
-        <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">
-          {getInitials(user)}
-        </span>
-        {!collapsed && (
-          <>
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-sm font-medium">
-                {displayName}
-              </span>
-              {user?.email && (
-                <span className="block truncate text-xs text-muted-foreground">
-                  {user.email}
-                </span>
-              )}
-            </span>
-            <ChevronsUpDown className="size-4 shrink-0 text-muted-foreground" />
-          </>
-        )}
-      </DropdownMenuTrigger>
-      <DropdownMenuContent className="w-40">
-        <div className="min-w-0 px-2.5 py-2">
-          <p className="truncate text-sm font-medium">{displayName}</p>
-          {user?.email && (
-            <p className="truncate text-xs text-muted-foreground">
-              {user.email}
-            </p>
-          )}
-        </div>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem>
-          <UserRound />
-          Profile
-        </DropdownMenuItem>
-        <DropdownMenuItem>
-          <Settings />
-          Settings
-        </DropdownMenuItem>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem
-          destructive
-          disabled={isPending}
-          closeOnClick={false}
-          onClick={handleLogout}
-        >
-          {isPending ? <LoaderCircle className="animate-spin" /> : <LogOut />}
-          {isPending ? "Logging out…" : "Log out"}
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-}
-
 export function DashboardSidebar({
   pathname,
-  currentUser,
   isCollapsed,
   onToggle,
   isMobileOpen,
@@ -244,9 +129,6 @@ export function DashboardSidebar({
         <div className="min-h-0 flex-1 overflow-y-auto px-3 py-4">
           <DashboardNavigation pathname={pathname} collapsed={isCollapsed} />
         </div>
-        <div className="border-t border-sidebar-border p-3">
-          <ProfileMenu user={currentUser} collapsed={isCollapsed} />
-        </div>
       </aside>
 
       <Sheet open={isMobileOpen} onOpenChange={onMobileOpenChange}>
@@ -263,9 +145,6 @@ export function DashboardSidebar({
               pathname={pathname}
               onNavigate={() => onMobileOpenChange(false)}
             />
-          </div>
-          <div className="border-t border-sidebar-border p-3">
-            <ProfileMenu user={currentUser} />
           </div>
         </SheetContent>
       </Sheet>

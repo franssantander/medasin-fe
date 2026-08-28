@@ -54,7 +54,6 @@ export default function AppLayout({
     <div id="dashboard-shell" className="flex h-dvh overflow-hidden bg-background">
       <DashboardSidebar
         pathname={pathname}
-        currentUser={currentUser}
         isCollapsed={isCollapsed}
         onToggle={toggleSidebar}
         isMobileOpen={isMobileNavOpen}
@@ -63,7 +62,7 @@ export default function AppLayout({
 
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <DashboardHeader
-          pathname={pathname}
+          currentUser={currentUser}
           isMobileNavOpen={isMobileNavOpen}
           onOpenMobileNav={() => setIsMobileNavOpen(true)}
         />
