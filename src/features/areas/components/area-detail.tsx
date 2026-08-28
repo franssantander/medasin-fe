@@ -1,19 +1,21 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Archive, ArrowLeft, ExternalLink, FileText, FolderKanban, Link2, ListChecks, Pencil, Pin, Plus, RefreshCw, Repeat2, Trash2, Unlink } from "lucide-react";
+import { Archive, ArrowLeft, ExternalLink, FileText, FolderKanban, Link2, ListChecks, MoreHorizontal, Pencil, Pin, Plus, RefreshCw, Repeat2, Trash2, Unlink } from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useState, type ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "@/components/ui/toast";
 import { areaKeys, useAreaMutation, useAreaQuery } from "../queries/area-query";
 import { areaService } from "../services/area-service";
 import type { ApiResponse, AreaInput, Goal, GoalInput, Habit, HabitInput, Note, NoteInput, Paginated, Project, Resource } from "../type";
-import { AreaFormDialog } from "./area-form-dialog";
+import { AreaFormDialog, DEFAULT_AREA_BACKGROUND } from "./area-form-dialog";
 import { AreaIcon, areaBadgeStyle } from "./area-icons";
 import { RecordFormSheet } from "./record-form-sheet";
 
@@ -36,6 +38,7 @@ export function AreaDetail() {
   const [activeTab, setActiveTab] = useState<Tab>("projects");
   const [page, setPage] = useState(1);
   const [areaFormOpen, setAreaFormOpen] = useState(false);
+  const [confirmationAction, setConfirmationAction] = useState<"archive" | "delete">();
   const [recordForm, setRecordForm] = useState<{ kind: "goal" | "habit" | "note"; value?: EditableRecord }>();
   const { data: areaResponse, isLoading, isError, refetch } = useAreaQuery(uuid);
   const area = areaResponse?.data;
@@ -44,6 +47,8 @@ export function AreaDetail() {
   const archiveArea = useAreaMutation("archive", uuid);
   const restoreArea = useAreaMutation("restore", uuid);
   const removeArea = useAreaMutation("remove", uuid);
+  const areaActionPending = archiveArea.isPending || removeArea.isPending;
+  const isDeletingArea = confirmationAction === "delete";
 
   const sectionQuery = useQuery<ApiResponse<Paginated<Goal | Habit | Note | Project | Resource>>>({
     queryKey: areaKeys.section(uuid, activeTab, page),
@@ -92,19 +97,51 @@ export function AreaDetail() {
 
   const changeTab = (tab: Tab) => { setActiveTab(tab); setPage(1); };
 
+  const confirmAreaAction = async () => {
+    if (confirmationAction === "archive") {
+      await archiveArea.mutateAsync();
+      setConfirmationAction(undefined);
+      return;
+    }
+
+    if (confirmationAction === "delete") {
+      await removeArea.mutateAsync();
+      setConfirmationAction(undefined);
+      router.replace("/areas");
+    }
+  };
+
   return (
     <div className="grid gap-5">
       <div><Button render={<Link href={archived ? "/archives" : "/areas"} />} variant="ghost" size="sm"><ArrowLeft />Back to {archived ? "archives" : "areas"}</Button></div>
-      <Card>
-        <CardHeader className="sm:grid-cols-[auto_1fr_auto] sm:items-center">
+      <Card className="gap-0 py-0">
+        <div
+          className="h-40 bg-cover bg-center sm:h-48"
+          style={{
+            backgroundImage: `url('${area.background_image_url || DEFAULT_AREA_BACKGROUND}')`,
+          }}
+          role="img"
+          aria-label={`${area.name} background`}
+        />
+        <CardHeader className="py-6 sm:grid-cols-[auto_1fr_auto] sm:items-center">
           <div className="flex size-12 items-center justify-center rounded-xl" style={areaBadgeStyle(area.background)}><AreaIcon name={area.icon} className="size-5" /></div>
           <div><div className="flex flex-wrap items-center gap-2"><CardTitle className="text-xl">{area.name}</CardTitle>{archived && <Badge variant="secondary">Archived</Badge>}</div><CardDescription className="mt-1">{area.description || "No description yet."}</CardDescription></div>
           <CardAction className="flex gap-2">
-            {archived ? <Button variant="outline" onClick={() => restoreArea.mutate()} disabled={restoreArea.isPending}>Restore</Button> : <><Button variant="outline" size="icon" aria-label="Edit area" onClick={() => setAreaFormOpen(true)}><Pencil /></Button><Button variant="outline" onClick={() => archiveArea.mutate()} disabled={archiveArea.isPending}><Archive />Archive</Button></>}
-            {!archived && <Button variant="destructive" size="icon" aria-label="Delete area" onClick={() => { if (window.confirm(`Permanently delete ${area.name} and its nested records?`)) removeArea.mutate(undefined, { onSuccess: () => router.replace("/areas") }); }}><Trash2 /></Button>}
+            {archived ? (
+              <Button variant="outline" onClick={() => restoreArea.mutate()} disabled={restoreArea.isPending}>Restore</Button>
+            ) : (
+              <DropdownMenu>
+                <DropdownMenuTrigger render={<Button variant="outline" size="icon" aria-label={`Actions for ${area.name}`} />}><MoreHorizontal /></DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => setAreaFormOpen(true)}><Pencil />Edit</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setConfirmationAction("archive")}><Archive />Archive</DropdownMenuItem>
+                  <DropdownMenuItem destructive onClick={() => setConfirmationAction("delete")}><Trash2 />Delete</DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
           </CardAction>
         </CardHeader>
-        {archived && <CardContent><p className="rounded-lg bg-muted px-3 py-2 text-sm text-muted-foreground">This Area is read-only. Restore it before making changes.</p></CardContent>}
+        {archived && <CardContent className="pb-6"><p className="rounded-lg bg-muted px-3 py-2 text-sm text-muted-foreground">This Area is read-only. Restore it before making changes.</p></CardContent>}
       </Card>
 
       <div className="flex gap-1 overflow-x-auto rounded-lg border bg-card p-1" role="tablist">
@@ -129,6 +166,30 @@ export function AreaDetail() {
 
       <AreaFormDialog open={areaFormOpen} onOpenChange={setAreaFormOpen} area={area} isPending={updateArea.isPending} onSubmit={(input: AreaInput) => updateArea.mutateAsync(input).then(() => undefined)} />
       {recordForm && <RecordFormSheet kind={recordForm.kind} value={recordForm.value} open={Boolean(recordForm)} onOpenChange={(open) => { if (!open) setRecordForm(undefined); }} isPending={recordMutation.isPending} onSubmit={(input) => recordMutation.mutateAsync(input).then(() => undefined)} />}
+
+      <Dialog
+        open={Boolean(confirmationAction)}
+        onOpenChange={(open) => {
+          if (!open && !areaActionPending) setConfirmationAction(undefined);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{isDeletingArea ? "Delete area?" : "Archive area?"}</DialogTitle>
+            <DialogDescription>
+              {isDeletingArea
+                ? `“${area.name}” will be permanently deleted. This action cannot be undone.`
+                : `“${area.name}” will be moved to your archived areas. You can restore it later.`}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" disabled={areaActionPending} onClick={() => setConfirmationAction(undefined)}>Cancel</Button>
+            <Button variant={isDeletingArea ? "destructive" : "default"} disabled={areaActionPending} onClick={confirmAreaAction}>
+              {areaActionPending ? (isDeletingArea ? "Deleting…" : "Archiving…") : (isDeletingArea ? "Delete area" : "Archive area")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
