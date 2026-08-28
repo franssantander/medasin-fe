@@ -65,7 +65,9 @@ function Brand() {
         className="size-8 shrink-0"
         priority
       />
-      <span className="truncate text-xl font-garamond font-semibold">Medasin</span>
+      <span className="truncate text-xl font-garamond font-semibold">
+        Medasin
+      </span>
     </Link>
   );
 }
@@ -94,8 +96,9 @@ function DashboardNavigation({
             aria-label={collapsed ? item.label : undefined}
             title={collapsed ? item.label : undefined}
             className={cn(
-              "flex h-10 items-center gap-3 rounded-md px-3 text-sm font-medium text-sidebar-foreground/70 transition-colors outline-none hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring",
-              active && "bg-sidebar-accent text-sidebar-accent-foreground",
+              "flex h-10 items-center gap-2 rounded-md px-3 text-sm font-medium text-sidebar-foreground/50 transition-colors outline-none hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring",
+              active &&
+                "bg-white border text-sidebar-accent-foreground hover:text-sidebar-accent-foreground hover:bg-white font-semibold",
               collapsed && "justify-center px-0",
             )}
           >
@@ -143,7 +146,7 @@ function ProfileMenu({
       <DropdownMenuTrigger
         aria-label={`Open account menu for ${displayName}`}
         className={cn(
-          "flex w-full items-center gap-3 rounded-md p-2 text-left outline-none transition-colors hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-sidebar-ring data-popup-open:bg-sidebar-accent",
+          "flex w-full items-center gap-3 rounded-md px-2 text-left outline-none transition-colors hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-sidebar-ring data-popup-open:bg-sidebar-accent",
           collapsed && "justify-center px-0",
         )}
       >
@@ -166,7 +169,7 @@ function ProfileMenu({
           </>
         )}
       </DropdownMenuTrigger>
-      <DropdownMenuContent className="w-60">
+      <DropdownMenuContent className="w-40">
         <div className="min-w-0 px-2.5 py-2">
           <p className="truncate text-sm font-medium">{displayName}</p>
           {user?.email && (
@@ -176,11 +179,11 @@ function ProfileMenu({
           )}
         </div>
         <DropdownMenuSeparator />
-        <DropdownMenuItem disabled>
+        <DropdownMenuItem>
           <UserRound />
           Profile
         </DropdownMenuItem>
-        <DropdownMenuItem disabled>
+        <DropdownMenuItem>
           <Settings />
           Settings
         </DropdownMenuItem>

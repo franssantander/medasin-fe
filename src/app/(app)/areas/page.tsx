@@ -1,7 +1,11 @@
-import React from 'react'
+import React from "react";
 
 export default function page() {
   return (
-    <div>page</div>
-  )
+    <div className="w-full">
+      <div>
+        <h1 className="font-bold text-lg">Areas</h1>
+      </div>
+    </div>
+  );
 }
