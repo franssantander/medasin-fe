@@ -1,9 +1,9 @@
 import {
   Archive,
-  FolderKanban,
+  BookOpen,
+  CirclePile,
   Home,
-  Layers3,
-  Library,
+  Target,
   type LucideIcon,
 } from "lucide-react";
 
@@ -15,9 +15,9 @@ export type DashboardNavigationItem = {
 
 export const dashboardNavigationItems: DashboardNavigationItem[] = [
   { label: "Home", href: "/home", icon: Home },
-  { label: "Projects", href: "/projects", icon: FolderKanban },
-  { label: "Areas", href: "/areas", icon: Layers3 },
-  { label: "Resources", href: "/resources", icon: Library },
+  { label: "Projects", href: "/projects", icon: Target },
+  { label: "Areas", href: "/areas", icon: CirclePile },
+  { label: "Resources", href: "/resources", icon: BookOpen },
   { label: "Archives", href: "/archives", icon: Archive },
 ];
 

@@ -77,7 +77,7 @@ export function AreaFormDialog({ open, onOpenChange, area, isPending, onSubmit }
         <form id="area-form" onSubmit={submit} className="grid gap-5">
           <FormField label="Background image" error={errors.background_image?.message}>
             <label className="group relative block h-36 cursor-pointer overflow-hidden rounded-xl border bg-muted">
-              <span className="absolute inset-0 bg-cover bg-center grayscale transition-transform duration-300 group-hover:scale-[1.02]" style={{ backgroundImage: `url('${uploadPreview || area?.background_image_url || DEFAULT_AREA_BACKGROUND}')` }} />
+              <span className="absolute inset-0 bg-cover bg-center transition-transform duration-300 group-hover:scale-[1.02]" style={{ backgroundImage: `url('${uploadPreview || area?.background_image_url || DEFAULT_AREA_BACKGROUND}')` }} />
               <span className="absolute inset-0 bg-black/25" />
               <span className="absolute bottom-3 left-3 flex size-11 items-center justify-center rounded-xl shadow-md ring-2 ring-white/80" style={areaBadgeStyle(badgeColor)}>
                 <AreaIcon name={selectedIcon} className="size-5" />
