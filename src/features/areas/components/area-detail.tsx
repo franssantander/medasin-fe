@@ -164,6 +164,7 @@ export function AreaDetail() {
       <div>
         <Button
           render={<Link href={archived ? "/archives" : "/areas"} />}
+          nativeButton={false}
           variant="ghost"
           size="sm"
         >

@@ -279,6 +279,7 @@ function RecordCard({
                   rel="noreferrer"
                 />
               }
+              nativeButton={false}
               variant="ghost"
               size="icon-sm"
               aria-label="Open resource"
