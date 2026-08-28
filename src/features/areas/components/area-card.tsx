@@ -103,7 +103,7 @@ export function AreaCard({ area, onEdit }: { area: Area; onEdit: () => void }) {
           >
             <AreaIcon name={area.icon} className="size-5" />
           </div>
-          <CardTitle className="font-black">{area.name}</CardTitle>
+          <CardTitle className="font-bold">{area.name}</CardTitle>
           <CardDescription className="line-clamp-2 min-h-10">
             {area.description || "No description yet."}
           </CardDescription>

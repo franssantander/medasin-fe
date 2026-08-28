@@ -36,35 +36,43 @@ export function AreaDetailHeader({
   onAction: (action: AreaConfirmationAction) => void;
 }) {
   return (
-    <Card className="gap-0 py-0">
+    <Card className="relative min-h-56 gap-0 overflow-hidden bg-black py-0 text-white sm:min-h-80">
       <div
-        className="h-40 bg-cover bg-center sm:h-48"
+        className="absolute inset-0 bg-cover bg-center"
         style={{
           backgroundImage: `url('${area.background_image_url || DEFAULT_AREA_BACKGROUND}')`,
         }}
         role="img"
         aria-label={`${area.name} background`}
       />
-      <CardHeader className="py-6 sm:grid-cols-[auto_1fr_auto] sm:items-center">
-        <div
-          className="flex size-12 items-center justify-center rounded-xl"
-          style={areaBadgeStyle(area.background)}
-        >
-          <AreaIcon name={area.icon} className="size-5" />
-        </div>
-        <div>
-          <div className="flex flex-wrap items-center gap-2">
-            <CardTitle className="text-xl">{area.name}</CardTitle>
-            {archived && <Badge variant="secondary">Archived</Badge>}
+      <div className="absolute inset-0 bg-linear-to-b from-black/80 via-black/45 to-black/65" />
+      <CardHeader className="absolute inset-x-0 top-0 z-10 grid grid-cols-[1fr_auto] items-start gap-4 py-5 sm:py-6">
+        <div className="min-w-0">
+          <div
+            className="mb-3 flex size-12 items-center justify-center rounded-xl shadow-lg ring-1 ring-white/25"
+            style={areaBadgeStyle(area.background)}
+          >
+            <AreaIcon name={area.icon} className="size-5" />
           </div>
-          <CardDescription className="mt-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <CardTitle className="text-xl font-bold text-white drop-shadow-sm">
+              {area.name}
+            </CardTitle>
+            {archived && (
+              <Badge className="border-white/25 bg-black/35 text-white backdrop-blur-sm">
+                Archived
+              </Badge>
+            )}
+          </div>
+          <CardDescription className="mt-1 line-clamp-3 max-w-2xl text-white/85 drop-shadow-sm">
             {area.description || "No description yet."}
           </CardDescription>
         </div>
-        <CardAction className="flex gap-2">
+        <CardAction className="col-start-2 row-start-1 flex gap-2">
           {archived ? (
             <Button
-              variant="outline"
+              variant="secondary"
+              className="border border-white/20 bg-black/35 text-white shadow-sm backdrop-blur-sm hover:bg-black/50 hover:text-white"
               onClick={onRestore}
               disabled={restorePending}
             >
@@ -75,8 +83,9 @@ export function AreaDetailHeader({
               <DropdownMenuTrigger
                 render={
                   <Button
-                    variant="outline"
+                    variant="secondary"
                     size="icon"
+                    className="border border-white/20 bg-black/35 text-white shadow-sm backdrop-blur-sm hover:bg-black/50 hover:text-white"
                     aria-label={`Actions for ${area.name}`}
                   />
                 }
@@ -105,8 +114,8 @@ export function AreaDetailHeader({
         </CardAction>
       </CardHeader>
       {archived && (
-        <CardContent className="pb-6">
-          <p className="rounded-lg bg-muted px-3 py-2 text-sm text-muted-foreground">
+        <CardContent className="relative z-10 mt-auto pb-5 sm:pb-6">
+          <p className="rounded-lg border border-white/15 bg-black/40 px-3 py-2 text-sm text-white/85 backdrop-blur-sm">
             This Area is read-only. Restore it before making changes.
           </p>
         </CardContent>
