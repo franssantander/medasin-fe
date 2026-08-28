@@ -175,10 +175,10 @@ export function HabitFormDialog({
           <FormField label="Icon" error={errors.icon?.message}>
             <div className="overflow-hidden rounded-xl border">
               <div className="flex items-center gap-3 border-b p-3">
-                <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+                <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground">
                   <AreaIcon
                     name={selectedIcon || "Repeat2"}
-                    className="size-4"
+                    className="size-3.5"
                   />
                 </div>
                 <div className="relative min-w-0 flex-1">
@@ -191,7 +191,7 @@ export function HabitFormDialog({
                   />
                 </div>
               </div>
-              <div className="grid max-h-48 grid-cols-7 gap-1 overflow-y-auto p-3 sm:grid-cols-9">
+              <div className="grid max-h-48 grid-cols-[repeat(auto-fill,2rem)] justify-between gap-1 overflow-y-auto p-3">
                 {filteredIcons.map(({ name, icon: Icon }) => (
                   <button
                     key={name}
@@ -199,7 +199,7 @@ export function HabitFormDialog({
                     title={name}
                     aria-label={`Use ${name} icon`}
                     aria-pressed={(selectedIcon || "Repeat2") === name}
-                    className="flex aspect-square items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground aria-pressed:bg-primary aria-pressed:text-primary-foreground"
+                    className="flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground aria-pressed:bg-primary aria-pressed:text-primary-foreground"
                     onClick={() =>
                       setValue("icon", name, {
                         shouldDirty: true,
@@ -207,7 +207,7 @@ export function HabitFormDialog({
                       })
                     }
                   >
-                    <Icon className="size-4" />
+                    <Icon className="size-3.5" />
                   </button>
                 ))}
               </div>

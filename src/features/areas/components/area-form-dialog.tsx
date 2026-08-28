@@ -280,7 +280,7 @@ export function AreaFormDialog({
                   className="pl-9"
                 />
               </div>
-              <div className="grid max-h-56 grid-cols-7 gap-1 overflow-y-auto p-3 sm:grid-cols-9">
+              <div className="grid max-h-56 grid-cols-[repeat(auto-fill,2rem)] justify-between gap-1 overflow-y-auto p-3">
                 {filteredIcons.map(({ name, icon: Icon }) => (
                   <button
                     key={name}
@@ -288,7 +288,7 @@ export function AreaFormDialog({
                     title={name}
                     aria-label={`Use ${name} icon`}
                     aria-pressed={selectedIcon === name}
-                    className="flex aspect-square items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground aria-pressed:bg-black aria-pressed:text-white"
+                    className="flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground aria-pressed:bg-black aria-pressed:text-white"
                     onClick={() =>
                       setValue("icon", name, {
                         shouldDirty: true,
@@ -296,7 +296,7 @@ export function AreaFormDialog({
                       })
                     }
                   >
-                    <Icon className="size-4" />
+                    <Icon className="size-3.5" />
                   </button>
                 ))}
               </div>
