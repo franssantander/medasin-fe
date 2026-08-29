@@ -447,7 +447,7 @@ export function NoteRichTextEditorClient({
 
   return (
     <NoteEditorContext.Provider value={noteEditorContext}>
-      <div className="flex min-h-0 min-w-0 w-full flex-1 overflow-hidden bg-white">
+      <div className="flex min-h-0 w-full min-w-0 flex-1 overflow-hidden bg-white">
         <BlockNoteView
           className="h-full min-h-0 w-full"
           editor={editor}

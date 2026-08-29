@@ -73,7 +73,7 @@ export function AreaNotesWorkspace({
   });
 
   if (treeQuery.isLoading) {
-    return <Skeleton className="min-h-[44rem] flex-1 rounded-xl" />;
+    return <Skeleton className="min-h-[48rem] flex-1 rounded-xl" />;
   }
 
   if (treeQuery.isError) {
@@ -96,7 +96,7 @@ export function AreaNotesWorkspace({
   };
 
   return (
-    <div className="grid min-h-[44rem] min-w-0 flex-1 overflow-hidden rounded-xl border bg-card md:grid-cols-[17rem_minmax(0,1fr)] md:grid-rows-[minmax(0,1fr)]">
+    <div className="grid h-full min-h-0 min-w-0 flex-1 grid-rows-[auto_minmax(0,1fr)] overflow-hidden rounded-xl border bg-card md:grid-cols-[17rem_minmax(0,1fr)] md:grid-rows-[minmax(0,1fr)]">
       <aside className="flex min-h-0 min-w-0 flex-col overflow-hidden border-b bg-muted/30 md:border-r md:border-b-0">
         <div className="flex items-center justify-between gap-3 border-b px-3 py-3">
           <div>
@@ -368,7 +368,7 @@ function NoteEditorPanel({
   );
 
   return (
-    <div className="flex h-full min-h-0 w-full flex-col gap-4">
+    <div className="flex h-full min-h-0 w-full min-w-0 flex-col gap-4">
       <div className="relative w-full">
         <Input
           aria-label="Note title"

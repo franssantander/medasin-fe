@@ -142,7 +142,7 @@ export function AreaDetail() {
   };
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-5">
+    <div className="flex min-h-full flex-col gap-5">
       <div>
         <Button
           render={<Link href={archived ? "/archives" : "/areas"} />}
@@ -154,14 +154,16 @@ export function AreaDetail() {
           Back to {archived ? "archives" : "areas"}
         </Button>
       </div>
-      <AreaDetailHeader
-        area={area}
-        archived={archived}
-        restorePending={restoreArea.isPending}
-        onRestore={() => restoreArea.mutate()}
-        onEdit={() => setAreaFormOpen(true)}
-        onAction={setConfirmationAction}
-      />
+      <div>
+        <AreaDetailHeader
+          area={area}
+          archived={archived}
+          restorePending={restoreArea.isPending}
+          onRestore={() => restoreArea.mutate()}
+          onEdit={() => setAreaFormOpen(true)}
+          onAction={setConfirmationAction}
+        />
+      </div>
       <Tabs
         value={activeTab}
         onValueChange={(value) => changeTab(value as AreaTab)}
@@ -175,55 +177,61 @@ export function AreaDetail() {
           ))}
         </TabsList>
       </Tabs>
-      {activeTab === "notes" ? (
-        <AreaNotesWorkspace areaUuid={uuid} archived={archived} />
-      ) : (
-        <AreaSectionContent
-          tab={activeTab}
-          data={
-            (activeTab === "goals"
-              ? goalsQuery.data?.data.items
-              : sectionQuery.data?.data) as
-              | Paginated<Goal | Habit | Project | Resource>
-              | undefined
-          }
-          goalCounts={goalsQuery.data?.data.counts}
-          goalFilter={goalFilter}
-          loading={
-            activeTab === "goals"
-              ? goalsQuery.isLoading
-              : sectionQuery.isLoading
-          }
-          error={
-            activeTab === "goals" ? goalsQuery.isError : sectionQuery.isError
-          }
-          archived={archived}
-          areaUuid={uuid}
-          page={page}
-          setPage={setPage}
-          refetch={() => {
-            if (activeTab === "goals") void goalsQuery.refetch();
-            else void sectionQuery.refetch();
-          }}
-          onGoalFilterChange={(filter) => {
-            setGoalFilter(filter);
-            setPage(1);
-          }}
-          onAdd={(kind) => {
-            if (kind === "goal") setGoalForm({});
-            else setRecordForm({ kind });
-          }}
-          onEdit={(kind, value) => {
-            if (kind === "goal") setGoalForm({ value: value as Goal });
-            else setRecordForm({ kind, value: value as Habit });
-          }}
-          onDelete={(kind, recordUuid) => {
-            if (kind === "habit" && window.confirm("Delete this record?"))
-              deleteRecord.mutate({ recordUuid });
-          }}
-          onChanged={invalidate}
-        />
-      )}
+      <div className="flex h-[48rem] min-h-0 min-w-0">
+        {activeTab === "notes" ? (
+          <AreaNotesWorkspace areaUuid={uuid} archived={archived} />
+        ) : (
+          <div className="h-full w-full">
+            <AreaSectionContent
+              tab={activeTab}
+              data={
+                (activeTab === "goals"
+                  ? goalsQuery.data?.data.items
+                  : sectionQuery.data?.data) as
+                  | Paginated<Goal | Habit | Project | Resource>
+                  | undefined
+              }
+              goalCounts={goalsQuery.data?.data.counts}
+              goalFilter={goalFilter}
+              loading={
+                activeTab === "goals"
+                  ? goalsQuery.isLoading
+                  : sectionQuery.isLoading
+              }
+              error={
+                activeTab === "goals"
+                  ? goalsQuery.isError
+                  : sectionQuery.isError
+              }
+              archived={archived}
+              areaUuid={uuid}
+              page={page}
+              setPage={setPage}
+              refetch={() => {
+                if (activeTab === "goals") void goalsQuery.refetch();
+                else void sectionQuery.refetch();
+              }}
+              onGoalFilterChange={(filter) => {
+                setGoalFilter(filter);
+                setPage(1);
+              }}
+              onAdd={(kind) => {
+                if (kind === "goal") setGoalForm({});
+                else setRecordForm({ kind });
+              }}
+              onEdit={(kind, value) => {
+                if (kind === "goal") setGoalForm({ value: value as Goal });
+                else setRecordForm({ kind, value: value as Habit });
+              }}
+              onDelete={(kind, recordUuid) => {
+                if (kind === "habit" && window.confirm("Delete this record?"))
+                  deleteRecord.mutate({ recordUuid });
+              }}
+              onChanged={invalidate}
+            />
+          </div>
+        )}
+      </div>
       <AreaFormDialog
         open={areaFormOpen}
         onOpenChange={setAreaFormOpen}
