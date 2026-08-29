@@ -5,6 +5,8 @@ import {
   ChevronRight,
   Ellipsis,
   FileText,
+  PanelLeftClose,
+  PanelLeftOpen,
   Pin,
   PinOff,
   Plus,
@@ -23,6 +25,14 @@ import {
 } from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -65,6 +75,8 @@ export function AreaNotesWorkspace({
 }) {
   const queryClient = useQueryClient();
   const [selection, setSelection] = useState<NoteSelection>();
+  const [noteToDelete, setNoteToDelete] = useState<NoteTreeNode>();
+  const [notesListOpen, setNotesListOpen] = useState(true);
   const [draftKey, setDraftKey] = useState(0);
   const treeQuery = useQuery({
     queryKey: noteKeys.tree(areaUuid),
@@ -97,6 +109,7 @@ export function AreaNotesWorkspace({
         setSelection(undefined);
       }
       await refreshTree();
+      setNoteToDelete(undefined);
       toast.add({ type: "success", description: response.message });
     },
     onError: (error) =>
@@ -127,108 +140,179 @@ export function AreaNotesWorkspace({
   };
 
   return (
-    <div className="grid h-full min-h-0 min-w-0 flex-1 grid-rows-[auto_minmax(0,1fr)] overflow-hidden rounded-xl border bg-card md:grid-cols-[24rem_minmax(0,1fr)] md:grid-rows-[minmax(0,1fr)]">
-      <aside className="flex min-h-0 min-w-0 flex-col overflow-hidden border-b bg-muted/30 md:border-r md:border-b-0">
-        <div className="flex items-center justify-between gap-3 border-b px-3 py-3">
-          <div>
-            <h2 className="font-semibold">Notes</h2>
-            <p className="text-xs text-muted-foreground">
-              {flatNotes.length} {flatNotes.length === 1 ? "page" : "pages"}
-            </p>
+    <div
+      className={cn(
+        "grid h-full min-h-0 min-w-0 flex-1 grid-rows-[auto_minmax(0,1fr)] overflow-hidden rounded-xl border bg-card md:grid-rows-[minmax(0,1fr)]",
+        notesListOpen
+          ? "md:grid-cols-[24rem_minmax(0,1fr)]"
+          : "md:grid-cols-[minmax(0,1fr)]",
+      )}
+    >
+      {notesListOpen && (
+        <aside className="flex min-h-0 min-w-0 flex-col overflow-hidden border-b bg-muted/30 md:border-r md:border-b-0">
+          <div className="flex items-center justify-between gap-3 border-b px-3 py-3">
+            <div>
+              <h2 className="font-semibold">Notes</h2>
+              <p className="text-xs text-muted-foreground">
+                {flatNotes.length} {flatNotes.length === 1 ? "page" : "pages"}
+              </p>
+            </div>
+            <div className="flex items-center gap-1">
+              {!archived && (
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label="New note"
+                  onClick={startDraft}
+                >
+                  <Plus />
+                </Button>
+              )}
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-label="Close notes list"
+                title="Close notes list"
+                onClick={() => setNotesListOpen(false)}
+              >
+                <PanelLeftClose />
+              </Button>
+            </div>
           </div>
-          {!archived && (
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              aria-label="New note"
-              onClick={startDraft}
-            >
-              <Plus />
-            </Button>
-          )}
-        </div>
-        <div className="notes-list-scrollbar max-h-64 min-w-0 overflow-x-hidden overflow-y-auto p-2 md:max-h-none md:flex-1">
-          {tree.length === 0 ? (
-            <p className="px-2 py-6 text-center text-sm text-muted-foreground">
-              {archived
-                ? "No notes in this area."
-                : "Start writing your first note."}
-            </p>
-          ) : (
-            <NoteTree
-              nodes={tree}
-              selectedUuid={selectedUuid}
-              archived={archived}
-              pinPending={pinMutation.isPending}
-              deletePending={deleteMutation.isPending}
-              onSelect={(uuid) => setSelection({ kind: "note", uuid })}
-              onPin={(node) =>
-                pinMutation.mutate({ uuid: node.uuid, pinned: !node.is_pinned })
-              }
-              onDelete={(node) => {
-                const deletedUuids = flattenNotes([node]).map(
-                  (item) => item.uuid,
-                );
-                if (
-                  window.confirm(
-                    node.children.length > 0
-                      ? "Delete this note and all of its child pages?"
-                      : "Delete this note?",
-                  )
-                ) {
-                  deleteMutation.mutate({ uuid: node.uuid, deletedUuids });
+          <div className="notes-list-scrollbar max-h-64 min-w-0 overflow-x-hidden overflow-y-auto p-2 md:max-h-none md:flex-1">
+            {tree.length === 0 ? (
+              <p className="px-2 py-6 text-center text-sm text-muted-foreground">
+                {archived
+                  ? "No notes in this area."
+                  : "Start writing your first note."}
+              </p>
+            ) : (
+              <NoteTree
+                nodes={tree}
+                selectedUuid={selectedUuid}
+                archived={archived}
+                pinPending={pinMutation.isPending}
+                deletePending={deleteMutation.isPending}
+                onSelect={(uuid) => setSelection({ kind: "note", uuid })}
+                onPin={(node) =>
+                  pinMutation.mutate({
+                    uuid: node.uuid,
+                    pinned: !node.is_pinned,
+                  })
                 }
+                onDelete={setNoteToDelete}
+              />
+            )}
+          </div>
+        </aside>
+      )}
+      <main className="relative flex min-h-0 min-w-0 justify-center overflow-hidden bg-white p-6">
+        {!notesListOpen && (
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            className="absolute top-3 left-3 z-10"
+            aria-label="Open notes list"
+            title="Open notes list"
+            onClick={() => setNotesListOpen(true)}
+          >
+            <PanelLeftOpen />
+          </Button>
+        )}
+        <div
+          className={cn(
+            "h-full min-h-0 min-w-0 flex-1",
+            !notesListOpen && "md:max-w-[calc(100%-24rem)]",
+          )}
+        >
+          {derivedSelection.kind === "note" ? (
+            <PersistedNotePanel
+              key={derivedSelection.uuid}
+              areaUuid={areaUuid}
+              noteUuid={derivedSelection.uuid}
+              archived={archived}
+              focusTitle={derivedSelection.focusTitle}
+              noteOptions={flatNotes}
+              onOpenNote={(uuid, options) =>
+                setSelection({ kind: "note", uuid, ...options })
+              }
+              onTreeChanged={refreshTree}
+            />
+          ) : (
+            <NoteEditorPanel
+              key={`draft-${derivedSelection.key}`}
+              areaUuid={areaUuid}
+              archived={archived}
+              documentId={`draft-${derivedSelection.key}`}
+              initialTitle=""
+              initialContent={EMPTY_NOTE_DOCUMENT}
+              initialPinned={false}
+              persistedUuid={derivedSelection.uuid}
+              noteOptions={flatNotes}
+              onCreated={(note) => {
+                setSelection((current) => {
+                  if (!current) {
+                    return {
+                      kind: "draft",
+                      key: derivedSelection.key,
+                      uuid: note.uuid,
+                    };
+                  }
+                  return current.kind === "draft"
+                    ? { ...current, uuid: note.uuid }
+                    : current;
+                });
               }}
+              onOpenNote={(uuid, options) =>
+                setSelection({ kind: "note", uuid, ...options })
+              }
+              onTreeChanged={refreshTree}
             />
           )}
         </div>
-      </aside>
-      <main className="min-h-0 min-w-0 overflow-hidden bg-white py-6">
-        {derivedSelection.kind === "note" ? (
-          <PersistedNotePanel
-            key={derivedSelection.uuid}
-            areaUuid={areaUuid}
-            noteUuid={derivedSelection.uuid}
-            archived={archived}
-            focusTitle={derivedSelection.focusTitle}
-            noteOptions={flatNotes}
-            onOpenNote={(uuid, options) =>
-              setSelection({ kind: "note", uuid, ...options })
-            }
-            onTreeChanged={refreshTree}
-          />
-        ) : (
-          <NoteEditorPanel
-            key={`draft-${derivedSelection.key}`}
-            areaUuid={areaUuid}
-            archived={archived}
-            documentId={`draft-${derivedSelection.key}`}
-            initialTitle=""
-            initialContent={EMPTY_NOTE_DOCUMENT}
-            initialPinned={false}
-            persistedUuid={derivedSelection.uuid}
-            noteOptions={flatNotes}
-            onCreated={(note) => {
-              setSelection((current) => {
-                if (!current) {
-                  return {
-                    kind: "draft",
-                    key: derivedSelection.key,
-                    uuid: note.uuid,
-                  };
-                }
-                return current.kind === "draft"
-                  ? { ...current, uuid: note.uuid }
-                  : current;
-              });
-            }}
-            onOpenNote={(uuid, options) =>
-              setSelection({ kind: "note", uuid, ...options })
-            }
-            onTreeChanged={refreshTree}
-          />
-        )}
       </main>
+      <Dialog
+        open={Boolean(noteToDelete)}
+        onOpenChange={(open) => {
+          if (!open && !deleteMutation.isPending) setNoteToDelete(undefined);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete note?</DialogTitle>
+            <DialogDescription>
+              {noteToDelete?.children.length
+                ? `“${noteToDelete.title || "Untitled"}” and all of its child pages will be permanently deleted. This action cannot be undone.`
+                : `“${noteToDelete?.title || "Untitled"}” will be permanently deleted. This action cannot be undone.`}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              disabled={deleteMutation.isPending}
+              onClick={() => setNoteToDelete(undefined)}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={deleteMutation.isPending || !noteToDelete}
+              onClick={() => {
+                if (!noteToDelete) return;
+
+                deleteMutation.mutate({
+                  uuid: noteToDelete.uuid,
+                  deletedUuids: flattenNotes([noteToDelete]).map(
+                    (note) => note.uuid,
+                  ),
+                });
+              }}
+            >
+              {deleteMutation.isPending ? "Deleting…" : "Delete note"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
