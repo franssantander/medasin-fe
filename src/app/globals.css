@@ -196,12 +196,22 @@
     flex: 1;
     border-radius: 0;
     padding-block: 1rem;
-    padding-inline: 0;
+    /* Keep BlockNote's controls inside the clipped editor while aligning the
+       document with the title's 3.25rem inset. */
+    padding-inline: 3.25rem;
     scrollbar-color: color-mix(in oklab, var(--muted-foreground) 45%, transparent)
       transparent;
     scrollbar-width: thin;
     overflow-x: hidden;
     overflow-y: auto;
+  }
+
+  .note-rich-text .bn-side-menu .bn-button[draggable="true"] {
+    cursor: grab;
+  }
+
+  .note-rich-text .bn-side-menu .bn-button[draggable="true"]:active {
+    cursor: grabbing;
   }
 
   .note-rich-text .bn-editor::-webkit-scrollbar {
@@ -248,6 +258,26 @@
 
   .note-rich-text .bn-block-content {
     position: relative;
+    border-radius: 0.375rem;
+    transition:
+      background-color 160ms ease,
+      box-shadow 160ms ease;
+  }
+
+  .note-rich-text .bn-block-content[data-note-block-selected="true"] {
+    background-color: color-mix(in oklab, #64a0ff 16%, white);
+    box-shadow: inset 0 0 0 1px
+      color-mix(in oklab, #64a0ff 32%, transparent);
+  }
+
+  /* Replace BlockNote's heavier inner selection outline with one smooth box
+     around the complete selected block. */
+  .note-rich-text .bn-block-content.ProseMirror-selectednode > *::after,
+  .note-rich-text .ProseMirror-selectednode > .bn-block-content > *::after,
+  .note-rich-text .bn-block-content .ProseMirror-selectednode::after,
+  .note-rich-text .bn-inline-content .ProseMirror-selectednode::after {
+    background-color: transparent;
+    box-shadow: none;
   }
 
   .note-rich-text

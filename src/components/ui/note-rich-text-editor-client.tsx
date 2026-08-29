@@ -8,14 +8,19 @@ import {
 import {
   filterSuggestionItems,
   insertOrUpdateBlockForSlashMenu,
+  SideMenuExtension,
 } from "@blocknote/core/extensions";
 import {
   createReactBlockSpec,
   getDefaultReactSlashMenuItems,
+  SideMenu,
+  SideMenuController,
   SuggestionMenuController,
   useCreateBlockNote,
+  useExtensionState,
   type DefaultReactSuggestionItem,
   type ReactCustomBlockRenderProps,
+  type SideMenuProps,
   type SuggestionMenuProps,
 } from "@blocknote/react";
 import { BlockNoteView } from "@blocknote/shadcn";
@@ -36,6 +41,7 @@ import {
   useRef,
   useState,
   useEffect,
+  type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -57,12 +63,44 @@ type NoteLinkTarget = { uuid: string; title: string; depth: number };
 type NoteEditorContextValue = {
   noteTitles: Map<string, string>;
   onOpenNote: (uuid: string) => void;
+  onSelectBlock: (blockId: string) => void;
+  onBlockDragEnd: () => void;
 };
 
 const NoteEditorContext = createContext<NoteEditorContextValue>({
   noteTitles: new Map(),
   onOpenNote: () => undefined,
+  onSelectBlock: () => undefined,
+  onBlockDragEnd: () => undefined,
 });
+
+function NoteBlockSideMenu(props: SideMenuProps) {
+  const { onSelectBlock, onBlockDragEnd } = useContext(NoteEditorContext);
+  const block = useExtensionState(SideMenuExtension, {
+    selector: (state) => state?.block,
+  });
+
+  return (
+    <div
+      className="contents"
+      onPointerDownCapture={(event) => {
+        if (
+          block &&
+          event.target instanceof Element &&
+          event.target.closest('[draggable="true"]')
+        ) {
+          onSelectBlock(block.id);
+        }
+      }}
+      onDragStartCapture={() => {
+        if (block) onSelectBlock(block.id);
+      }}
+      onDragEndCapture={onBlockDragEnd}
+    >
+      <SideMenu {...props} />
+    </div>
+  );
+}
 
 const CalloutBlock = createReactBlockSpec(
   {
@@ -257,6 +295,8 @@ export function NoteRichTextEditorClient({
   const onUploadFileRef = useRef(onUploadFile);
   const onCreateChildRef = useRef(onCreateChild);
   const onOpenNoteRef = useRef(onOpenNote);
+  const editorShellRef = useRef<HTMLDivElement>(null);
+  const selectedBlockIdRef = useRef<string | undefined>(undefined);
   const [pendingDialog, setPendingDialog] = useState<PendingDialog>();
   const [url, setUrl] = useState("");
   const [label, setLabel] = useState("");
@@ -293,9 +333,39 @@ export function NoteRichTextEditorClient({
     (uuid: string) => onOpenNoteRef.current(uuid),
     [],
   );
+  const clearSelectedBlock = useCallback(() => {
+    editor.domElement
+      ?.querySelector<HTMLElement>('[data-note-block-selected="true"]')
+      ?.removeAttribute("data-note-block-selected");
+    selectedBlockIdRef.current = undefined;
+  }, [editor]);
+  const selectBlock = useCallback(
+    (blockId: string) => {
+      clearSelectedBlock();
+
+      const blockOuter = Array.from(
+        editor.domElement?.querySelectorAll<HTMLElement>(
+          '[data-node-type="blockOuter"][data-id]',
+        ) ?? [],
+      ).find((element) => element.dataset.id === blockId);
+      const blockContent = blockOuter?.querySelector<HTMLElement>(
+        ".bn-block-content",
+      );
+
+      if (!blockContent) return;
+      blockContent.dataset.noteBlockSelected = "true";
+      selectedBlockIdRef.current = blockId;
+    },
+    [clearSelectedBlock, editor],
+  );
   const noteEditorContext = useMemo(
-    () => ({ noteTitles, onOpenNote: openNote }),
-    [noteTitles, openNote],
+    () => ({
+      noteTitles,
+      onOpenNote: openNote,
+      onSelectBlock: selectBlock,
+      onBlockDragEnd: clearSelectedBlock,
+    }),
+    [clearSelectedBlock, noteTitles, openNote, selectBlock],
   );
   const handleEditorChange = useCallback(() => {
     const serializedDocument = serializeNoteDocument(editor.document);
@@ -303,8 +373,65 @@ export function NoteRichTextEditorClient({
     // BlockNote emits changes while ProseMirror is still reconciling node-view
     // positions. Defer parent state updates so undo/redo can finish that cycle
     // before React rerenders the editor tree.
-    queueMicrotask(() => onChangeRef.current(serializedDocument));
-  }, [editor]);
+    queueMicrotask(() => {
+      const selectedBlockId = selectedBlockIdRef.current;
+      if (selectedBlockId && !editor.getBlock(selectedBlockId)) {
+        clearSelectedBlock();
+      }
+      onChangeRef.current(serializedDocument);
+    });
+  }, [clearSelectedBlock, editor]);
+
+  useEffect(() => {
+    const handleDocumentPointerDown = (event: PointerEvent) => {
+      if (
+        event.target instanceof Node &&
+        !editorShellRef.current?.contains(event.target)
+      ) {
+        clearSelectedBlock();
+      }
+    };
+
+    document.addEventListener("pointerdown", handleDocumentPointerDown, true);
+    return () => {
+      document.removeEventListener(
+        "pointerdown",
+        handleDocumentPointerDown,
+        true,
+      );
+      clearSelectedBlock();
+    };
+  }, [clearSelectedBlock]);
+
+  const handleSelectedBlockKeyDown = useCallback(
+    (event: ReactKeyboardEvent<HTMLDivElement>) => {
+      if (event.key !== "Backspace" && event.key !== "Delete") return;
+
+      const target = event.target;
+      if (
+        target instanceof HTMLElement &&
+        (target.isContentEditable ||
+          Boolean(target.closest("input, textarea, select, [contenteditable]")))
+      ) {
+        return;
+      }
+
+      const selectedBlockId = selectedBlockIdRef.current;
+      if (!selectedBlockId) return;
+
+      const selectedBlock = editor.getBlock(selectedBlockId);
+      if (!selectedBlock) {
+        clearSelectedBlock();
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+      editor.removeBlocks([selectedBlock]);
+      clearSelectedBlock();
+    },
+    [clearSelectedBlock, editor],
+  );
 
   const prepareDialog = (kind: "link" | "bookmark" | "note") => {
     const block = editor.getTextCursorPosition().block;
@@ -445,23 +572,39 @@ export function NoteRichTextEditorClient({
 
   return (
     <NoteEditorContext.Provider value={noteEditorContext}>
-      <div className="flex min-h-0 w-full min-w-0 flex-1 overflow-hidden bg-white">
+      <div
+        ref={editorShellRef}
+        className="flex min-h-0 w-full min-w-0 flex-1 overflow-hidden bg-white"
+        onKeyDownCapture={handleSelectedBlockKeyDown}
+        onPointerDownCapture={(event) => {
+          if (
+            event.target instanceof Element &&
+            !event.target.closest(".bn-side-menu, .bn-menu-dropdown")
+          ) {
+            clearSelectedBlock();
+          }
+        }}
+      >
         <BlockNoteView
           className="h-full min-h-0 w-full"
           editor={editor}
           editable={editable}
+          sideMenu={false}
           slashMenu={false}
           theme="light"
           onChange={handleEditorChange}
         >
           {editable && (
-            <SuggestionMenuController
-              triggerCharacter="/"
-              suggestionMenuComponent={NoteSlashMenu}
-              getItems={async (query) =>
-                filterSuggestionItems(slashItems, query)
-              }
-            />
+            <>
+              <SideMenuController sideMenu={NoteBlockSideMenu} />
+              <SuggestionMenuController
+                triggerCharacter="/"
+                suggestionMenuComponent={NoteSlashMenu}
+                getItems={async (query) =>
+                  filterSuggestionItems(slashItems, query)
+                }
+              />
+            </>
           )}
         </BlockNoteView>
       </div>
