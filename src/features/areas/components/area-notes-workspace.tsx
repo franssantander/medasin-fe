@@ -620,7 +620,7 @@ function NoteTreeLevel({
       multiple
       value={openUuids}
       onValueChange={(value) => onExpandedChange(nodes, value)}
-      className="grid gap-2"
+      className="grid gap-3"
     >
       {nodes.map((node) => (
         <AccordionItem key={node.uuid} value={node.uuid}>
@@ -742,7 +742,7 @@ function RootNoteCard({
             {formatNoteTimestamp(node.updated_at)}
           </time>
         </button>
-        <div className="absolute top-2 right-2 flex items-center gap-0.5">
+        <div className="absolute top-2 right-2 flex items-center gap-1">
           {!archived && (
             <NoteActions
               node={node}
@@ -750,7 +750,7 @@ function RootNoteCard({
               deletePending={deletePending}
               onPin={onPin}
               onDelete={onDelete}
-              className="hidden group-hover/note:flex group-focus-within/note:flex"
+              className="hidden group-hover/note:flex"
             />
           )}
           {hasChildren && (
@@ -844,7 +844,7 @@ function ChildNoteRow({
             onPin={onPin}
             onDelete={onDelete}
             className={cn(
-              "absolute top-1/2 hidden -translate-y-1/2 bg-card/95 group-hover/child:flex group-focus-within/child:flex",
+              "absolute top-1/2 hidden -translate-y-1/2 bg-card/95 group-hover/child:flex",
               hasChildren ? "right-9" : "right-1",
             )}
           />
