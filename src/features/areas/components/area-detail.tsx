@@ -3,12 +3,13 @@
 import { useMutation } from "@tanstack/react-query";
 import {
   ArrowLeft,
+  CircleStar,
   FileText,
+  Folder,
   FolderKanban,
-  Link2,
   ListChecks,
+  LucideLibraryBig,
   RefreshCw,
-  Repeat2,
 } from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
@@ -44,11 +45,11 @@ import { GoalFormDialog } from "./goal-form-dialog";
 import { HabitFormDialog } from "./habit-form-dialog";
 
 const tabs: { value: AreaTab; label: string; icon: typeof FolderKanban }[] = [
-  { value: "projects", label: "Projects", icon: FolderKanban },
+  { value: "projects", label: "Projects", icon: Folder },
   { value: "goals", label: "Goals", icon: ListChecks },
-  { value: "habits", label: "Habits", icon: Repeat2 },
+  { value: "habits", label: "Habits", icon: CircleStar },
   { value: "notes", label: "Notes", icon: FileText },
-  { value: "resources", label: "Resources", icon: Link2 },
+  { value: "resources", label: "Resources", icon: LucideLibraryBig },
 ];
 
 export function AreaDetail() {
@@ -98,11 +99,8 @@ export function AreaDetail() {
     onSuccess: (response) => invalidate(response.message),
   });
   const deleteRecord = useMutation({
-    mutationFn: ({
-      recordUuid,
-    }: {
-      recordUuid: string;
-    }) => areaService.removeHabit(uuid, recordUuid),
+    mutationFn: ({ recordUuid }: { recordUuid: string }) =>
+      areaService.removeHabit(uuid, recordUuid),
     onSuccess: (response) => invalidate(response.message),
   });
 

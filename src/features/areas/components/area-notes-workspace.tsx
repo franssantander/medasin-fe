@@ -8,8 +8,10 @@ import {
   Pin,
   PinOff,
   Plus,
+  Redo2,
   RefreshCw,
   Trash2,
+  Undo2,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -33,6 +35,10 @@ import {
   getNoteDocumentPreview,
 } from "@/components/ui/note-editor-document";
 import { NoteRichTextEditor } from "@/components/ui/note-rich-text-editor";
+import type {
+  NoteEditorHistoryState,
+  NoteRichTextEditorControls,
+} from "@/components/ui/note-rich-text-editor-client";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
@@ -314,8 +320,14 @@ function NoteEditorPanel({
     "idle" | "dirty" | "saving" | "saved" | "error"
   >("idle");
   const [activeUuid, setActiveUuid] = useState(persistedUuid);
+  const [historyState, setHistoryState] = useState<NoteEditorHistoryState>({
+    canUndo: false,
+    canRedo: false,
+  });
   const uuidRef = useRef(persistedUuid);
   const titleInputRef = useRef<HTMLInputElement>(null);
+  const editorControlsRef = useRef<NoteRichTextEditorControls | null>(null);
+  const pendingEditorFocusRef = useRef(false);
   const titleRef = useRef(initialTitle);
   const contentRef = useRef(initialContent);
   const revisionRef = useRef(0);
@@ -447,6 +459,16 @@ function NoteEditorPanel({
     () => buildNotePath(noteOptions, activeUuid),
     [activeUuid, noteOptions],
   );
+  const handleEditorReady = useCallback(
+    (controls: NoteRichTextEditorControls | null) => {
+      editorControlsRef.current = controls;
+      if (!controls || !pendingEditorFocusRef.current) return;
+
+      pendingEditorFocusRef.current = false;
+      controls.focusFirstBlock();
+    },
+    [],
+  );
 
   return (
     <div className="flex h-full min-h-0 w-full min-w-0 flex-col gap-4">
@@ -462,7 +484,7 @@ function NoteEditorPanel({
           <Input
             ref={titleInputRef}
             aria-label="Note title"
-            className="h-auto w-full border-0 px-0 py-0 pl-13 text-2xl font-bold shadow-none focus-visible:ring-0 md:text-3xl"
+            className="h-auto w-full border-0 px-0 py-0 pr-48 pl-13 text-2xl font-bold shadow-none focus-visible:ring-0 md:text-3xl"
             placeholder="Untitled"
             maxLength={120}
             value={title}
@@ -472,25 +494,70 @@ function NoteEditorPanel({
               titleRef.current = event.target.value;
               scheduleSave();
             }}
+            onKeyDown={(event) => {
+              if (
+                archived ||
+                event.key !== "Enter" ||
+                event.nativeEvent.isComposing
+              ) {
+                return;
+              }
+
+              event.preventDefault();
+              const controls = editorControlsRef.current;
+              if (controls) {
+                controls.focusFirstBlock();
+              } else {
+                pendingEditorFocusRef.current = true;
+              }
+            }}
           />
-          <div className="absolute top-1 right-13 text-xs text-muted-foreground">
-            {archived ? (
-              "Read only"
-            ) : saveStatus === "saving" ? (
-              "Saving…"
-            ) : saveStatus === "dirty" ? (
-              "Unsaved"
-            ) : saveStatus === "saved" ? (
-              "Saved"
-            ) : saveStatus === "error" ? (
-              <button
+          <div className="absolute top-1/2 right-13 flex -translate-y-1/2 items-center gap-1.5">
+            <div className="text-xs whitespace-nowrap text-muted-foreground">
+              {archived ? (
+                "Read only"
+              ) : saveStatus === "saving" ? (
+                "Saving…"
+              ) : saveStatus === "dirty" ? (
+                "Unsaved"
+              ) : saveStatus === "saved" ? (
+                "Saved"
+              ) : saveStatus === "error" ? (
+                <button
+                  type="button"
+                  className="text-destructive underline"
+                  onClick={flush}
+                >
+                  Retry save
+                </button>
+              ) : null}
+            </div>
+            <div className="flex items-center gap-0.5">
+              <Button
                 type="button"
-                className="text-destructive underline"
-                onClick={flush}
+                variant="ghost"
+                size="icon-xs"
+                aria-label="Undo editor change"
+                title="Undo"
+                disabled={archived || !historyState.canUndo}
+                onPointerDown={(event) => event.preventDefault()}
+                onClick={() => editorControlsRef.current?.undo()}
               >
-                Retry save
-              </button>
-            ) : null}
+                <Undo2 />
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-xs"
+                aria-label="Redo editor change"
+                title="Redo"
+                disabled={archived || !historyState.canRedo}
+                onPointerDown={(event) => event.preventDefault()}
+                onClick={() => editorControlsRef.current?.redo()}
+              >
+                <Redo2 />
+              </Button>
+            </div>
           </div>
         </div>
       </div>
@@ -499,6 +566,8 @@ function NoteEditorPanel({
         content={initialContent}
         editable={!archived}
         noteOptions={editorOptions}
+        onEditorReady={handleEditorReady}
+        onHistoryStateChange={setHistoryState}
         onChange={(content) => {
           contentRef.current = content;
           scheduleSave();

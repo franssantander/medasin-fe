@@ -279,6 +279,19 @@ export type NoteRichTextEditorClientProps = {
   onUploadFile: (file: File) => Promise<string>;
   onCreateChild: () => Promise<{ uuid: string; title: string }>;
   onOpenNote: (uuid: string, options?: { focusTitle?: boolean }) => void;
+  onEditorReady: (controls: NoteRichTextEditorControls | null) => void;
+  onHistoryStateChange: (state: NoteEditorHistoryState) => void;
+};
+
+export type NoteRichTextEditorControls = {
+  undo: () => boolean;
+  redo: () => boolean;
+  focusFirstBlock: () => void;
+};
+
+export type NoteEditorHistoryState = {
+  canUndo: boolean;
+  canRedo: boolean;
 };
 
 export function NoteRichTextEditorClient({
@@ -290,11 +303,15 @@ export function NoteRichTextEditorClient({
   onUploadFile,
   onCreateChild,
   onOpenNote,
+  onEditorReady,
+  onHistoryStateChange,
 }: NoteRichTextEditorClientProps) {
   const onChangeRef = useRef(onChange);
   const onUploadFileRef = useRef(onUploadFile);
   const onCreateChildRef = useRef(onCreateChild);
   const onOpenNoteRef = useRef(onOpenNote);
+  const onEditorReadyRef = useRef(onEditorReady);
+  const onHistoryStateChangeRef = useRef(onHistoryStateChange);
   const editorShellRef = useRef<HTMLDivElement>(null);
   const selectedBlockIdRef = useRef<string | undefined>(undefined);
   const [pendingDialog, setPendingDialog] = useState<PendingDialog>();
@@ -306,7 +323,16 @@ export function NoteRichTextEditorClient({
     onUploadFileRef.current = onUploadFile;
     onCreateChildRef.current = onCreateChild;
     onOpenNoteRef.current = onOpenNote;
-  }, [onChange, onCreateChild, onOpenNote, onUploadFile]);
+    onEditorReadyRef.current = onEditorReady;
+    onHistoryStateChangeRef.current = onHistoryStateChange;
+  }, [
+    onChange,
+    onCreateChild,
+    onEditorReady,
+    onHistoryStateChange,
+    onOpenNote,
+    onUploadFile,
+  ]);
 
   const initialContent = useMemo(
     () =>
@@ -358,6 +384,58 @@ export function NoteRichTextEditorClient({
     },
     [clearSelectedBlock, editor],
   );
+  const emitHistoryState = useCallback(() => {
+    const historyExtension = editor.getExtension("history") as
+      | {
+          undoCommand: (state: typeof editor.prosemirrorState) => boolean;
+          redoCommand: (state: typeof editor.prosemirrorState) => boolean;
+        }
+      | undefined;
+
+    onHistoryStateChangeRef.current({
+      canUndo:
+        historyExtension?.undoCommand(editor.prosemirrorState) ?? false,
+      canRedo:
+        historyExtension?.redoCommand(editor.prosemirrorState) ?? false,
+    });
+  }, [editor]);
+  const editorControls = useMemo<NoteRichTextEditorControls>(
+    () => ({
+      undo: () => {
+        const changed = editor.undo();
+        editor.focus();
+        queueMicrotask(emitHistoryState);
+        return changed;
+      },
+      redo: () => {
+        const changed = editor.redo();
+        editor.focus();
+        queueMicrotask(emitHistoryState);
+        return changed;
+      },
+      focusFirstBlock: () => {
+        const firstBlock = editor.document[0];
+        if (firstBlock) editor.setTextCursorPosition(firstBlock, "start");
+        editor.focus();
+      },
+    }),
+    [editor, emitHistoryState],
+  );
+
+  useEffect(() => {
+    let active = true;
+
+    onEditorReadyRef.current(editorControls);
+    queueMicrotask(() => {
+      if (active) emitHistoryState();
+    });
+
+    return () => {
+      active = false;
+      onEditorReadyRef.current(null);
+    };
+  }, [editorControls, emitHistoryState]);
+
   const noteEditorContext = useMemo(
     () => ({
       noteTitles,
@@ -379,8 +457,9 @@ export function NoteRichTextEditorClient({
         clearSelectedBlock();
       }
       onChangeRef.current(serializedDocument);
+      emitHistoryState();
     });
-  }, [clearSelectedBlock, editor]);
+  }, [clearSelectedBlock, editor, emitHistoryState]);
 
   useEffect(() => {
     const handleDocumentPointerDown = (event: PointerEvent) => {
