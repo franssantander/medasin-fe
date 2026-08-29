@@ -1,7 +1,16 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { FileText, Pin, PinOff, Plus, RefreshCw, Trash2 } from "lucide-react";
+import {
+  ChevronRight,
+  Ellipsis,
+  FileText,
+  Pin,
+  PinOff,
+  Plus,
+  RefreshCw,
+  Trash2,
+} from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Accordion,
@@ -12,6 +21,12 @@ import {
 } from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import {
   EMPTY_NOTE_DOCUMENT,
@@ -428,42 +443,55 @@ function NoteEditorPanel({
   const editorOptions = noteOptions.filter(
     (option) => option.uuid !== activeUuid,
   );
+  const notePath = useMemo(
+    () => buildNotePath(noteOptions, activeUuid),
+    [activeUuid, noteOptions],
+  );
 
   return (
     <div className="flex h-full min-h-0 w-full min-w-0 flex-col gap-4">
       <div className="relative w-full">
-        <Input
-          ref={titleInputRef}
-          aria-label="Note title"
-          className="h-auto w-full border-0 px-0 py-0 pl-13 text-2xl font-bold shadow-none focus-visible:ring-0 md:text-3xl"
-          placeholder="Untitled"
-          maxLength={120}
-          value={title}
-          readOnly={archived}
-          onChange={(event) => {
-            setTitle(event.target.value);
-            titleRef.current = event.target.value;
-            scheduleSave();
-          }}
-        />
-        <div className="absolute top-1 right-13 text-xs text-muted-foreground">
-          {archived ? (
-            "Read only"
-          ) : saveStatus === "saving" ? (
-            "Saving…"
-          ) : saveStatus === "dirty" ? (
-            "Unsaved"
-          ) : saveStatus === "saved" ? (
-            "Saved"
-          ) : saveStatus === "error" ? (
-            <button
-              type="button"
-              className="text-destructive underline"
-              onClick={flush}
-            >
-              Retry save
-            </button>
-          ) : null}
+        {notePath.length > 1 && (
+          <NoteBreadcrumbs
+            path={notePath}
+            currentTitle={title}
+            onOpenNote={onOpenNote}
+          />
+        )}
+        <div className="relative">
+          <Input
+            ref={titleInputRef}
+            aria-label="Note title"
+            className="h-auto w-full border-0 px-0 py-0 pl-13 text-2xl font-bold shadow-none focus-visible:ring-0 md:text-3xl"
+            placeholder="Untitled"
+            maxLength={120}
+            value={title}
+            readOnly={archived}
+            onChange={(event) => {
+              setTitle(event.target.value);
+              titleRef.current = event.target.value;
+              scheduleSave();
+            }}
+          />
+          <div className="absolute top-1 right-13 text-xs text-muted-foreground">
+            {archived ? (
+              "Read only"
+            ) : saveStatus === "saving" ? (
+              "Saving…"
+            ) : saveStatus === "dirty" ? (
+              "Unsaved"
+            ) : saveStatus === "saved" ? (
+              "Saved"
+            ) : saveStatus === "error" ? (
+              <button
+                type="button"
+                className="text-destructive underline"
+                onClick={flush}
+              >
+                Retry save
+              </button>
+            ) : null}
+          </div>
         </div>
       </div>
       <NoteRichTextEditor
@@ -507,11 +535,132 @@ function NoteEditorPanel({
 
 type FlatNote = Omit<NoteTreeNode, "children"> & { depth: number };
 
+function NoteBreadcrumbs({
+  path,
+  currentTitle,
+  onOpenNote,
+}: {
+  path: FlatNote[];
+  currentTitle: string;
+  onOpenNote: (uuid: string) => void;
+}) {
+  const displayTitle = currentTitle.trim() || "Untitled";
+  const isCollapsed = path.length > 3;
+  const visibleAncestors = isCollapsed ? path.slice(0, 1) : path.slice(0, -1);
+  const hiddenAncestors = isCollapsed ? path.slice(1, -1) : [];
+
+  return (
+    <nav
+      aria-label="Note breadcrumb"
+      className="mb-2 min-w-0 px-13 text-muted-foreground"
+    >
+      <ol className="flex min-w-0 items-center gap-1 text-xs">
+        {visibleAncestors.map((note, index) => (
+          <li key={note.uuid} className="contents">
+            {index > 0 && <BreadcrumbSeparator />}
+            <BreadcrumbNoteButton note={note} onOpenNote={onOpenNote} />
+          </li>
+        ))}
+        {hiddenAncestors.length > 0 && (
+          <li className="contents">
+            <BreadcrumbSeparator />
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                aria-label="Show hidden ancestor pages"
+                className="inline-flex size-6 shrink-0 items-center justify-center rounded-md outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/40"
+              >
+                <Ellipsis className="size-3.5" />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                side="bottom"
+                align="start"
+                className="max-w-72 min-w-52"
+              >
+                {hiddenAncestors.map((note) => (
+                  <DropdownMenuItem
+                    key={note.uuid}
+                    title={note.title || "Untitled"}
+                    onClick={() => onOpenNote(note.uuid)}
+                  >
+                    <FileText />
+                    <span className="min-w-0 truncate">
+                      {note.title || "Untitled"}
+                    </span>
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </li>
+        )}
+        <li className="contents">
+          <BreadcrumbSeparator />
+          <span
+            aria-current="page"
+            title={displayTitle}
+            className="min-w-0 max-w-48 flex-1 truncate px-1 py-0.5 font-medium text-foreground"
+          >
+            {displayTitle}
+          </span>
+        </li>
+      </ol>
+    </nav>
+  );
+}
+
+function BreadcrumbNoteButton({
+  note,
+  onOpenNote,
+}: {
+  note: FlatNote;
+  onOpenNote: (uuid: string) => void;
+}) {
+  const title = note.title || "Untitled";
+
+  return (
+    <button
+      type="button"
+      title={title}
+      className="max-w-36 truncate rounded px-1 py-0.5 text-left outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/40 sm:max-w-48"
+      onClick={() => onOpenNote(note.uuid)}
+    >
+      {title}
+    </button>
+  );
+}
+
+function BreadcrumbSeparator() {
+  return (
+    <ChevronRight
+      aria-hidden="true"
+      className="size-3 shrink-0 text-muted-foreground/60"
+    />
+  );
+}
+
 function flattenNotes(nodes: NoteTreeNode[], depth = 0): FlatNote[] {
   return nodes.flatMap((node) => {
     const { children, ...summary } = node;
     return [{ ...summary, depth }, ...flattenNotes(children, depth + 1)];
   });
+}
+
+function buildNotePath(notes: FlatNote[], noteUuid?: string) {
+  if (!noteUuid) return [];
+
+  const notesByUuid = new Map(notes.map((note) => [note.uuid, note]));
+  const path: FlatNote[] = [];
+  const visited = new Set<string>();
+  let current = notesByUuid.get(noteUuid);
+
+  while (current && !visited.has(current.uuid)) {
+    path.unshift(current);
+    visited.add(current.uuid);
+    current = current.parent_uuid
+      ? notesByUuid.get(current.parent_uuid)
+      : undefined;
+  }
+
+  return path;
 }
 
 function NoteTree({
