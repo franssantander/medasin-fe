@@ -3,10 +3,20 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { FileText, Pin, PinOff, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionHeader,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { EMPTY_NOTE_DOCUMENT } from "@/components/ui/note-editor-document";
+import {
+  EMPTY_NOTE_DOCUMENT,
+  getNoteDocumentPreview,
+} from "@/components/ui/note-editor-document";
 import { NoteRichTextEditor } from "@/components/ui/note-rich-text-editor";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "@/components/ui/toast";
@@ -96,7 +106,7 @@ export function AreaNotesWorkspace({
   };
 
   return (
-    <div className="grid h-full min-h-0 min-w-0 flex-1 grid-rows-[auto_minmax(0,1fr)] overflow-hidden rounded-xl border bg-card md:grid-cols-[17rem_minmax(0,1fr)] md:grid-rows-[minmax(0,1fr)]">
+    <div className="grid h-full min-h-0 min-w-0 flex-1 grid-rows-[auto_minmax(0,1fr)] overflow-hidden rounded-xl border bg-card md:grid-cols-[24rem_minmax(0,1fr)] md:grid-rows-[minmax(0,1fr)]">
       <aside className="flex min-h-0 min-w-0 flex-col overflow-hidden border-b bg-muted/30 md:border-r md:border-b-0">
         <div className="flex items-center justify-between gap-3 border-b px-3 py-3">
           <div>
@@ -513,7 +523,6 @@ function NoteTree({
   onSelect,
   onPin,
   onDelete,
-  depth = 0,
 }: {
   nodes: NoteTreeNode[];
   selectedUuid?: string;
@@ -523,58 +532,238 @@ function NoteTree({
   onSelect: (uuid: string) => void;
   onPin: (node: NoteTreeNode) => void;
   onDelete: (node: NoteTreeNode) => void;
-  depth?: number;
 }) {
+  const [expandedUuids, setExpandedUuids] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const visibleExpandedUuids = useMemo(
+    () =>
+      new Set([
+        ...expandedUuids,
+        ...findAncestorUuids(nodes, selectedUuid),
+      ]),
+    [expandedUuids, nodes, selectedUuid],
+  );
+
+  const updateExpandedLevel = useCallback(
+    (levelNodes: NoteTreeNode[], openUuids: string[]) => {
+      setExpandedUuids((current) => {
+        const next = new Set(current);
+        levelNodes.forEach((node) => next.delete(node.uuid));
+        openUuids.forEach((uuid) => next.add(uuid));
+        return next;
+      });
+    },
+    [],
+  );
+  const ensureExpanded = useCallback((uuid: string) => {
+    setExpandedUuids((current) => {
+      if (current.has(uuid)) return current;
+
+      const next = new Set(current);
+      next.add(uuid);
+      return next;
+    });
+  }, []);
+
   return (
-    <div className="grid min-w-0 gap-0.5 overflow-hidden">
+    <NoteTreeLevel
+      nodes={nodes}
+      selectedUuid={selectedUuid}
+      archived={archived}
+      pinPending={pinPending}
+      deletePending={deletePending}
+      onSelect={onSelect}
+      onPin={onPin}
+      onDelete={onDelete}
+      expandedUuids={visibleExpandedUuids}
+      onExpandedChange={updateExpandedLevel}
+      onEnsureExpanded={ensureExpanded}
+      depth={0}
+    />
+  );
+}
+
+function NoteTreeLevel({
+  nodes,
+  selectedUuid,
+  archived,
+  pinPending,
+  deletePending,
+  onSelect,
+  onPin,
+  onDelete,
+  expandedUuids,
+  onExpandedChange,
+  onEnsureExpanded,
+  depth,
+}: {
+  nodes: NoteTreeNode[];
+  selectedUuid?: string;
+  archived: boolean;
+  pinPending: boolean;
+  deletePending: boolean;
+  onSelect: (uuid: string) => void;
+  onPin: (node: NoteTreeNode) => void;
+  onDelete: (node: NoteTreeNode) => void;
+  expandedUuids: Set<string>;
+  onExpandedChange: (nodes: NoteTreeNode[], openUuids: string[]) => void;
+  onEnsureExpanded: (uuid: string) => void;
+  depth: number;
+}) {
+  const openUuids = nodes
+    .filter((node) => expandedUuids.has(node.uuid))
+    .map((node) => node.uuid);
+
+  return (
+    <Accordion
+      multiple
+      value={openUuids}
+      onValueChange={(value) => onExpandedChange(nodes, value)}
+      className="grid gap-2"
+    >
       {nodes.map((node) => (
-        <div key={node.uuid} className="min-w-0 overflow-hidden">
-          <div
+        <AccordionItem key={node.uuid} value={node.uuid}>
+          {depth === 0 ? (
+            <RootNoteCard
+              node={node}
+              selectedUuid={selectedUuid}
+              archived={archived}
+              pinPending={pinPending}
+              deletePending={deletePending}
+              onSelect={onSelect}
+              onPin={onPin}
+              onDelete={onDelete}
+              expandedUuids={expandedUuids}
+              onExpandedChange={onExpandedChange}
+              onEnsureExpanded={onEnsureExpanded}
+              depth={depth}
+            />
+          ) : (
+            <ChildNoteRow
+              node={node}
+              selectedUuid={selectedUuid}
+              archived={archived}
+              pinPending={pinPending}
+              deletePending={deletePending}
+              onSelect={onSelect}
+              onPin={onPin}
+              onDelete={onDelete}
+              expandedUuids={expandedUuids}
+              onExpandedChange={onExpandedChange}
+              onEnsureExpanded={onEnsureExpanded}
+              depth={depth}
+            />
+          )}
+        </AccordionItem>
+      ))}
+    </Accordion>
+  );
+}
+
+type NoteTreeItemProps = {
+  node: NoteTreeNode;
+  selectedUuid?: string;
+  archived: boolean;
+  pinPending: boolean;
+  deletePending: boolean;
+  onSelect: (uuid: string) => void;
+  onPin: (node: NoteTreeNode) => void;
+  onDelete: (node: NoteTreeNode) => void;
+  expandedUuids: Set<string>;
+  onExpandedChange: (nodes: NoteTreeNode[], openUuids: string[]) => void;
+  onEnsureExpanded: (uuid: string) => void;
+  depth: number;
+};
+
+function RootNoteCard({
+  node,
+  selectedUuid,
+  archived,
+  pinPending,
+  deletePending,
+  onSelect,
+  onPin,
+  onDelete,
+  expandedUuids,
+  onExpandedChange,
+  onEnsureExpanded,
+  depth,
+}: NoteTreeItemProps) {
+  const hasChildren = node.children.length > 0;
+
+  return (
+    <Card
+      size="sm"
+      className={cn(
+        "group/note relative min-w-0 gap-0 rounded-lg py-0 shadow-none ring-1 ring-border/90 transition-[background-color,box-shadow] duration-150 hover:bg-muted/25 hover:shadow-xs hover:ring-foreground/15 focus-within:ring-2 focus-within:ring-ring/35",
+        selectedUuid === node.uuid &&
+          "bg-accent/60 shadow-xs ring-foreground/20 hover:bg-accent/70 hover:ring-foreground/25",
+      )}
+    >
+      <div className="relative min-w-0">
+        <button
+          type="button"
+          aria-current={selectedUuid === node.uuid ? "page" : undefined}
+          className="w-full min-w-0 px-3 py-3 text-left"
+          onClick={() => {
+            onSelect(node.uuid);
+            if (hasChildren) onEnsureExpanded(node.uuid);
+          }}
+        >
+          <span
             className={cn(
-              "group flex min-w-0 max-w-full items-center overflow-hidden rounded-md pr-1",
-              selectedUuid === node.uuid && "bg-accent text-accent-foreground",
+              "flex min-w-0 items-center gap-2",
+              archived
+                ? hasChildren
+                  ? "pr-10"
+                  : "pr-0"
+                : hasChildren
+                  ? "pr-28"
+                  : "pr-20",
             )}
-            style={{ paddingLeft: `${depth * 0.75}rem` }}
           >
-            <button
-              type="button"
-              className="flex min-w-0 flex-1 items-center gap-2 px-2 py-2 text-left text-sm"
-              onClick={() => onSelect(node.uuid)}
-            >
-              {node.is_pinned ? (
-                <Pin className="size-3.5 shrink-0" />
-              ) : (
-                <FileText className="size-3.5 shrink-0 text-muted-foreground" />
-              )}
-              <span className="min-w-0 flex-1 truncate">
-                {node.title || "Untitled"}
-              </span>
-            </button>
-            {!archived && (
-              <div className="hidden shrink-0 items-center group-hover:flex group-focus-within:flex">
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label={node.is_pinned ? "Unpin note" : "Pin note"}
-                  disabled={pinPending}
-                  onClick={() => onPin(node)}
-                >
-                  {node.is_pinned ? <PinOff /> : <Pin />}
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label="Delete note"
-                  disabled={deletePending}
-                  onClick={() => onDelete(node)}
-                >
-                  <Trash2 />
-                </Button>
-              </div>
+            {node.is_pinned ? (
+              <Pin className="size-3.5 shrink-0" />
+            ) : (
+              <FileText className="size-3.5 shrink-0 text-muted-foreground" />
             )}
-          </div>
-          {node.children.length > 0 && (
-            <NoteTree
+            <span className="min-w-0 flex-1 truncate text-sm font-medium">
+              {node.title || "Untitled"}
+            </span>
+          </span>
+          <span className="mt-1.5 line-clamp-2 min-h-8 text-xs leading-4 text-muted-foreground">
+            {getNoteDocumentPreview(node.content) || "No content yet"}
+          </span>
+          <time
+            dateTime={node.updated_at}
+            className="mt-2 block truncate text-[0.6875rem] font-medium text-muted-foreground/80"
+          >
+            {formatNoteTimestamp(node.updated_at)}
+          </time>
+        </button>
+        <div className="absolute top-2 right-2 flex items-center gap-0.5">
+          {!archived && (
+            <NoteActions
+              node={node}
+              pinPending={pinPending}
+              deletePending={deletePending}
+              onPin={onPin}
+              onDelete={onDelete}
+              className="hidden group-hover/note:flex group-focus-within/note:flex"
+            />
+          )}
+          {hasChildren && (
+            <AccordionHeader>
+              <AccordionTrigger aria-label={`Toggle ${node.title || "Untitled"} child pages`} />
+            </AccordionHeader>
+          )}
+        </div>
+      </div>
+      {hasChildren && (
+        <AccordionContent>
+          <div className="border-t border-border/60 bg-muted/15 p-2">
+            <NoteTreeLevel
               nodes={node.children}
               selectedUuid={selectedUuid}
               archived={archived}
@@ -583,11 +772,209 @@ function NoteTree({
               onSelect={onSelect}
               onPin={onPin}
               onDelete={onDelete}
+              expandedUuids={expandedUuids}
+              onExpandedChange={onExpandedChange}
+              onEnsureExpanded={onEnsureExpanded}
               depth={depth + 1}
             />
+          </div>
+        </AccordionContent>
+      )}
+    </Card>
+  );
+}
+
+function ChildNoteRow({
+  node,
+  selectedUuid,
+  archived,
+  pinPending,
+  deletePending,
+  onSelect,
+  onPin,
+  onDelete,
+  expandedUuids,
+  onExpandedChange,
+  onEnsureExpanded,
+  depth,
+}: NoteTreeItemProps) {
+  const hasChildren = node.children.length > 0;
+
+  return (
+    <div className="min-w-0">
+      <div
+        className={cn(
+          "group/child relative flex min-w-0 items-center rounded-md ring-1 ring-transparent transition-[background-color,box-shadow,color] duration-150 hover:bg-muted/50 hover:ring-border/80 active:bg-accent/70 focus-within:bg-muted/50 focus-within:ring-ring/30",
+          selectedUuid === node.uuid &&
+            "bg-accent/60 text-accent-foreground ring-foreground/15 hover:bg-accent/70 hover:ring-foreground/20",
+        )}
+      >
+        <button
+          type="button"
+          aria-current={selectedUuid === node.uuid ? "page" : undefined}
+          className={cn(
+            "flex min-w-0 flex-1 items-center gap-2 py-2.5 pl-2 text-left",
+            hasChildren ? "pr-10" : "pr-2",
           )}
-        </div>
-      ))}
+          onClick={() => {
+            onSelect(node.uuid);
+            if (hasChildren) onEnsureExpanded(node.uuid);
+          }}
+        >
+          {node.is_pinned ? (
+            <Pin className="size-3.5 shrink-0" />
+          ) : (
+            <FileText className="size-3.5 shrink-0 text-muted-foreground" />
+          )}
+          <span className="min-w-0 flex-1 truncate text-sm font-medium">
+            {node.title || "Untitled"}
+          </span>
+          <time
+            dateTime={node.updated_at}
+            className="max-w-24 shrink-0 truncate text-[0.6875rem] font-medium text-muted-foreground/80"
+          >
+            {formatNoteTimestamp(node.updated_at)}
+          </time>
+        </button>
+        {!archived && (
+          <NoteActions
+            node={node}
+            pinPending={pinPending}
+            deletePending={deletePending}
+            onPin={onPin}
+            onDelete={onDelete}
+            className={cn(
+              "absolute top-1/2 hidden -translate-y-1/2 bg-card/95 group-hover/child:flex group-focus-within/child:flex",
+              hasChildren ? "right-9" : "right-1",
+            )}
+          />
+        )}
+        {hasChildren && (
+          <AccordionHeader className="absolute top-1/2 right-1 -translate-y-1/2">
+            <AccordionTrigger aria-label={`Toggle ${node.title || "Untitled"} child pages`} />
+          </AccordionHeader>
+        )}
+      </div>
+      {hasChildren && (
+        <AccordionContent>
+          <div className="ml-3 border-l border-border/60 py-1 pl-2">
+            <NoteTreeLevel
+              nodes={node.children}
+              selectedUuid={selectedUuid}
+              archived={archived}
+              pinPending={pinPending}
+              deletePending={deletePending}
+              onSelect={onSelect}
+              onPin={onPin}
+              onDelete={onDelete}
+              expandedUuids={expandedUuids}
+              onExpandedChange={onExpandedChange}
+              onEnsureExpanded={onEnsureExpanded}
+              depth={depth + 1}
+            />
+          </div>
+        </AccordionContent>
+      )}
     </div>
   );
+}
+
+function NoteActions({
+  node,
+  pinPending,
+  deletePending,
+  onPin,
+  onDelete,
+  className,
+}: {
+  node: NoteTreeNode;
+  pinPending: boolean;
+  deletePending: boolean;
+  onPin: (node: NoteTreeNode) => void;
+  onDelete: (node: NoteTreeNode) => void;
+  className?: string;
+}) {
+  return (
+    <div
+      className={cn(
+        "shrink-0 items-center rounded-md bg-card/95 p-0.5 shadow-none ring-1 ring-border/80",
+        className,
+      )}
+    >
+      <Button
+        variant="ghost"
+        size="icon-sm"
+        aria-label={node.is_pinned ? "Unpin note" : "Pin note"}
+        disabled={pinPending}
+        onClick={() => onPin(node)}
+      >
+        {node.is_pinned ? <PinOff /> : <Pin />}
+      </Button>
+      <Button
+        variant="ghost"
+        size="icon-sm"
+        aria-label="Delete note"
+        disabled={deletePending}
+        onClick={() => onDelete(node)}
+      >
+        <Trash2 />
+      </Button>
+    </div>
+  );
+}
+
+function findAncestorUuids(nodes: NoteTreeNode[], selectedUuid?: string) {
+  if (!selectedUuid) return [];
+
+  const ancestors: string[] = [];
+  const containsSelection = (node: NoteTreeNode): boolean => {
+    if (node.uuid === selectedUuid) return true;
+
+    if (node.children.some(containsSelection)) {
+      ancestors.push(node.uuid);
+      return true;
+    }
+
+    return false;
+  };
+
+  nodes.some(containsSelection);
+  return ancestors;
+}
+
+function formatNoteTimestamp(value: string, now = new Date()) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+
+  const dayDifference = calendarDayDifference(now, date);
+  if (dayDifference === 0) {
+    const time = new Intl.DateTimeFormat(undefined, {
+      hour: "numeric",
+      minute: "2-digit",
+    }).format(date);
+    return `Today ${time}`;
+  }
+
+  if (dayDifference >= 1 && dayDifference <= 7) {
+    return `${dayDifference} ${dayDifference === 1 ? "day" : "days"} ago`;
+  }
+
+  return new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(
+    date,
+  );
+}
+
+function calendarDayDifference(later: Date, earlier: Date) {
+  const laterDay = Date.UTC(
+    later.getFullYear(),
+    later.getMonth(),
+    later.getDate(),
+  );
+  const earlierDay = Date.UTC(
+    earlier.getFullYear(),
+    earlier.getMonth(),
+    earlier.getDate(),
+  );
+
+  return Math.round((laterDay - earlierDay) / 86_400_000);
 }

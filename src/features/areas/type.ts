@@ -112,7 +112,13 @@ export type Note = {
 
 export type NoteTreeNode = Pick<
   Note,
-  "uuid" | "parent_uuid" | "title" | "is_pinned" | "created_at" | "updated_at"
+  | "uuid"
+  | "parent_uuid"
+  | "title"
+  | "content"
+  | "is_pinned"
+  | "created_at"
+  | "updated_at"
 > & {
   children: NoteTreeNode[];
 };
