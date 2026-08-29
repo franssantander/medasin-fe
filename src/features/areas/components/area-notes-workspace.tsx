@@ -116,7 +116,7 @@ export function AreaNotesWorkspace({
             </Button>
           )}
         </div>
-        <div className="max-h-64 min-w-0 overflow-x-hidden overflow-y-auto p-2 md:max-h-none md:flex-1">
+        <div className="notes-list-scrollbar max-h-64 min-w-0 overflow-x-hidden overflow-y-auto p-2 md:max-h-none md:flex-1">
           {tree.length === 0 ? (
             <p className="px-2 py-6 text-center text-sm text-muted-foreground">
               {archived
