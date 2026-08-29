@@ -142,14 +142,15 @@
   .note-rich-text .bn-editor,
   .note-rich-text .ProseMirror {
     box-sizing: border-box;
+    min-width: 0;
     width: 100%;
     max-width: none;
     background: white;
-    color: oklch(0.145 0 0);
+    color: oklch(0% 0 0);
   }
 
   .note-rich-text .bn-container {
-    display: flex;
+
     min-height: 0;
     flex: 1;
     overflow: hidden;
@@ -162,8 +163,39 @@
     border-radius: 0;
     padding-block: 1rem;
     padding-inline: 0;
+    scrollbar-color: color-mix(in oklab, var(--muted-foreground) 45%, transparent)
+      transparent;
+    scrollbar-width: thin;
     overflow-x: hidden;
     overflow-y: auto;
+  }
+
+  .note-rich-text .bn-editor::-webkit-scrollbar {
+    width: 8px;
+  }
+
+  .note-rich-text .bn-editor::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .note-rich-text .bn-editor::-webkit-scrollbar-thumb {
+    border: 2px solid transparent;
+    border-radius: 9999px;
+    background: color-mix(
+      in oklab,
+      var(--muted-foreground) 45%,
+      transparent
+    );
+    background-clip: padding-box;
+  }
+
+  .note-rich-text .bn-editor::-webkit-scrollbar-thumb:hover {
+    background: color-mix(
+      in oklab,
+      var(--muted-foreground) 65%,
+      transparent
+    );
+    background-clip: padding-box;
   }
 
   .note-rich-text .bn-default-styles {

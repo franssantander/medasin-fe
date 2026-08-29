@@ -369,10 +369,10 @@ function NoteEditorPanel({
 
   return (
     <div className="flex h-full min-h-0 w-full flex-col gap-4">
-      <div className="flex items-start justify-between gap-4">
+      <div className="relative w-full">
         <Input
           aria-label="Note title"
-          className="h-auto border-0 px-0 py-0 text-2xl font-semibold shadow-none focus-visible:ring-0 md:text-3xl"
+          className="h-auto w-full border-0 px-0 py-0 pl-13 text-2xl font-bold shadow-none focus-visible:ring-0 md:text-3xl"
           placeholder="Untitled"
           maxLength={120}
           value={title}
@@ -383,7 +383,7 @@ function NoteEditorPanel({
             scheduleSave();
           }}
         />
-        <div className="shrink-0 pt-1 text-xs text-muted-foreground">
+        <div className="absolute top-1 right-13 text-xs text-muted-foreground">
           {archived ? (
             "Read only"
           ) : saveStatus === "saving" ? (
@@ -434,12 +434,6 @@ function NoteEditorPanel({
         }}
         onOpenNote={onOpenNote}
       />
-      {!archived && (
-        <p className="text-xs text-muted-foreground">
-          Type <kbd className="rounded border bg-muted px-1 py-0.5">/</kbd> for
-          headings, lists, pages, media, code, links, and more.
-        </p>
-      )}
     </div>
   );
 }

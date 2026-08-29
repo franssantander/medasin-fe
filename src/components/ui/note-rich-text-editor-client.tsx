@@ -29,6 +29,7 @@ import {
   NotebookTabs,
 } from "lucide-react";
 import {
+  useCallback,
   createContext,
   useContext,
   useMemo,
@@ -253,6 +254,7 @@ export function NoteRichTextEditorClient({
   const onChangeRef = useRef(onChange);
   const onUploadFileRef = useRef(onUploadFile);
   const onCreateChildRef = useRef(onCreateChild);
+  const onOpenNoteRef = useRef(onOpenNote);
   const [pendingDialog, setPendingDialog] = useState<PendingDialog>();
   const [url, setUrl] = useState("");
   const [label, setLabel] = useState("");
@@ -261,7 +263,8 @@ export function NoteRichTextEditorClient({
     onChangeRef.current = onChange;
     onUploadFileRef.current = onUploadFile;
     onCreateChildRef.current = onCreateChild;
-  }, [onChange, onCreateChild, onUploadFile]);
+    onOpenNoteRef.current = onOpenNote;
+  }, [onChange, onCreateChild, onOpenNote, onUploadFile]);
 
   const initialContent = useMemo(
     () =>
@@ -278,16 +281,13 @@ export function NoteRichTextEditorClient({
       initialContent,
       domAttributes: {
         editor: {
-          style:
-            "box-sizing:border-box;width:100%;max-width:none;min-width:0;",
+          style: "box-sizing:border-box;width:100%;max-width:none;min-width:0;",
         },
         block: {
-          style:
-            "box-sizing:border-box;width:100%;max-width:none;min-width:0;",
+          style: "box-sizing:border-box;width:100%;max-width:none;min-width:0;",
         },
         blockContent: {
-          style:
-            "box-sizing:border-box;width:100%;max-width:none;min-width:0;",
+          style: "box-sizing:border-box;width:100%;max-width:none;min-width:0;",
         },
         inlineContent: {
           style:
@@ -302,6 +302,22 @@ export function NoteRichTextEditorClient({
     () => new Map(noteOptions.map((note) => [note.uuid, note.title])),
     [noteOptions],
   );
+  const openNote = useCallback(
+    (uuid: string) => onOpenNoteRef.current(uuid),
+    [],
+  );
+  const noteEditorContext = useMemo(
+    () => ({ noteTitles, onOpenNote: openNote }),
+    [noteTitles, openNote],
+  );
+  const handleEditorChange = useCallback(() => {
+    const serializedDocument = serializeNoteDocument(editor.document);
+
+    // BlockNote emits changes while ProseMirror is still reconciling node-view
+    // positions. Defer parent state updates so undo/redo can finish that cycle
+    // before React rerenders the editor tree.
+    queueMicrotask(() => onChangeRef.current(serializedDocument));
+  }, [editor]);
 
   const prepareDialog = (kind: "link" | "bookmark" | "note") => {
     const block = editor.getTextCursorPosition().block;
@@ -430,17 +446,15 @@ export function NoteRichTextEditorClient({
   };
 
   return (
-    <NoteEditorContext.Provider value={{ noteTitles, onOpenNote }}>
-      <div className="flex min-h-0 w-full flex-1 overflow-hidden bg-white">
+    <NoteEditorContext.Provider value={noteEditorContext}>
+      <div className="flex min-h-0 min-w-0 w-full flex-1 overflow-hidden bg-white">
         <BlockNoteView
           className="h-full min-h-0 w-full"
           editor={editor}
           editable={editable}
           slashMenu={false}
           theme="light"
-          onChange={() =>
-            onChangeRef.current(serializeNoteDocument(editor.document))
-          }
+          onChange={handleEditorChange}
         >
           {editable && (
             <SuggestionMenuController

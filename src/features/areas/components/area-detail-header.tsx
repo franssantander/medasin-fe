@@ -36,7 +36,7 @@ export function AreaDetailHeader({
   onAction: (action: AreaConfirmationAction) => void;
 }) {
   return (
-    <Card className="relative min-h-56 gap-0 overflow-hidden bg-black py-0 text-white sm:min-h-80">
+    <Card className="relative min-h-56 gap-0 overflow-hidden bg-black py-0 text-white sm:min-h-60">
       <div
         className="absolute inset-0 bg-cover bg-center"
         style={{

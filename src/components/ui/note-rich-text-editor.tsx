@@ -19,7 +19,7 @@ const NoteRichTextEditorClient = dynamic(
 
 export function NoteRichTextEditor(props: NoteRichTextEditorClientProps) {
   return (
-    <div className="flex min-h-[32rem] min-w-0 w-full flex-1">
+    <div className="note-rich-text flex min-h-[32rem] min-w-0 w-full flex-1">
       <NoteRichTextEditorClient {...props} />
     </div>
   );
