@@ -238,7 +238,7 @@ export type NoteRichTextEditorClientProps = {
   onChange: (content: string) => void;
   onUploadFile: (file: File) => Promise<string>;
   onCreateChild: () => Promise<{ uuid: string; title: string }>;
-  onOpenNote: (uuid: string) => void;
+  onOpenNote: (uuid: string, options?: { focusTitle?: boolean }) => void;
 };
 
 export function NoteRichTextEditorClient({
@@ -279,21 +279,6 @@ export function NoteRichTextEditorClient({
     {
       schema: noteEditorSchema,
       initialContent,
-      domAttributes: {
-        editor: {
-          style: "box-sizing:border-box;width:100%;max-width:none;min-width:0;",
-        },
-        block: {
-          style: "box-sizing:border-box;width:100%;max-width:none;min-width:0;",
-        },
-        blockContent: {
-          style: "box-sizing:border-box;width:100%;max-width:none;min-width:0;",
-        },
-        inlineContent: {
-          style:
-            "box-sizing:border-box;width:100%;max-width:none;min-width:0;flex:1 1 auto;overflow-wrap:anywhere;word-break:break-word;",
-        },
-      },
       uploadFile: (file) => onUploadFileRef.current(file),
     },
     [documentId],
@@ -349,7 +334,10 @@ export function NoteRichTextEditorClient({
       icon: <FilePlus2 className="size-4" />,
       onItemClick: () => {
         const block = editor.getTextCursorPosition().block;
-        editor.updateBlock(block, { type: "paragraph", content: "" });
+        editor.updateBlock(block, {
+          type: "paragraph",
+          content: "Creating child page…",
+        });
         void onCreateChildRef
           .current()
           .then((note) => {
@@ -357,6 +345,14 @@ export function NoteRichTextEditorClient({
               type: "noteLink",
               props: { noteUuid: note.uuid, label: note.title },
             });
+
+            // Let BlockNote emit the parent document change before navigating
+            // away, so the new child link is included in the parent's save.
+            window.setTimeout(
+              () =>
+                onOpenNoteRef.current(note.uuid, { focusTitle: true }),
+              0,
+            );
           })
           .catch(() => {
             editor.updateBlock(block.id, {

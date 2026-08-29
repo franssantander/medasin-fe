@@ -12,7 +12,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
 import { areaService } from "../services/area-service";
-import type { Note, NoteInput, NoteTreeNode } from "../type";
+import type { ApiResponse, Note, NoteInput, NoteTreeNode } from "../type";
 
 const noteKeys = {
   tree: (areaUuid: string) =>
@@ -22,7 +22,7 @@ const noteKeys = {
 };
 
 type NoteSelection =
-  | { kind: "note"; uuid: string }
+  | { kind: "note"; uuid: string; focusTitle?: boolean }
   | { kind: "draft"; key: number; uuid?: string };
 
 export function AreaNotesWorkspace({
@@ -159,8 +159,11 @@ export function AreaNotesWorkspace({
             areaUuid={areaUuid}
             noteUuid={derivedSelection.uuid}
             archived={archived}
+            focusTitle={derivedSelection.focusTitle}
             noteOptions={flatNotes}
-            onOpenNote={(uuid) => setSelection({ kind: "note", uuid })}
+            onOpenNote={(uuid, options) =>
+              setSelection({ kind: "note", uuid, ...options })
+            }
             onTreeChanged={refreshTree}
           />
         ) : (
@@ -188,7 +191,9 @@ export function AreaNotesWorkspace({
                   : current;
               });
             }}
-            onOpenNote={(uuid) => setSelection({ kind: "note", uuid })}
+            onOpenNote={(uuid, options) =>
+              setSelection({ kind: "note", uuid, ...options })
+            }
             onTreeChanged={refreshTree}
           />
         )}
@@ -201,6 +206,7 @@ function PersistedNotePanel({
   areaUuid,
   noteUuid,
   archived,
+  focusTitle,
   noteOptions,
   onOpenNote,
   onTreeChanged,
@@ -208,8 +214,9 @@ function PersistedNotePanel({
   areaUuid: string;
   noteUuid: string;
   archived: boolean;
+  focusTitle?: boolean;
   noteOptions: FlatNote[];
-  onOpenNote: (uuid: string) => void;
+  onOpenNote: (uuid: string, options?: { focusTitle?: boolean }) => void;
   onTreeChanged: () => Promise<void>;
 }) {
   const noteQuery = useQuery({
@@ -239,6 +246,7 @@ function PersistedNotePanel({
       initialTitle={note.title}
       initialContent={note.content}
       initialPinned={note.is_pinned}
+      focusTitle={focusTitle}
       persistedUuid={note.uuid}
       noteOptions={noteOptions}
       onCreated={() => undefined}
@@ -255,6 +263,7 @@ function NoteEditorPanel({
   initialTitle,
   initialContent,
   initialPinned,
+  focusTitle = false,
   persistedUuid,
   noteOptions,
   onCreated,
@@ -267,18 +276,21 @@ function NoteEditorPanel({
   initialTitle: string;
   initialContent: string;
   initialPinned: boolean;
+  focusTitle?: boolean;
   persistedUuid?: string;
   noteOptions: FlatNote[];
   onCreated: (note: Note) => void;
-  onOpenNote: (uuid: string) => void;
+  onOpenNote: (uuid: string, options?: { focusTitle?: boolean }) => void;
   onTreeChanged: () => Promise<void>;
 }) {
+  const queryClient = useQueryClient();
   const [title, setTitle] = useState(initialTitle);
   const [saveStatus, setSaveStatus] = useState<
     "idle" | "dirty" | "saving" | "saved" | "error"
   >("idle");
   const [activeUuid, setActiveUuid] = useState(persistedUuid);
   const uuidRef = useRef(persistedUuid);
+  const titleInputRef = useRef<HTMLInputElement>(null);
   const titleRef = useRef(initialTitle);
   const contentRef = useRef(initialContent);
   const revisionRef = useRef(0);
@@ -287,6 +299,17 @@ function NoteEditorPanel({
   const createPromiseRef = useRef<Promise<string> | undefined>(undefined);
   const saveChainRef = useRef<Promise<void>>(Promise.resolve());
   const flushRef = useRef<() => void>(() => undefined);
+
+  useEffect(() => {
+    if (!focusTitle) return;
+
+    const frame = window.requestAnimationFrame(() => {
+      titleInputRef.current?.focus({ preventScroll: true });
+      titleInputRef.current?.select();
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [focusTitle]);
 
   const currentInput = useCallback(
     (): NoteInput => ({
@@ -303,11 +326,15 @@ function NoteEditorPanel({
 
       createPromiseRef.current = areaService
         .createNote(areaUuid, input)
-        .then(async (response) => {
+        .then((response) => {
           uuidRef.current = response.data.uuid;
+          queryClient.setQueryData(
+            noteKeys.detail(areaUuid, response.data.uuid),
+            response,
+          );
           setActiveUuid(response.data.uuid);
           onCreated(response.data);
-          await onTreeChanged();
+          void onTreeChanged().catch(() => undefined);
           return response.data.uuid;
         })
         .finally(() => {
@@ -315,22 +342,40 @@ function NoteEditorPanel({
         });
       return createPromiseRef.current;
     },
-    [areaUuid, onCreated, onTreeChanged],
+    [areaUuid, onCreated, onTreeChanged, queryClient],
   );
   const flush = useCallback(() => {
     if (archived || !dirtyRef.current) return;
     if (timerRef.current) window.clearTimeout(timerRef.current);
     const revision = revisionRef.current;
     const input = currentInput();
+    const existingUuid = uuidRef.current;
+    if (existingUuid) {
+      queryClient.setQueryData<ApiResponse<Note>>(
+        noteKeys.detail(areaUuid, existingUuid),
+        (cachedNote) =>
+          cachedNote
+            ? {
+                ...cachedNote,
+                data: {
+                  ...cachedNote.data,
+                  title: input.title,
+                  content: input.content,
+                },
+              }
+            : cachedNote,
+      );
+    }
     setSaveStatus("saving");
     saveChainRef.current = saveChainRef.current
       .catch(() => undefined)
       .then(async () => {
         const uuid = await ensureNote(input);
-        await areaService.updateNote(areaUuid, uuid, {
+        const response = await areaService.updateNote(areaUuid, uuid, {
           title: input.title,
           content: input.content,
         });
+        queryClient.setQueryData(noteKeys.detail(areaUuid, uuid), response);
         await onTreeChanged();
       })
       .then(() => {
@@ -340,7 +385,14 @@ function NoteEditorPanel({
         }
       })
       .catch(() => setSaveStatus("error"));
-  }, [archived, areaUuid, currentInput, ensureNote, onTreeChanged]);
+  }, [
+    archived,
+    areaUuid,
+    currentInput,
+    ensureNote,
+    onTreeChanged,
+    queryClient,
+  ]);
 
   useEffect(() => {
     flushRef.current = flush;
@@ -371,6 +423,7 @@ function NoteEditorPanel({
     <div className="flex h-full min-h-0 w-full min-w-0 flex-col gap-4">
       <div className="relative w-full">
         <Input
+          ref={titleInputRef}
           aria-label="Note title"
           className="h-auto w-full border-0 px-0 py-0 pl-13 text-2xl font-bold shadow-none focus-visible:ring-0 md:text-3xl"
           placeholder="Untitled"
@@ -429,7 +482,11 @@ function NoteEditorPanel({
             is_pinned: false,
             parent_uuid: parentUuid,
           });
-          await onTreeChanged();
+          queryClient.setQueryData(
+            noteKeys.detail(areaUuid, response.data.uuid),
+            response,
+          );
+          void onTreeChanged().catch(() => undefined);
           return { uuid: response.data.uuid, title: response.data.title };
         }}
         onOpenNote={onOpenNote}
