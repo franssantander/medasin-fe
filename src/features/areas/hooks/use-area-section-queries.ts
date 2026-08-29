@@ -38,7 +38,7 @@ export function useAreaSectionQueries({
       if (tab === "notes") return areaService.notes(areaUuid, page);
       return areaService.resources(areaUuid, page);
     },
-    enabled: enabled && tab !== "goals",
+    enabled: enabled && tab !== "goals" && tab !== "notes",
   });
   const goalsQuery = useQuery<ApiResponse<GoalTrackerData>>({
     queryKey: areaKeys.section(areaUuid, "goals", page, goalFilter),

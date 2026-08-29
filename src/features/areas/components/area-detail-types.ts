@@ -1,5 +1,5 @@
-import type { Goal, Habit, Note } from "../type";
+import type { Goal, Habit } from "../type";
 
 export type AreaTab = "projects" | "goals" | "habits" | "notes" | "resources";
-export type EditableAreaRecord = Goal | Habit | Note;
-export type EditableAreaRecordKind = "goal" | "habit" | "note";
+export type EditableAreaRecord = Goal | Habit;
+export type EditableAreaRecordKind = "goal" | "habit";

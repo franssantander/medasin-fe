@@ -27,8 +27,6 @@ import type {
   GoalInput,
   Habit,
   HabitInput,
-  Note,
-  NoteInput,
   Paginated,
   Project,
   Resource,
@@ -40,10 +38,10 @@ import {
 import type { AreaTab } from "./area-detail-types";
 import { AreaDetailHeader } from "./area-detail-header";
 import { AreaFormDialog } from "./area-form-dialog";
+import { AreaNotesWorkspace } from "./area-notes-workspace";
 import { AreaSectionContent } from "./area-section-content";
 import { GoalFormDialog } from "./goal-form-dialog";
 import { HabitFormDialog } from "./habit-form-dialog";
-import { RecordFormSheet } from "./record-form-sheet";
 
 const tabs: { value: AreaTab; label: string; icon: typeof FolderKanban }[] = [
   { value: "projects", label: "Projects", icon: FolderKanban },
@@ -64,8 +62,8 @@ export function AreaDetail() {
     useState<AreaConfirmationAction>();
   const [goalForm, setGoalForm] = useState<{ value?: Goal }>();
   const [recordForm, setRecordForm] = useState<{
-    kind: "habit" | "note";
-    value?: Habit | Note;
+    kind: "habit";
+    value?: Habit;
   }>();
   const areaQuery = useAreaQuery(uuid);
   const area = areaQuery.data?.data;
@@ -91,37 +89,20 @@ export function AreaDetail() {
     onSuccess: (response) => invalidate(response.message),
   });
   const recordMutation = useMutation({
-    mutationFn: async (input: HabitInput | NoteInput) => {
+    mutationFn: async (input: HabitInput) => {
       if (!recordForm) throw new Error("No record selected.");
-      if (recordForm.kind === "habit")
-        return recordForm.value
-          ? areaService.updateHabit(
-              uuid,
-              recordForm.value.uuid,
-              input as HabitInput,
-            )
-          : areaService.createHabit(uuid, input as HabitInput);
       return recordForm.value
-        ? areaService.updateNote(
-            uuid,
-            recordForm.value.uuid,
-            input as NoteInput,
-          )
-        : areaService.createNote(uuid, input as NoteInput);
+        ? areaService.updateHabit(uuid, recordForm.value.uuid, input)
+        : areaService.createHabit(uuid, input);
     },
     onSuccess: (response) => invalidate(response.message),
   });
   const deleteRecord = useMutation({
     mutationFn: ({
-      kind,
       recordUuid,
     }: {
-      kind: "habit" | "note";
       recordUuid: string;
-    }) =>
-      kind === "habit"
-        ? areaService.removeHabit(uuid, recordUuid)
-        : areaService.removeNote(uuid, recordUuid),
+    }) => areaService.removeHabit(uuid, recordUuid),
     onSuccess: (response) => invalidate(response.message),
   });
 
@@ -161,7 +142,7 @@ export function AreaDetail() {
   };
 
   return (
-    <div className="grid gap-5">
+    <div className="flex h-full min-h-0 flex-col gap-5">
       <div>
         <Button
           render={<Link href={archived ? "/archives" : "/areas"} />}
@@ -194,49 +175,55 @@ export function AreaDetail() {
           ))}
         </TabsList>
       </Tabs>
-      <AreaSectionContent
-        tab={activeTab}
-        data={
-          (activeTab === "goals"
-            ? goalsQuery.data?.data.items
-            : sectionQuery.data?.data) as
-            | Paginated<Goal | Habit | Note | Project | Resource>
-            | undefined
-        }
-        goalCounts={goalsQuery.data?.data.counts}
-        goalFilter={goalFilter}
-        loading={
-          activeTab === "goals" ? goalsQuery.isLoading : sectionQuery.isLoading
-        }
-        error={
-          activeTab === "goals" ? goalsQuery.isError : sectionQuery.isError
-        }
-        archived={archived}
-        areaUuid={uuid}
-        page={page}
-        setPage={setPage}
-        refetch={() => {
-          if (activeTab === "goals") void goalsQuery.refetch();
-          else void sectionQuery.refetch();
-        }}
-        onGoalFilterChange={(filter) => {
-          setGoalFilter(filter);
-          setPage(1);
-        }}
-        onAdd={(kind) => {
-          if (kind === "goal") setGoalForm({});
-          else setRecordForm({ kind });
-        }}
-        onEdit={(kind, value) => {
-          if (kind === "goal") setGoalForm({ value: value as Goal });
-          else setRecordForm({ kind, value: value as Habit | Note });
-        }}
-        onDelete={(kind, recordUuid) => {
-          if (kind !== "goal" && window.confirm("Delete this record?"))
-            deleteRecord.mutate({ kind, recordUuid });
-        }}
-        onChanged={invalidate}
-      />
+      {activeTab === "notes" ? (
+        <AreaNotesWorkspace areaUuid={uuid} archived={archived} />
+      ) : (
+        <AreaSectionContent
+          tab={activeTab}
+          data={
+            (activeTab === "goals"
+              ? goalsQuery.data?.data.items
+              : sectionQuery.data?.data) as
+              | Paginated<Goal | Habit | Project | Resource>
+              | undefined
+          }
+          goalCounts={goalsQuery.data?.data.counts}
+          goalFilter={goalFilter}
+          loading={
+            activeTab === "goals"
+              ? goalsQuery.isLoading
+              : sectionQuery.isLoading
+          }
+          error={
+            activeTab === "goals" ? goalsQuery.isError : sectionQuery.isError
+          }
+          archived={archived}
+          areaUuid={uuid}
+          page={page}
+          setPage={setPage}
+          refetch={() => {
+            if (activeTab === "goals") void goalsQuery.refetch();
+            else void sectionQuery.refetch();
+          }}
+          onGoalFilterChange={(filter) => {
+            setGoalFilter(filter);
+            setPage(1);
+          }}
+          onAdd={(kind) => {
+            if (kind === "goal") setGoalForm({});
+            else setRecordForm({ kind });
+          }}
+          onEdit={(kind, value) => {
+            if (kind === "goal") setGoalForm({ value: value as Goal });
+            else setRecordForm({ kind, value: value as Habit });
+          }}
+          onDelete={(kind, recordUuid) => {
+            if (kind === "habit" && window.confirm("Delete this record?"))
+              deleteRecord.mutate({ recordUuid });
+          }}
+          onChanged={invalidate}
+        />
+      )}
       <AreaFormDialog
         open={areaFormOpen}
         onOpenChange={setAreaFormOpen}
@@ -257,24 +244,10 @@ export function AreaDetail() {
           goalMutation.mutateAsync(input).then(() => undefined)
         }
       />
-      {recordForm?.kind === "habit" && (
+      {recordForm && (
         <HabitFormDialog
           open
           habit={recordForm.value as Habit | undefined}
-          onOpenChange={(open) => {
-            if (!open) setRecordForm(undefined);
-          }}
-          isPending={recordMutation.isPending}
-          onSubmit={(input) =>
-            recordMutation.mutateAsync(input).then(() => undefined)
-          }
-        />
-      )}
-      {recordForm?.kind === "note" && (
-        <RecordFormSheet
-          kind={recordForm.kind}
-          value={recordForm.value}
-          open
           onOpenChange={(open) => {
             if (!open) setRecordForm(undefined);
           }}

@@ -2,6 +2,8 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
+@source "../../node_modules/@blocknote/shadcn/dist/blocknote-shadcn.js";
+
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
@@ -131,5 +133,72 @@
   }
   html {
     @apply font-sans;
+  }
+}
+
+@layer components {
+  .note-rich-text,
+  .note-rich-text .bn-container,
+  .note-rich-text .bn-editor,
+  .note-rich-text .ProseMirror {
+    box-sizing: border-box;
+    width: 100%;
+    max-width: none;
+    background: white;
+    color: oklch(0.145 0 0);
+  }
+
+  .note-rich-text .bn-container {
+    display: flex;
+    min-height: 0;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  .note-rich-text .bn-editor {
+    height: 100%;
+    min-height: 0;
+    flex: 1;
+    border-radius: 0;
+    padding-block: 1rem;
+    padding-inline: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+
+  .note-rich-text .bn-default-styles {
+    font-family: var(--font-sans);
+  }
+
+  .note-rich-text .bn-editor > .bn-block-group,
+  .note-rich-text .bn-editor > .bn-block-group > .bn-block-outer,
+  .note-rich-text .bn-block-content,
+  .note-rich-text [data-content-type="paragraph"] {
+    box-sizing: border-box;
+    min-width: 0;
+    width: 100%;
+    max-width: none;
+  }
+
+  .note-rich-text .bn-block-content {
+    position: relative;
+  }
+
+  .note-rich-text
+    .bn-block-content:has(.ProseMirror-trailingBreak:only-child)::after {
+    position: absolute;
+    inset-block-start: 3px;
+    inset-inline: 0;
+    width: 100%;
+    margin-inline: 0;
+  }
+
+  .note-rich-text .bn-inline-content {
+    min-width: 0;
+    width: 100%;
+    max-width: 100%;
+    flex: 1;
+    overflow-wrap: anywhere;
+    word-break: break-word;
   }
 }

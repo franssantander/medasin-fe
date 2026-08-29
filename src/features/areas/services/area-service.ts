@@ -13,6 +13,8 @@ import type {
   HabitInput,
   Note,
   NoteInput,
+  NoteMedia,
+  NoteTreeNode,
   Paginated,
   Project,
   Resource,
@@ -87,14 +89,25 @@ export const areaService = {
   notes(areaUuid: string, page = 1) {
     return unwrap(axiosClient.get<ApiResponse<Paginated<Note>>>(`/area/${areaUuid}/notes`, { params: { page } }));
   },
+  noteTree(areaUuid: string) {
+    return unwrap(axiosClient.get<ApiResponse<NoteTreeNode[]>>(`/area/${areaUuid}/notes/tree`));
+  },
+  note(areaUuid: string, noteUuid: string) {
+    return unwrap(axiosClient.get<ApiResponse<Note>>(`/area/${areaUuid}/notes/${noteUuid}`));
+  },
   createNote(areaUuid: string, input: NoteInput) {
     return unwrap(axiosClient.post<ApiResponse<Note>>(`/area/${areaUuid}/notes`, input));
   },
-  updateNote(areaUuid: string, noteUuid: string, input: NoteInput) {
+  updateNote(areaUuid: string, noteUuid: string, input: Partial<NoteInput>) {
     return unwrap(axiosClient.put<ApiResponse<Note>>(`/area/${areaUuid}/notes/${noteUuid}`, input));
   },
   removeNote(areaUuid: string, noteUuid: string) {
     return unwrap(axiosClient.delete<ApiResponse<null>>(`/area/${areaUuid}/notes/${noteUuid}`));
+  },
+  uploadNoteMedia(areaUuid: string, noteUuid: string, file: File) {
+    const data = new FormData();
+    data.append("file", file);
+    return unwrap(axiosClient.post<ApiResponse<NoteMedia>>(`/area/${areaUuid}/notes/${noteUuid}/media`, data));
   },
   projects(areaUuid: string, page = 1) {
     return unwrap(axiosClient.get<ApiResponse<Paginated<Project>>>(`/area/${areaUuid}/projects`, { params: { page } }));

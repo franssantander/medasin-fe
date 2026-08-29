@@ -1,15 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  ExternalLink,
-  Link2,
-  Pencil,
-  Pin,
-  Plus,
-  Trash2,
-  Unlink,
-} from "lucide-react";
+import { ExternalLink, Link2, Unlink } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -29,7 +21,6 @@ import type {
   Goal,
   GoalFilter,
   Habit,
-  Note,
   Paginated,
   Project,
   Resource,
@@ -42,7 +33,7 @@ import type {
 import { GoalTracker } from "./goal-tracker";
 import { HabitTracker } from "./habit-tracker";
 
-type AreaRecord = Goal | Habit | Note | Project | Resource;
+type AreaRecord = Goal | Habit | Project | Resource;
 
 export function AreaSectionContent({
   tab,
@@ -126,7 +117,6 @@ export function AreaSectionContent({
     );
   }
 
-  const singular = "note";
   return (
     <div className="grid gap-4">
       <div className="flex items-center justify-between gap-3">
@@ -136,12 +126,6 @@ export function AreaSectionContent({
             {data?.total ?? 0} connected
           </p>
         </div>
-        {!archived && tab === "notes" && (
-          <Button size="sm" onClick={() => onAdd(singular)}>
-            <Plus />
-            Add {singular}
-          </Button>
-        )}
         {!archived && (tab === "projects" || tab === "resources") && (
           <LinkPicker
             areaUuid={areaUuid}
@@ -165,8 +149,6 @@ export function AreaSectionContent({
               record={record}
               archived={archived}
               areaUuid={areaUuid}
-              onEdit={onEdit}
-              onDelete={onDelete}
               onChanged={onChanged}
             />
           ))}
@@ -184,16 +166,12 @@ function RecordCard({
   record,
   archived,
   areaUuid,
-  onEdit,
-  onDelete,
   onChanged,
 }: {
   tab: AreaTab;
   record: AreaRecord;
   archived: boolean;
   areaUuid: string;
-  onEdit: (kind: EditableAreaRecordKind, value: EditableAreaRecord) => void;
-  onDelete: (kind: EditableAreaRecordKind, uuid: string) => void;
   onChanged: (message: string) => Promise<void>;
 }) {
   const queryClient = useQueryClient();
@@ -212,16 +190,10 @@ function RecordCard({
       toast.add({ type: "error", description: error.message }),
   });
   const { title, description, badge } = getRecordDisplay(tab, record);
-  const nested = tab === "habits" || tab === "notes";
   return (
     <Card size="sm">
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          {tab === "notes" && (record as Note).is_pinned && (
-            <Pin className="size-3" />
-          )}
-          {title}
-        </CardTitle>
+        <CardTitle className="flex items-center gap-2">{title}</CardTitle>
         <CardDescription>{description}</CardDescription>
         {badge && (
           <CardAction>
@@ -233,43 +205,15 @@ function RecordCard({
       </CardHeader>
       {!archived && (
         <CardContent className="flex-row justify-end">
-          {nested ? (
-            <>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() =>
-                  onEdit(
-                    tab.slice(0, -1) as "habit" | "note",
-                    record as Habit | Note,
-                  )
-                }
-              >
-                <Pencil />
-                Edit
-              </Button>
-              <Button
-                variant="destructive"
-                size="sm"
-                onClick={() =>
-                  onDelete(tab.slice(0, -1) as "habit" | "note", record.uuid)
-                }
-              >
-                <Trash2 />
-                Delete
-              </Button>
-            </>
-          ) : (
-            <Button
-              variant="ghost"
-              size="sm"
-              disabled={detach.isPending}
-              onClick={() => detach.mutate()}
-            >
-              <Unlink />
-              Detach
-            </Button>
-          )}
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={detach.isPending}
+            onClick={() => detach.mutate()}
+          >
+            <Unlink />
+            Detach
+          </Button>
           {tab === "resources" && (record as Resource).url && (
             <Button
               render={
@@ -392,13 +336,11 @@ function getRecordDisplay(
       badge: `${item.frequency}${item.is_active ? "" : " · paused"}`,
     };
   }
-  const item = record as Note;
+  const item = record as Habit;
   return {
-    title: item.title,
-    description: (
-      <span className="line-clamp-3 whitespace-pre-wrap">{item.content}</span>
-    ),
-    badge: item.is_pinned ? "Pinned" : undefined,
+    title: item.name,
+    description: item.description || "No description.",
+    badge: item.frequency,
   };
 }
 
