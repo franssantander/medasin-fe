@@ -152,7 +152,7 @@ export function AreaNotesWorkspace({
           )}
         </div>
       </aside>
-      <main className="min-h-0 min-w-0 overflow-hidden bg-white p-4 sm:p-6">
+      <main className="min-h-0 min-w-0 overflow-hidden bg-white py-6">
         {derivedSelection.kind === "note" ? (
           <PersistedNotePanel
             key={derivedSelection.uuid}
