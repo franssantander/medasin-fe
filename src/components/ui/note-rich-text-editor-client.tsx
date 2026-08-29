@@ -132,11 +132,13 @@ function NoteLinkRenderer({
   return (
     <button
       type="button"
-      className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left font-medium underline-offset-4 hover:bg-muted hover:underline"
+      className="flex h-6 w-full items-center gap-2 rounded-md px-2 text-left text-sm leading-none font-medium underline-offset-4 hover:bg-muted hover:underline"
       onClick={() => context.onOpenNote(block.props.noteUuid)}
     >
       <NotebookTabs className="size-4 shrink-0" />
-      <span className="truncate">{title || "Untitled"}</span>
+      <span className="flex min-w-0 flex-1 items-center truncate leading-none">
+        {title || "Untitled"}
+      </span>
     </button>
   );
 }
