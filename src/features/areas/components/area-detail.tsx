@@ -16,6 +16,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAreaSectionQueries } from "../hooks/use-area-section-queries";
 import { useAreaMutation, useAreaQuery } from "../queries/area-query";
 import { areaService } from "../services/area-service";
@@ -180,22 +181,19 @@ export function AreaDetail() {
         onEdit={() => setAreaFormOpen(true)}
         onAction={setConfirmationAction}
       />
-      <div
-        className="flex gap-1 overflow-x-auto rounded-lg border bg-card p-1"
-        role="tablist"
+      <Tabs
+        value={activeTab}
+        onValueChange={(value) => changeTab(value as AreaTab)}
       >
-        {tabs.map(({ value, label, icon: Icon }) => (
-          <Button
-            key={value}
-            variant={activeTab === value ? "secondary" : "ghost"}
-            className="flex-1"
-            onClick={() => changeTab(value)}
-          >
-            <Icon />
-            {label}
-          </Button>
-        ))}
-      </div>
+        <TabsList variant="line">
+          {tabs.map(({ value, label, icon: Icon }) => (
+            <TabsTrigger key={value} value={value}>
+              <Icon />
+              {label}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+      </Tabs>
       <AreaSectionContent
         tab={activeTab}
         data={
