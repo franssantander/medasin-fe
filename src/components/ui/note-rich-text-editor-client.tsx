@@ -666,7 +666,7 @@ export function NoteRichTextEditorClient({
         ref={editorShellRef}
         className={
           mode === "task"
-            ? "flex min-h-0 w-full min-w-0 flex-1 overflow-x-hidden overflow-y-auto bg-white"
+            ? "flex h-full min-h-0 w-full min-w-0 flex-1 overflow-hidden bg-white"
             : "flex min-h-0 w-full min-w-0 flex-1 overflow-hidden bg-white"
         }
         onBlurCapture={(event) => {
@@ -687,7 +687,7 @@ export function NoteRichTextEditorClient({
         <BlockNoteView
           className={
             mode === "task"
-              ? "h-auto min-h-full w-full"
+              ? "h-full min-h-0 w-full"
               : "h-full min-h-0 w-full"
           }
           editor={editor}
