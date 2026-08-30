@@ -12,12 +12,20 @@ const areaTabs: AreaTab[] = [
 export default async function AreaDetailPage({
   searchParams,
 }: {
-  searchParams: Promise<{ tab?: string | string[] }>;
+  searchParams: Promise<{
+    tab?: string | string[];
+    note?: string | string[];
+  }>;
 }) {
-  const requestedTab = (await searchParams).tab;
+  const params = await searchParams;
+  const requestedTab = params.tab;
   const initialTab = areaTabs.includes(requestedTab as AreaTab)
     ? (requestedTab as AreaTab)
     : "projects";
+  const initialNoteUuid =
+    typeof params.note === "string" ? params.note : undefined;
 
-  return <AreaDetail initialTab={initialTab} />;
+  return (
+    <AreaDetail initialTab={initialTab} initialNoteUuid={initialNoteUuid} />
+  );
 }

@@ -22,6 +22,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Check,
+  CalendarDays,
   ChevronDown,
   Circle,
   Clock3,
@@ -35,6 +36,7 @@ import {
   Tags,
   Trash2,
 } from "lucide-react";
+import Link from "next/link";
 import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -57,6 +59,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
@@ -90,6 +93,8 @@ import type {
   BoardSummary,
   BoardTask,
   BoardTaskInput,
+  BoardTaskNoteLink,
+  BoardTaskResourceLink,
   ProjectApiResponse,
 } from "../type";
 import { ProjectLabelDialog } from "./project-label-dialog";
@@ -139,6 +144,20 @@ function StatusValue({ color, label }: { color: string; label: string }) {
       <StatusDot color={color} />
       <span className="truncate">{label}</span>
     </span>
+  );
+}
+
+function LabelBadge({ label }: { label: BoardLabel }) {
+  return (
+    <Badge
+      className="border-transparent"
+      style={{
+        backgroundColor: label.hex,
+        color: getLabelTextColor(label.hex),
+      }}
+    >
+      {label.name}
+    </Badge>
   );
 }
 
@@ -862,14 +881,8 @@ function TaskCard({
           <Badge className={priorityStyles[task.priority]}>
             {task.priority}
           </Badge>
-          {task.labels.map((label) => (
-            <Badge key={label.uuid} variant="outline">
-              <span
-                className="mr-1 size-1.5 rounded-full"
-                style={{ backgroundColor: label.hex }}
-              />
-              {label.name}
-            </Badge>
+          {task.labels.slice(0, 1).map((label) => (
+            <LabelBadge key={label.uuid} label={label} />
           ))}
         </div>
         {(task.resources.length > 0 || task.notes.length > 0) && (
@@ -921,7 +934,7 @@ function TaskDetailsSheet({
   );
   const [stage, setStage] = useState<BoardStageKey>(task?.stage ?? "backlog");
   const [labelUuids, setLabelUuids] = useState<string[]>(
-    task?.labels.map((label) => label.uuid) ?? [],
+    task?.labels.slice(0, 1).map((label) => label.uuid) ?? [],
   );
   const [resourceUuids, setResourceUuids] = useState<string[]>(
     task?.resources.map((resource) => resource.uuid) ?? [],
@@ -929,6 +942,7 @@ function TaskDetailsSheet({
   const [noteUuids, setNoteUuids] = useState<string[]>(
     task?.notes.map((note) => note.uuid) ?? [],
   );
+  const [linkPicker, setLinkPicker] = useState<"resources" | "notes">();
   const areasQuery = useQuery({
     queryKey: areaKeys.list("active"),
     queryFn: () => areaService.list("active"),
@@ -1004,6 +1018,19 @@ function TaskDetailsSheet({
       setDescription(task.description ?? "");
     }
   };
+
+  const updateLabel = (labelUuid?: string) => {
+    const next = labelUuid ? [labelUuid] : [];
+    setLabelUuids(next);
+    void save({ labelUuids: next }).catch(() =>
+      setLabelUuids(task?.labels.slice(0, 1).map((label) => label.uuid) ?? []),
+    );
+  };
+
+  const selectedLabel = labelUuids[0]
+    ? (labels.find((label) => label.uuid === labelUuids[0]) ??
+      task?.labels.find((label) => label.uuid === labelUuids[0]))
+    : undefined;
 
   return (
     <Sheet open={Boolean(task)} onOpenChange={onOpenChange}>
@@ -1147,159 +1174,109 @@ function TaskDetailsSheet({
 
               <TaskDetailSection title="Labels">
                 {archived ? (
-                  task.labels.length > 0 ? (
-                    <div className="flex flex-wrap gap-2">
-                      {task.labels.map((label) => (
-                        <Badge key={label.uuid} variant="outline">
-                          <span
-                            className="mr-1 size-2 rounded-full"
-                            style={{ backgroundColor: label.hex }}
-                          />
-                          {label.name}
-                        </Badge>
-                      ))}
-                    </div>
+                  task.labels[0] ? (
+                    <LabelBadge label={task.labels[0]} />
                   ) : (
                     <EmptyTaskDetail>No labels assigned.</EmptyTaskDetail>
                   )
-                ) : labels.length > 0 ? (
-                  <div className="flex flex-wrap gap-2">
-                    {labels.map((label) => {
-                      const selected = labelUuids.includes(label.uuid);
-                      return (
-                        <Button
-                          key={label.uuid}
-                          type="button"
-                          size="sm"
-                          variant={selected ? "default" : "outline"}
-                          disabled={isSaving}
-                          onClick={() => {
-                            const next = toggleSelection(
-                              labelUuids,
-                              label.uuid,
-                            );
-                            setLabelUuids(next);
-                            void save({ labelUuids: next }).catch(() =>
-                              setLabelUuids(
-                                task.labels.map((item) => item.uuid),
-                              ),
-                            );
-                          }}
-                        >
-                          {selected && <Check />}
-                          <span
-                            className="size-2 rounded-full"
-                            style={{ backgroundColor: label.hex }}
-                          />
-                          {label.name}
-                        </Button>
-                      );
-                    })}
-                  </div>
                 ) : (
-                  <EmptyTaskDetail>
-                    No labels on this board yet.
-                  </EmptyTaskDetail>
-                )}
-              </TaskDetailSection>
-
-              <TaskDetailSection title="Resources" icon={<Link2 />}>
-                {archived ? (
-                  task.resources.length > 0 ? (
-                    <TaskLinkList items={task.resources} />
-                  ) : (
-                    <EmptyTaskDetail>No resources linked.</EmptyTaskDetail>
-                  )
-                ) : resourcesQuery.isLoading ? (
-                  <EmptyTaskDetail>Loading resources…</EmptyTaskDetail>
-                ) : resourcesQuery.data?.data.length ? (
-                  <div className="flex flex-wrap gap-2">
-                    {resourcesQuery.data.data.map((resource) => {
-                      const selected = resourceUuids.includes(resource.uuid);
-                      return (
-                        <Button
-                          key={resource.uuid}
-                          type="button"
-                          size="sm"
-                          variant={selected ? "default" : "outline"}
-                          disabled={isSaving}
-                          onClick={() => {
-                            const next = toggleSelection(
-                              resourceUuids,
-                              resource.uuid,
-                            );
-                            setResourceUuids(next);
-                            void save({ resourceUuids: next }).catch(() =>
-                              setResourceUuids(
-                                task.resources.map((item) => item.uuid),
-                              ),
-                            );
-                          }}
-                        >
-                          {selected && <Check />}
-                          {resource.title}
-                        </Button>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <EmptyTaskDetail>No resources available.</EmptyTaskDetail>
-                )}
-              </TaskDetailSection>
-
-              <TaskDetailSection title="Notes" icon={<FileText />}>
-                {archived ? (
-                  task.notes.length > 0 ? (
-                    <TaskLinkList items={task.notes} />
-                  ) : (
-                    <EmptyTaskDetail>No notes linked.</EmptyTaskDetail>
-                  )
-                ) : notesQuery.isLoading ? (
-                  <EmptyTaskDetail>Loading notes…</EmptyTaskDetail>
-                ) : notesQuery.data?.length ? (
-                  <div className="grid max-h-48 gap-3 overflow-y-auto rounded-lg border p-3">
-                    {notesQuery.data.map(
-                      ({ area, notes }) =>
-                        notes.length > 0 && (
-                          <div key={area.uuid} className="grid gap-2">
-                            <Badge variant="secondary" className="w-fit">
-                              {area.name}
-                            </Badge>
-                            <div className="flex flex-wrap gap-2">
-                              {notes.map((note) => {
-                                const selected = noteUuids.includes(note.uuid);
-                                return (
-                                  <Button
-                                    key={note.uuid}
-                                    type="button"
-                                    size="sm"
-                                    variant={selected ? "default" : "outline"}
-                                    disabled={isSaving}
-                                    onClick={() => {
-                                      const next = toggleSelection(
-                                        noteUuids,
-                                        note.uuid,
-                                      );
-                                      setNoteUuids(next);
-                                      void save({ noteUuids: next }).catch(() =>
-                                        setNoteUuids(
-                                          task.notes.map((item) => item.uuid),
-                                        ),
-                                      );
-                                    }}
-                                  >
-                                    {selected && <Check />}
-                                    {note.title}
-                                  </Button>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        ),
+                  <div className="flex items-center gap-2">
+                    {selectedLabel ? (
+                      <LabelBadge label={selectedLabel} />
+                    ) : (
+                      <EmptyTaskDetail>No label assigned.</EmptyTaskDetail>
                     )}
+                    <DropdownMenu>
+                      <DropdownMenuTrigger
+                        render={
+                          <Button
+                            type="button"
+                            size="icon-sm"
+                            variant="outline"
+                            disabled={isSaving || labels.length === 0}
+                            aria-label={
+                              selectedLabel ? "Update label" : "Add label"
+                            }
+                          />
+                        }
+                      >
+                        <Plus />
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent side="bottom" align="start">
+                        {labels.map((label) => (
+                          <DropdownMenuItem
+                            key={label.uuid}
+                            onClick={() => updateLabel(label.uuid)}
+                          >
+                            <span className="flex-1">
+                              <LabelBadge label={label} />
+                            </span>
+                            {label.uuid === labelUuids[0] && <Check />}
+                          </DropdownMenuItem>
+                        ))}
+                        {selectedLabel && (
+                          <>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              destructive
+                              onClick={() => updateLabel()}
+                            >
+                              <Trash2 />
+                              Remove label
+                            </DropdownMenuItem>
+                          </>
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </div>
+                )}
+              </TaskDetailSection>
+
+              <TaskDetailSection
+                title="Resources"
+                icon={<Link2 />}
+                action={
+                  !archived ? (
+                    <Button
+                      type="button"
+                      size="icon-sm"
+                      variant="outline"
+                      aria-label="Link resources"
+                      onClick={() => setLinkPicker("resources")}
+                    >
+                      <Plus />
+                    </Button>
+                  ) : undefined
+                }
+              >
+                {task.resources.length > 0 ? (
+                  <TaskResourceList items={task.resources} />
                 ) : (
-                  <EmptyTaskDetail>No notes available.</EmptyTaskDetail>
+                  <EmptyTaskDetail>No resources linked.</EmptyTaskDetail>
+                )}
+              </TaskDetailSection>
+
+              <TaskDetailSection
+                title="Notes"
+                icon={<FileText />}
+                action={
+                  !archived ? (
+                    <Button
+                      type="button"
+                      size="icon-sm"
+                      variant="outline"
+                      aria-label="Link notes"
+                      onClick={() => setLinkPicker("notes")}
+                    >
+                      <Plus />
+                    </Button>
+                  ) : undefined
+                }
+              >
+                {task.notes.length > 0 ? (
+                  <TaskNoteList items={task.notes} />
+                ) : (
+                  <EmptyTaskDetail>No notes linked.</EmptyTaskDetail>
                 )}
               </TaskDetailSection>
 
@@ -1334,6 +1311,108 @@ function TaskDetailsSheet({
                 </Button>
               </SheetFooter>
             )}
+
+            {!archived && (
+              <Dialog
+                open={Boolean(linkPicker)}
+                onOpenChange={(open) => {
+                  if (!open) setLinkPicker(undefined);
+                }}
+              >
+                <DialogContent className="max-w-lg">
+                  <DialogHeader>
+                    <DialogTitle>
+                      Link {linkPicker === "notes" ? "notes" : "resources"}
+                    </DialogTitle>
+                    <DialogDescription>
+                      Select one or more items to link to this task.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="grid max-h-[55vh] gap-3 overflow-y-auto pr-1">
+                    {linkPicker === "resources" ? (
+                      resourcesQuery.isLoading ? (
+                        <EmptyTaskDetail>Loading resources…</EmptyTaskDetail>
+                      ) : resourcesQuery.data?.data.length ? (
+                        resourcesQuery.data.data.map((resource) => {
+                          const selected = resourceUuids.includes(resource.uuid);
+                          return (
+                            <LinkPickerItem
+                              key={resource.uuid}
+                              title={resource.title}
+                              icon={<Link2 />}
+                              selected={selected}
+                              disabled={isSaving}
+                              onClick={() => {
+                                const next = toggleSelection(
+                                  resourceUuids,
+                                  resource.uuid,
+                                );
+                                setResourceUuids(next);
+                                void save({ resourceUuids: next }).catch(() =>
+                                  setResourceUuids(
+                                    task.resources.map((item) => item.uuid),
+                                  ),
+                                );
+                              }}
+                            />
+                          );
+                        })
+                      ) : (
+                        <EmptyTaskDetail>No resources available.</EmptyTaskDetail>
+                      )
+                    ) : notesQuery.isLoading ? (
+                      <EmptyTaskDetail>Loading notes…</EmptyTaskDetail>
+                    ) : notesQuery.data?.length ? (
+                      notesQuery.data.map(
+                        ({ area, notes }) =>
+                          notes.length > 0 && (
+                            <div key={area.uuid} className="grid gap-2">
+                              <p className="text-xs font-medium text-muted-foreground">
+                                {area.name}
+                              </p>
+                              {notes.map((note) => {
+                                const selected = noteUuids.includes(note.uuid);
+                                return (
+                                  <LinkPickerItem
+                                    key={note.uuid}
+                                    title={note.title}
+                                    icon={<FileText />}
+                                    selected={selected}
+                                    disabled={isSaving}
+                                    onClick={() => {
+                                      const next = toggleSelection(
+                                        noteUuids,
+                                        note.uuid,
+                                      );
+                                      setNoteUuids(next);
+                                      void save({ noteUuids: next }).catch(() =>
+                                        setNoteUuids(
+                                          task.notes.map((item) => item.uuid),
+                                        ),
+                                      );
+                                    }}
+                                  />
+                                );
+                              })}
+                            </div>
+                          ),
+                      )
+                    ) : (
+                      <EmptyTaskDetail>No notes available.</EmptyTaskDetail>
+                    )}
+                  </div>
+                  <DialogFooter>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => setLinkPicker(undefined)}
+                    >
+                      Done
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+            )}
           </>
         )}
       </SheetContent>
@@ -1344,18 +1423,23 @@ function TaskDetailsSheet({
 function TaskDetailSection({
   title,
   icon,
+  action,
   children,
 }: {
   title: string;
   icon?: React.ReactNode;
+  action?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
     <section className="grid gap-2">
-      <h3 className="flex items-center gap-2 text-sm font-semibold">
-        {icon && <span className="[&_svg]:size-4">{icon}</span>}
-        {title}
-      </h3>
+      <div className="flex min-h-8 items-center justify-between gap-3">
+        <h3 className="flex items-center gap-2 text-sm font-semibold">
+          {icon && <span className="[&_svg]:size-4">{icon}</span>}
+          {title}
+        </h3>
+        {action}
+      </div>
       {children}
     </section>
   );
@@ -1365,18 +1449,101 @@ function EmptyTaskDetail({ children }: { children: React.ReactNode }) {
   return <p className="text-sm text-muted-foreground">{children}</p>;
 }
 
-function TaskLinkList({ items }: { items: BoardTask["resources"] }) {
+function TaskResourceList({ items }: { items: BoardTaskResourceLink[] }) {
   return (
     <div className="grid gap-2">
       {items.map((item) => (
-        <div key={item.uuid} className="rounded-md border px-3 py-2 text-sm">
-          <p className="font-medium">{item.title}</p>
-          {item.type && (
-            <p className="mt-0.5 text-xs text-muted-foreground">{item.type}</p>
-          )}
-        </div>
+        <LinkedItemCard
+          key={item.uuid}
+          icon={<Link2 />}
+          title={item.title}
+          areas={item.areas.map((area) => area.name)}
+          date={item.updated_at ?? item.created_at}
+        />
       ))}
     </div>
+  );
+}
+
+function TaskNoteList({ items }: { items: BoardTaskNoteLink[] }) {
+  return (
+    <div className="grid gap-2">
+      {items.map((item) => (
+        <LinkedItemCard
+          key={item.uuid}
+          href={`/areas/${item.area.uuid}?tab=notes&note=${item.uuid}`}
+          icon={<FileText />}
+          title={item.title}
+          areas={[item.area.name]}
+          date={item.updated_at ?? item.created_at}
+        />
+      ))}
+    </div>
+  );
+}
+
+function LinkedItemCard({
+  href,
+  icon,
+  title,
+  areas,
+  date,
+}: {
+  href?: string;
+  icon: React.ReactNode;
+  title: string;
+  areas: string[];
+  date: string | null;
+}) {
+  const content = (
+    <div className="flex items-start gap-3 rounded-lg border bg-card p-3 text-sm transition-colors hover:bg-muted/40">
+      <span className="mt-0.5 rounded-md bg-muted p-2 text-muted-foreground [&_svg]:size-4">
+        {icon}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate font-medium">{title}</span>
+        <span className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+          <span>{areas.length > 0 ? areas.join(", ") : "No Area"}</span>
+          {date && (
+            <span className="flex items-center gap-1">
+              <CalendarDays className="size-3" />
+              {formatTaskDate(date)}
+            </span>
+          )}
+        </span>
+      </span>
+    </div>
+  );
+
+  return href ? <Link href={href}>{content}</Link> : content;
+}
+
+function LinkPickerItem({
+  icon,
+  title,
+  selected,
+  disabled,
+  onClick,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  selected: boolean;
+  disabled: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <Button
+      type="button"
+      variant="outline"
+      className="h-auto min-h-10 justify-start py-2 text-left"
+      aria-pressed={selected}
+      disabled={disabled}
+      onClick={onClick}
+    >
+      <span className="text-muted-foreground [&_svg]:size-4">{icon}</span>
+      <span className="min-w-0 flex-1 truncate">{title}</span>
+      <Check className={selected ? "opacity-100" : "opacity-0"} />
+    </Button>
   );
 }
 
@@ -1390,6 +1557,25 @@ function toggleSelection(items: string[], uuid: string) {
     : [...items, uuid];
 }
 
+function getLabelTextColor(hex: string) {
+  const normalized = hex.replace("#", "");
+  const value =
+    normalized.length === 3
+      ? normalized
+          .split("")
+          .map((character) => character.repeat(2))
+          .join("")
+      : normalized;
+  if (!/^[0-9a-f]{6}$/i.test(value)) return "#ffffff";
+
+  const red = Number.parseInt(value.slice(0, 2), 16);
+  const green = Number.parseInt(value.slice(2, 4), 16);
+  const blue = Number.parseInt(value.slice(4, 6), 16);
+  return red * 0.299 + green * 0.587 + blue * 0.114 > 160
+    ? "#111827"
+    : "#ffffff";
+}
+
 function formatTaskTimestamp(value: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
@@ -1397,6 +1583,14 @@ function formatTaskTimestamp(value: string) {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(date);
+}
+
+function formatTaskDate(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(
+    date,
+  );
 }
 
 function moveLocally(

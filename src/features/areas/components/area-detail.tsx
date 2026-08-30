@@ -54,8 +54,10 @@ const tabs: { value: AreaTab; label: string; icon: typeof FolderKanban }[] = [
 
 export function AreaDetail({
   initialTab = "projects",
+  initialNoteUuid,
 }: {
   initialTab?: AreaTab;
+  initialNoteUuid?: string;
 }) {
   const { uuid } = useParams<{ uuid: string }>();
   const router = useRouter();
@@ -182,7 +184,11 @@ export function AreaDetail({
       </Tabs>
       <div className="flex h-[48rem] min-h-0 min-w-0">
         {activeTab === "notes" ? (
-          <AreaNotesWorkspace areaUuid={uuid} archived={archived} />
+          <AreaNotesWorkspace
+            areaUuid={uuid}
+            archived={archived}
+            initialNoteUuid={initialNoteUuid}
+          />
         ) : (
           <div className="h-full w-full">
             <AreaSectionContent

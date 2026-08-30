@@ -67,10 +67,26 @@ export type BoardLabel = {
   hex: string;
 };
 
-export type BoardTaskLink = {
+export type BoardTaskAreaLink = {
+  uuid: string;
+  name: string;
+};
+
+export type BoardTaskResourceLink = {
   uuid: string;
   title: string;
   type?: string | null;
+  areas: BoardTaskAreaLink[];
+  created_at: string | null;
+  updated_at: string | null;
+};
+
+export type BoardTaskNoteLink = {
+  uuid: string;
+  title: string;
+  area: BoardTaskAreaLink;
+  created_at: string | null;
+  updated_at: string | null;
 };
 
 export type BoardTask = {
@@ -81,8 +97,8 @@ export type BoardTask = {
   stage: BoardStageKey;
   position: number;
   labels: BoardLabel[];
-  resources: BoardTaskLink[];
-  notes: BoardTaskLink[];
+  resources: BoardTaskResourceLink[];
+  notes: BoardTaskNoteLink[];
   created_at: string | null;
   updated_at: string | null;
 };

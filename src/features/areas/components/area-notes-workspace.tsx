@@ -69,9 +69,11 @@ type NoteSelection =
 export function AreaNotesWorkspace({
   areaUuid,
   archived,
+  initialNoteUuid,
 }: {
   areaUuid: string;
   archived: boolean;
+  initialNoteUuid?: string;
 }) {
   const queryClient = useQueryClient();
   const [selection, setSelection] = useState<NoteSelection>();
@@ -84,9 +86,14 @@ export function AreaNotesWorkspace({
   });
   const tree = useMemo(() => treeQuery.data?.data ?? [], [treeQuery.data]);
   const flatNotes = useMemo(() => flattenNotes(tree), [tree]);
+  const initialNote = initialNoteUuid
+    ? flatNotes.find((note) => note.uuid === initialNoteUuid)
+    : undefined;
   const derivedSelection: NoteSelection =
     selection ??
-    (flatNotes[0]
+    (initialNote
+      ? { kind: "note", uuid: initialNote.uuid }
+      : flatNotes[0]
       ? { kind: "note", uuid: flatNotes[0].uuid }
       : { kind: "draft", key: draftKey });
   const selectedUuid = derivedSelection.uuid;
