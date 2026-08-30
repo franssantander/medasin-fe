@@ -34,6 +34,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "@/components/ui/toast";
+import {
+  goalStatusBadgeClassNames,
+  goalStatusLabels,
+} from "../goal-status";
 import { areaService } from "../services/area-service";
 import type { Goal, GoalFilter, GoalStatus, Paginated } from "../type";
 import { AreaIcon } from "./area-icons";
@@ -212,12 +216,24 @@ export function GoalTracker({
                     className="w-full sm:w-36"
                     aria-label={`Status for ${goal.title}`}
                   >
-                    <SelectValue />
+                    <SelectValue>
+                      <Badge
+                        variant="outline"
+                        className={goalStatusBadgeClassNames[goal.status]}
+                      >
+                        {goalStatusLabels[goal.status]}
+                      </Badge>
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent align="start">
                     {goalStatuses.map((status) => (
                       <SelectItem key={status.value} value={status.value}>
-                        {status.label}
+                        <Badge
+                          variant="outline"
+                          className={goalStatusBadgeClassNames[status.value]}
+                        >
+                          {status.label}
+                        </Badge>
                       </SelectItem>
                     ))}
                   </SelectContent>

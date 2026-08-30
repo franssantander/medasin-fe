@@ -5,11 +5,13 @@ import {
   CalendarDays,
   Flag,
   ListChecks,
+  LoaderCircle,
   MoreHorizontal,
   Pencil,
   Trash2,
   TriangleAlert,
 } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
@@ -26,6 +28,12 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  goalStatusBadgeClassNames,
+  goalStatusLabels,
+} from "@/features/areas/goal-status";
+import { areaKeys } from "@/features/areas/queries/area-query";
+import { areaService } from "@/features/areas/services/area-service";
 import { useProjectMutation } from "../queries/project-query";
 import type { ProjectListCard, ProjectStatus } from "../type";
 import { ProjectActionDialog } from "./project-action-dialog";
@@ -54,6 +62,13 @@ export function ProjectCard({
 }) {
   const [confirmationAction, setConfirmationAction] =
     useState<ProjectConfirmationAction>();
+  const [goalsMenuOpen, setGoalsMenuOpen] = useState(false);
+  const areaUuid = project.area?.uuid;
+  const goalsQuery = useQuery({
+    queryKey: areaKeys.section(areaUuid ?? "", "goals", 1, "all"),
+    queryFn: () => areaService.goals(areaUuid!, 1, "all"),
+    enabled: goalsMenuOpen && Boolean(areaUuid),
+  });
   const archive = useProjectMutation("archive", project.uuid);
   const remove = useProjectMutation("remove", project.uuid);
   const isPending = archive.isPending || remove.isPending;
@@ -176,17 +191,67 @@ export function ProjectCard({
               </div>
             )}
             {project.area ? (
-              <Button
-                render={<Link href={`/areas/${project.area.uuid}?tab=goals`} />}
-                nativeButton={false}
-                variant="outline"
-                size="sm"
-                className="justify-start"
+              <DropdownMenu
+                open={goalsMenuOpen}
+                onOpenChange={setGoalsMenuOpen}
               >
-                <ListChecks />
-                {project.goals.count}{" "}
-                {project.goals.count === 1 ? "goal" : "goals"}
-              </Button>
+                <DropdownMenuTrigger
+                  render={
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="justify-start"
+                      aria-label={`View goals for ${project.name}`}
+                    />
+                  }
+                >
+                  <ListChecks />
+                  {project.goals.count}{" "}
+                  {project.goals.count === 1 ? "goal" : "goals"}
+                </DropdownMenuTrigger>
+                <DropdownMenuContent
+                  align="start"
+                  side="bottom"
+                  className="w-72 max-w-[calc(100vw-2rem)]"
+                >
+                  {goalsQuery.isLoading ? (
+                    <div className="flex min-h-16 items-center justify-center gap-2 px-3 text-sm text-muted-foreground">
+                      <LoaderCircle className="size-4 animate-spin" />
+                      Loading goals…
+                    </div>
+                  ) : goalsQuery.isError ? (
+                    <div className="px-3 py-4 text-center text-sm text-muted-foreground">
+                      Goals could not be loaded.
+                    </div>
+                  ) : goalsQuery.data?.data.items.data.length ? (
+                    goalsQuery.data.data.items.data.map((goal) => (
+                      <DropdownMenuItem
+                        key={goal.uuid}
+                        render={
+                          <Link
+                            href={`/areas/${project.area!.uuid}?tab=goals`}
+                          />
+                        }
+                        className="items-start justify-between gap-3"
+                      >
+                        <span className="min-w-0 flex-1 truncate font-medium">
+                          {goal.title}
+                        </span>
+                        <Badge
+                          variant="outline"
+                          className={`shrink-0 ${goalStatusBadgeClassNames[goal.status]}`}
+                        >
+                          {goalStatusLabels[goal.status]}
+                        </Badge>
+                      </DropdownMenuItem>
+                    ))
+                  ) : (
+                    <div className="px-3 py-4 text-center text-sm text-muted-foreground">
+                      No goals yet.
+                    </div>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
             ) : (
               <div className="flex h-8 items-center gap-2 rounded-md border px-3 text-muted-foreground">
                 <ListChecks className="size-4" />
