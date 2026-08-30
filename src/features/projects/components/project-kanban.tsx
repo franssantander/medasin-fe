@@ -19,10 +19,12 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Check,
   ChevronDown,
+  Circle,
+  Clock3,
   Edit3,
   FileText,
   GripVertical,
@@ -58,8 +60,26 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+} from "@/components/ui/select";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/toast";
+import { areaKeys } from "@/features/areas/queries/area-query";
+import { areaService } from "@/features/areas/services/area-service";
+import type { NoteTreeNode } from "@/features/areas/type";
 import { projectKeys, useProjectBoardQuery } from "../queries/project-query";
 import { projectService } from "../services/project-service";
 import type {
@@ -73,13 +93,54 @@ import type {
   ProjectApiResponse,
 } from "../type";
 import { ProjectLabelDialog } from "./project-label-dialog";
-import { ProjectTaskDialog } from "./project-task-dialog";
 
 const priorityStyles = {
   low: "bg-slate-500/10 text-slate-700 dark:text-slate-300",
   medium: "bg-amber-500/10 text-amber-700 dark:text-amber-300",
   high: "bg-red-500/10 text-red-700 dark:text-red-300",
 };
+
+const stageCountStyles: Record<BoardStageKey, string> = {
+  backlog: "bg-slate-500/10 text-slate-700 dark:text-slate-300",
+  todos: "bg-blue-500/10 text-blue-700 dark:text-blue-300",
+  in_progress: "bg-amber-500/10 text-amber-700 dark:text-amber-300",
+  done: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+};
+
+const stageDotColors: Record<BoardStageKey, string> = {
+  backlog: "#64748b",
+  todos: "#3b82f6",
+  in_progress: "#f59e0b",
+  done: "#10b981",
+};
+
+const priorityDotColors: Record<BoardTask["priority"], string> = {
+  low: "#64748b",
+  medium: "#f59e0b",
+  high: "#ef4444",
+};
+
+const kanbanGridStyles =
+  "grid w-full min-w-0 grid-flow-col auto-cols-[minmax(18rem,1fr)] gap-4 overflow-x-auto pb-4 @[64rem]:grid-flow-row @[64rem]:grid-cols-4 @[64rem]:auto-cols-auto @[64rem]:overflow-x-visible @[64rem]:pb-0";
+
+function StatusDot({ color }: { color: string }) {
+  return (
+    <Circle
+      aria-hidden="true"
+      className="size-2.5 shrink-0 self-center fill-current"
+      style={{ color }}
+    />
+  );
+}
+
+function StatusValue({ color, label }: { color: string; label: string }) {
+  return (
+    <span className="flex min-w-0 flex-1 items-center gap-2 text-left">
+      <StatusDot color={color} />
+      <span className="truncate">{label}</span>
+    </span>
+  );
+}
 
 export function ProjectKanban({
   projectUuid,
@@ -94,9 +155,9 @@ export function ProjectKanban({
   const [selectedBoardUuid, setSelectedBoardUuid] = useState<
     string | undefined
   >(boards[0]?.uuid);
-  const [taskForm, setTaskForm] = useState<{
-    task?: BoardTask;
+  const [taskDraft, setTaskDraft] = useState<{
     stage: BoardStageKey;
+    title: string;
   }>();
   const [labelsOpen, setLabelsOpen] = useState(false);
   const [boardDialog, setBoardDialog] = useState<{
@@ -104,8 +165,12 @@ export function ProjectKanban({
     name: string;
   }>();
   const [activeTask, setActiveTask] = useState<BoardTask>();
+  const [selectedTaskUuid, setSelectedTaskUuid] = useState<string>();
   const boardQuery = useProjectBoardQuery(projectUuid, selectedBoardUuid);
   const board = boardQuery.data?.data;
+  const selectedTask = board?.stages
+    .flatMap((stage) => stage.tasks)
+    .find((task) => task.uuid === selectedTaskUuid);
   const selectedBoard = boards.find((item) => item.uuid === selectedBoardUuid);
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -132,22 +197,43 @@ export function ProjectKanban({
     toast.add({ type: "error", description: error.message });
 
   const taskMutation = useMutation({
-    mutationFn: (input: BoardTaskInput) =>
-      taskForm?.task
-        ? projectService.updateTask(
-            projectUuid,
-            selectedBoardUuid!,
-            taskForm.task.uuid,
-            input,
-          )
-        : projectService.createTask(projectUuid, selectedBoardUuid!, input),
+    scope: { id: `task:${selectedBoardUuid}:${selectedTaskUuid}` },
+    mutationFn: ({
+      taskUuid,
+      input,
+    }: {
+      taskUuid: string;
+      input: BoardTaskInput;
+    }) =>
+      projectService.updateTask(
+        projectUuid,
+        selectedBoardUuid!,
+        taskUuid,
+        input,
+      ),
     onSuccess: (response) => refresh(response.message),
+    onError: mutationError,
+  });
+  const createTask = useMutation({
+    mutationFn: (input: BoardTaskInput) =>
+      projectService.createTask(projectUuid, selectedBoardUuid!, input),
+    onSuccess: async (response, input) => {
+      setTaskDraft((draft) =>
+        draft?.stage === input.stage && draft.title.trim() === input.title
+          ? undefined
+          : draft,
+      );
+      await refresh(response.message);
+    },
     onError: mutationError,
   });
   const deleteTask = useMutation({
     mutationFn: (taskUuid: string) =>
       projectService.removeTask(projectUuid, selectedBoardUuid!, taskUuid),
-    onSuccess: (response) => refresh(response.message),
+    onSuccess: async (response, taskUuid) => {
+      if (selectedTaskUuid === taskUuid) setSelectedTaskUuid(undefined);
+      await refresh(response.message);
+    },
     onError: mutationError,
   });
   const saveBoard = useMutation({
@@ -268,7 +354,7 @@ export function ProjectKanban({
   };
 
   return (
-    <div className="grid gap-4">
+    <div className="@container grid min-w-0 gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <DropdownMenu>
           <DropdownMenuTrigger
@@ -302,8 +388,14 @@ export function ProjectKanban({
             {boards.map((item) => (
               <DropdownMenuItem
                 key={item.uuid}
-                onClick={() => setSelectedBoardUuid(item.uuid)}
-                aria-current={item.uuid === selectedBoardUuid ? "true" : undefined}
+                onClick={() => {
+                  setTaskDraft(undefined);
+                  setSelectedTaskUuid(undefined);
+                  setSelectedBoardUuid(item.uuid);
+                }}
+                aria-current={
+                  item.uuid === selectedBoardUuid ? "true" : undefined
+                }
               >
                 <Check
                   className={
@@ -342,7 +434,7 @@ export function ProjectKanban({
               >
                 <MoreHorizontal />
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
+              <DropdownMenuContent>
                 <DropdownMenuItem
                   onClick={() => setBoardDialog({ mode: "create", name: "" })}
                 >
@@ -377,7 +469,7 @@ export function ProjectKanban({
       </div>
 
       {boardQuery.isLoading ? (
-        <div className="grid grid-cols-4 gap-4">
+        <div className={kanbanGridStyles}>
           {[1, 2, 3, 4].map((item) => (
             <Skeleton key={item} className="h-[32rem] rounded-xl" />
           ))}
@@ -403,18 +495,39 @@ export function ProjectKanban({
           onDragEnd={handleDragEnd}
           onDragCancel={() => setActiveTask(undefined)}
         >
-          <div className="grid w-full min-w-0 grid-flow-col auto-cols-[minmax(20rem,1fr)] gap-4 overflow-x-auto pb-4">
+          <div className={kanbanGridStyles}>
             {board.stages.map((stage) => (
               <KanbanColumn
                 key={stage.uuid}
                 stage={stage}
                 archived={archived}
-                onAdd={() => setTaskForm({ stage: stage.key })}
-                onEdit={(task) => setTaskForm({ task, stage: task.stage })}
-                onDelete={(task) => {
-                  if (window.confirm(`Delete “${task.title}”?`))
-                    deleteTask.mutate(task.uuid);
+                draft={taskDraft?.stage === stage.key ? taskDraft : undefined}
+                isCreating={createTask.isPending}
+                onAdd={() => {
+                  setTaskDraft({ stage: stage.key, title: "" });
                 }}
+                onDraftChange={(title) =>
+                  setTaskDraft((draft) =>
+                    draft && draft.stage === stage.key
+                      ? { ...draft, title }
+                      : draft,
+                  )
+                }
+                onDraftCancel={() => setTaskDraft(undefined)}
+                onDraftSubmit={() => {
+                  const title = taskDraft?.title.trim();
+                  if (!title) return;
+                  createTask.mutate({
+                    title,
+                    description: null,
+                    priority: "medium",
+                    stage: stage.key,
+                    label_uuids: [],
+                    resource_uuids: [],
+                    note_uuids: [],
+                  });
+                }}
+                onOpen={(task) => setSelectedTaskUuid(task.uuid)}
               />
             ))}
           </div>
@@ -424,21 +537,28 @@ export function ProjectKanban({
         </DndContext>
       )}
 
-      {taskForm && board && (
-        <ProjectTaskDialog
-          open
-          initialStage={taskForm.stage}
-          task={taskForm.task}
-          labels={board.labels}
-          isPending={taskMutation.isPending}
-          onOpenChange={(open) => {
-            if (!open) setTaskForm(undefined);
-          }}
-          onSubmit={(input) =>
-            taskMutation.mutateAsync(input).then(() => undefined)
-          }
-        />
-      )}
+      <TaskDetailsSheet
+        key={`${selectedTask?.uuid ?? "closed"}:${selectedTask?.updated_at ?? ""}`}
+        task={selectedTask}
+        stages={board?.stages ?? []}
+        labels={board?.labels ?? []}
+        archived={archived}
+        isSaving={taskMutation.isPending}
+        isDeleting={deleteTask.isPending}
+        onOpenChange={(open) => {
+          if (!open) setSelectedTaskUuid(undefined);
+        }}
+        onSave={(input) => {
+          if (!selectedTask) return Promise.resolve();
+          return taskMutation
+            .mutateAsync({ taskUuid: selectedTask.uuid, input })
+            .then(() => undefined);
+        }}
+        onDelete={() => {
+          if (selectedTask && window.confirm(`Delete “${selectedTask.title}”?`))
+            deleteTask.mutate(selectedTask.uuid);
+        }}
+      />
       {board && (
         <ProjectLabelDialog
           open={labelsOpen}
@@ -510,15 +630,23 @@ export function ProjectKanban({
 function KanbanColumn({
   stage,
   archived,
+  draft,
+  isCreating,
   onAdd,
-  onEdit,
-  onDelete,
+  onDraftChange,
+  onDraftCancel,
+  onDraftSubmit,
+  onOpen,
 }: {
   stage: BoardStage;
   archived: boolean;
+  draft?: { stage: BoardStageKey; title: string };
+  isCreating: boolean;
   onAdd: () => void;
-  onEdit: (task: BoardTask) => void;
-  onDelete: (task: BoardTask) => void;
+  onDraftChange: (title: string) => void;
+  onDraftCancel: () => void;
+  onDraftSubmit: () => void;
+  onOpen: (task: BoardTask) => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({
     id: `stage:${stage.key}`,
@@ -530,12 +658,16 @@ function KanbanColumn({
       className={`flex h-[34rem] min-w-0 flex-col rounded-xl border bg-muted/25 transition-colors ${isOver ? "border-primary/60 bg-primary/5" : ""}`}
     >
       <div className="flex items-center justify-between border-b p-3">
-        <div>
-          <h3 className="font-semibold">{stage.name}</h3>
-          <p className="text-xs text-muted-foreground">
-            {stage.tasks.length} {stage.tasks.length === 1 ? "task" : "tasks"}
-          </p>
-        </div>
+        <h3 className="flex items-center gap-1.5 font-semibold">
+          <span>{stage.name}</span>
+          <Badge
+            variant="secondary"
+            className={`h-5 min-w-5 justify-center rounded-full px-1.5 text-xs tabular-nums font-bold ${stageCountStyles[stage.key]}`}
+            aria-label={`${stage.tasks.length} ${stage.tasks.length === 1 ? "task" : "tasks"}`}
+          >
+            {stage.tasks.length}
+          </Badge>
+        </h3>
         {!archived && (
           <Button
             variant="ghost"
@@ -557,11 +689,19 @@ function KanbanColumn({
               key={task.uuid}
               task={task}
               disabled={archived}
-              onEdit={() => onEdit(task)}
-              onDelete={() => onDelete(task)}
+              onOpen={() => onOpen(task)}
             />
           ))}
-          {stage.tasks.length === 0 && (
+          {draft && (
+            <TaskDraft
+              title={draft.title}
+              isPending={isCreating}
+              onChange={onDraftChange}
+              onCancel={onDraftCancel}
+              onSubmit={onDraftSubmit}
+            />
+          )}
+          {stage.tasks.length === 0 && !draft && (
             <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
               {archived ? "No tasks" : "Drop a task here"}
             </div>
@@ -572,16 +712,66 @@ function KanbanColumn({
   );
 }
 
+function TaskDraft({
+  title,
+  isPending,
+  onChange,
+  onCancel,
+  onSubmit,
+}: {
+  title: string;
+  isPending: boolean;
+  onChange: (title: string) => void;
+  onCancel: () => void;
+  onSubmit: () => void;
+}) {
+  return (
+    <Card size="sm" className="border-primary/40 shadow-sm">
+      <form
+        className="p-3"
+        onSubmit={(event) => {
+          event.preventDefault();
+          onSubmit();
+        }}
+        onBlur={(event) => {
+          if (
+            isPending ||
+            event.currentTarget.contains(event.relatedTarget as Node | null)
+          )
+            return;
+
+          if (title.trim()) onSubmit();
+          else onCancel();
+        }}
+      >
+        <Input
+          autoFocus
+          value={title}
+          onChange={(event) => onChange(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Escape") {
+              event.preventDefault();
+              onCancel();
+            }
+          }}
+          placeholder="Task title"
+          aria-label="Task title"
+          maxLength={120}
+          disabled={isPending}
+        />
+      </form>
+    </Card>
+  );
+}
+
 function SortableTask({
   task,
   disabled,
-  onEdit,
-  onDelete,
+  onOpen,
 }: {
   task: BoardTask;
   disabled: boolean;
-  onEdit: () => void;
-  onDelete: () => void;
+  onOpen: () => void;
 }) {
   const {
     attributes,
@@ -601,8 +791,7 @@ function SortableTask({
         task={task}
         disabled={disabled}
         dragProps={{ ...attributes, ...listeners }}
-        onEdit={onEdit}
-        onDelete={onDelete}
+        onOpen={onOpen}
       />
     </div>
   );
@@ -613,20 +802,35 @@ function TaskCard({
   disabled,
   overlay,
   dragProps,
-  onEdit,
-  onDelete,
+  onOpen,
 }: {
   task: BoardTask;
   disabled?: boolean;
   overlay?: boolean;
   dragProps?: React.HTMLAttributes<HTMLButtonElement>;
-  onEdit?: () => void;
-  onDelete?: () => void;
+  onOpen?: () => void;
 }) {
   return (
     <Card
       size="sm"
-      className={overlay ? "w-[19rem] rotate-2 shadow-xl" : "gap-3"}
+      className={
+        overlay
+          ? "w-[19rem] rotate-2 shadow-xl"
+          : "gap-3 cursor-pointer transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      }
+      role={overlay ? undefined : "button"}
+      tabIndex={overlay ? undefined : 0}
+      onClick={overlay ? undefined : onOpen}
+      onKeyDown={
+        overlay
+          ? undefined
+          : (event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                onOpen?.();
+              }
+            }
+      }
     >
       <CardHeader className="gap-2">
         <div className="flex items-start gap-2">
@@ -636,6 +840,8 @@ function TaskCard({
               className="mt-0.5 cursor-grab text-muted-foreground active:cursor-grabbing"
               aria-label={`Move ${task.title}`}
               {...dragProps}
+              onClick={(event) => event.stopPropagation()}
+              onKeyDown={(event) => event.stopPropagation()}
             >
               <GripVertical className="size-4" />
             </button>
@@ -648,31 +854,6 @@ function TaskCard({
               </CardDescription>
             )}
           </div>
-          {!disabled && !overlay && (
-            <DropdownMenu>
-              <DropdownMenuTrigger
-                render={
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    aria-label={`Actions for ${task.title}`}
-                  />
-                }
-              >
-                <MoreHorizontal />
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={onEdit}>
-                  <Edit3 />
-                  Edit
-                </DropdownMenuItem>
-                <DropdownMenuItem destructive onClick={onDelete}>
-                  <Trash2 />
-                  Delete
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )}
         </div>
       </CardHeader>
       <CardContent className="grid gap-2">
@@ -710,6 +891,512 @@ function TaskCard({
       </CardContent>
     </Card>
   );
+}
+
+function TaskDetailsSheet({
+  task,
+  stages,
+  labels,
+  archived,
+  isSaving,
+  isDeleting,
+  onOpenChange,
+  onSave,
+  onDelete,
+}: {
+  task?: BoardTask;
+  stages: BoardStage[];
+  labels: BoardLabel[];
+  archived: boolean;
+  isSaving: boolean;
+  isDeleting: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSave: (input: BoardTaskInput) => Promise<void>;
+  onDelete: () => void;
+}) {
+  const [title, setTitle] = useState(task?.title ?? "");
+  const [description, setDescription] = useState(task?.description ?? "");
+  const [priority, setPriority] = useState<BoardTask["priority"]>(
+    task?.priority ?? "medium",
+  );
+  const [stage, setStage] = useState<BoardStageKey>(task?.stage ?? "backlog");
+  const [labelUuids, setLabelUuids] = useState<string[]>(
+    task?.labels.map((label) => label.uuid) ?? [],
+  );
+  const [resourceUuids, setResourceUuids] = useState<string[]>(
+    task?.resources.map((resource) => resource.uuid) ?? [],
+  );
+  const [noteUuids, setNoteUuids] = useState<string[]>(
+    task?.notes.map((note) => note.uuid) ?? [],
+  );
+  const areasQuery = useQuery({
+    queryKey: areaKeys.list("active"),
+    queryFn: () => areaService.list("active"),
+    enabled: Boolean(task) && !archived,
+  });
+  const resourcesQuery = useQuery({
+    queryKey: ["resources", "all"],
+    queryFn: () => areaService.allResources(),
+    enabled: Boolean(task) && !archived,
+  });
+  const notesQuery = useQuery({
+    queryKey: [
+      "areas",
+      "all-notes",
+      ...(areasQuery.data?.data.map((area) => area.uuid) ?? []),
+    ],
+    queryFn: async () =>
+      Promise.all(
+        (areasQuery.data?.data ?? []).map(async (area) => ({
+          area,
+          notes: flattenNotes((await areaService.noteTree(area.uuid)).data),
+        })),
+      ),
+    enabled: Boolean(task) && !archived && Boolean(areasQuery.data),
+  });
+
+  const save = async (
+    values: Partial<{
+      title: string;
+      description: string;
+      priority: BoardTask["priority"];
+      stage: BoardStageKey;
+      labelUuids: string[];
+      resourceUuids: string[];
+      noteUuids: string[];
+    }>,
+  ) => {
+    if (!task) return;
+    await onSave({
+      title: values.title ?? title,
+      description: (values.description ?? description).trim() || null,
+      priority: values.priority ?? priority,
+      stage: values.stage ?? stage,
+      label_uuids: values.labelUuids ?? labelUuids,
+      resource_uuids: values.resourceUuids ?? resourceUuids,
+      note_uuids: values.noteUuids ?? noteUuids,
+    });
+  };
+
+  const saveTitle = async () => {
+    const nextTitle = title.trim();
+    if (!task || nextTitle === task.title) {
+      if (task) setTitle(task.title);
+      return;
+    }
+    if (!nextTitle) {
+      setTitle(task.title);
+      return;
+    }
+    setTitle(nextTitle);
+    try {
+      await save({ title: nextTitle });
+    } catch {
+      setTitle(task.title);
+    }
+  };
+
+  const saveDescription = async () => {
+    if (!task || description.trim() === (task.description ?? "")) return;
+    try {
+      await save({ description });
+    } catch {
+      setDescription(task.description ?? "");
+    }
+  };
+
+  return (
+    <Sheet open={Boolean(task)} onOpenChange={onOpenChange}>
+      <SheetContent className="top-0 right-0 bottom-0 m-0 h-dvh w-full max-w-none gap-0 overflow-hidden rounded-none border-l sm:h-auto sm:max-w-[60rem] sm:border">
+        {task && (
+          <>
+            <SheetHeader className="shrink-0 border-b pr-14">
+              <SheetTitle>
+                {archived ? (
+                  <span className="text-lg leading-snug">{task.title}</span>
+                ) : (
+                  <Input
+                    value={title}
+                    onChange={(event) => setTitle(event.target.value)}
+                    onBlur={() => void saveTitle()}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") event.currentTarget.blur();
+                    }}
+                    disabled={isSaving}
+                    maxLength={120}
+                    aria-label="Task title"
+                    className="h-auto border-0 px-0 text-lg font-semibold shadow-none focus-visible:ring-0"
+                  />
+                )}
+              </SheetTitle>
+              <SheetDescription>
+                <div className="w-full grid grid-cols-2 gap-4">
+                  {archived ? (
+                    <Badge
+                      variant="secondary"
+                      className="w-fit gap-1.5 capitalize"
+                    >
+                      <StatusDot color={stageDotColors[task.stage]} />
+                      {stages.find((item) => item.key === task.stage)?.name ??
+                        task.stage.replace("_", " ")}
+                    </Badge>
+                  ) : (
+                    <Select
+                      value={stage}
+                      disabled={isSaving}
+                      onValueChange={(value) => {
+                        const nextStage = value as BoardStageKey;
+                        setStage(nextStage);
+                        void save({ stage: nextStage }).catch(() =>
+                          setStage(task.stage),
+                        );
+                      }}
+                    >
+                      <SelectTrigger className="w-full bg-background">
+                        <StatusValue
+                          color={stageDotColors[stage]}
+                          label={
+                            stages.find((item) => item.key === stage)?.name ??
+                            stage.replace("_", " ")
+                          }
+                        />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {stages.map((item) => (
+                          <SelectItem key={item.key} value={item.key}>
+                            <StatusValue
+                              color={stageDotColors[item.key]}
+                              label={item.name}
+                            />
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+
+                  {archived ? (
+                    <Badge
+                      className={`w-fit gap-1.5 capitalize ${priorityStyles[task.priority]}`}
+                    >
+                      <StatusDot color={priorityDotColors[task.priority]} />
+                      {task.priority}
+                    </Badge>
+                  ) : (
+                    <Select
+                      value={priority}
+                      disabled={isSaving}
+                      onValueChange={(value) => {
+                        const nextPriority = value as BoardTask["priority"];
+                        setPriority(nextPriority);
+                        void save({ priority: nextPriority }).catch(() =>
+                          setPriority(task.priority),
+                        );
+                      }}
+                    >
+                      <SelectTrigger className="w-full bg-background">
+                        <StatusValue
+                          color={priorityDotColors[priority]}
+                          label={
+                            priority.charAt(0).toUpperCase() + priority.slice(1)
+                          }
+                        />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="low">
+                          <StatusValue
+                            color={priorityDotColors.low}
+                            label="Low"
+                          />
+                        </SelectItem>
+                        <SelectItem value="medium">
+                          <StatusValue
+                            color={priorityDotColors.medium}
+                            label="Medium"
+                          />
+                        </SelectItem>
+                        <SelectItem value="high">
+                          <StatusValue
+                            color={priorityDotColors.high}
+                            label="High"
+                          />
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                  )}
+                </div>
+              </SheetDescription>
+            </SheetHeader>
+
+            <div className="grid min-h-0 flex-1 content-start gap-6 overflow-y-auto p-4">
+              <TaskDetailSection title="Description">
+                {archived ? (
+                  <p className="whitespace-pre-wrap text-sm text-muted-foreground">
+                    {task.description || "No description provided."}
+                  </p>
+                ) : (
+                  <Textarea
+                    value={description}
+                    onChange={(event) => setDescription(event.target.value)}
+                    onBlur={() => void saveDescription()}
+                    disabled={isSaving}
+                    placeholder="Add a description…"
+                    className="min-h-28"
+                  />
+                )}
+              </TaskDetailSection>
+
+              <TaskDetailSection title="Labels">
+                {archived ? (
+                  task.labels.length > 0 ? (
+                    <div className="flex flex-wrap gap-2">
+                      {task.labels.map((label) => (
+                        <Badge key={label.uuid} variant="outline">
+                          <span
+                            className="mr-1 size-2 rounded-full"
+                            style={{ backgroundColor: label.hex }}
+                          />
+                          {label.name}
+                        </Badge>
+                      ))}
+                    </div>
+                  ) : (
+                    <EmptyTaskDetail>No labels assigned.</EmptyTaskDetail>
+                  )
+                ) : labels.length > 0 ? (
+                  <div className="flex flex-wrap gap-2">
+                    {labels.map((label) => {
+                      const selected = labelUuids.includes(label.uuid);
+                      return (
+                        <Button
+                          key={label.uuid}
+                          type="button"
+                          size="sm"
+                          variant={selected ? "default" : "outline"}
+                          disabled={isSaving}
+                          onClick={() => {
+                            const next = toggleSelection(
+                              labelUuids,
+                              label.uuid,
+                            );
+                            setLabelUuids(next);
+                            void save({ labelUuids: next }).catch(() =>
+                              setLabelUuids(
+                                task.labels.map((item) => item.uuid),
+                              ),
+                            );
+                          }}
+                        >
+                          {selected && <Check />}
+                          <span
+                            className="size-2 rounded-full"
+                            style={{ backgroundColor: label.hex }}
+                          />
+                          {label.name}
+                        </Button>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <EmptyTaskDetail>
+                    No labels on this board yet.
+                  </EmptyTaskDetail>
+                )}
+              </TaskDetailSection>
+
+              <TaskDetailSection title="Resources" icon={<Link2 />}>
+                {archived ? (
+                  task.resources.length > 0 ? (
+                    <TaskLinkList items={task.resources} />
+                  ) : (
+                    <EmptyTaskDetail>No resources linked.</EmptyTaskDetail>
+                  )
+                ) : resourcesQuery.isLoading ? (
+                  <EmptyTaskDetail>Loading resources…</EmptyTaskDetail>
+                ) : resourcesQuery.data?.data.length ? (
+                  <div className="flex flex-wrap gap-2">
+                    {resourcesQuery.data.data.map((resource) => {
+                      const selected = resourceUuids.includes(resource.uuid);
+                      return (
+                        <Button
+                          key={resource.uuid}
+                          type="button"
+                          size="sm"
+                          variant={selected ? "default" : "outline"}
+                          disabled={isSaving}
+                          onClick={() => {
+                            const next = toggleSelection(
+                              resourceUuids,
+                              resource.uuid,
+                            );
+                            setResourceUuids(next);
+                            void save({ resourceUuids: next }).catch(() =>
+                              setResourceUuids(
+                                task.resources.map((item) => item.uuid),
+                              ),
+                            );
+                          }}
+                        >
+                          {selected && <Check />}
+                          {resource.title}
+                        </Button>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <EmptyTaskDetail>No resources available.</EmptyTaskDetail>
+                )}
+              </TaskDetailSection>
+
+              <TaskDetailSection title="Notes" icon={<FileText />}>
+                {archived ? (
+                  task.notes.length > 0 ? (
+                    <TaskLinkList items={task.notes} />
+                  ) : (
+                    <EmptyTaskDetail>No notes linked.</EmptyTaskDetail>
+                  )
+                ) : notesQuery.isLoading ? (
+                  <EmptyTaskDetail>Loading notes…</EmptyTaskDetail>
+                ) : notesQuery.data?.length ? (
+                  <div className="grid max-h-48 gap-3 overflow-y-auto rounded-lg border p-3">
+                    {notesQuery.data.map(
+                      ({ area, notes }) =>
+                        notes.length > 0 && (
+                          <div key={area.uuid} className="grid gap-2">
+                            <Badge variant="secondary" className="w-fit">
+                              {area.name}
+                            </Badge>
+                            <div className="flex flex-wrap gap-2">
+                              {notes.map((note) => {
+                                const selected = noteUuids.includes(note.uuid);
+                                return (
+                                  <Button
+                                    key={note.uuid}
+                                    type="button"
+                                    size="sm"
+                                    variant={selected ? "default" : "outline"}
+                                    disabled={isSaving}
+                                    onClick={() => {
+                                      const next = toggleSelection(
+                                        noteUuids,
+                                        note.uuid,
+                                      );
+                                      setNoteUuids(next);
+                                      void save({ noteUuids: next }).catch(() =>
+                                        setNoteUuids(
+                                          task.notes.map((item) => item.uuid),
+                                        ),
+                                      );
+                                    }}
+                                  >
+                                    {selected && <Check />}
+                                    {note.title}
+                                  </Button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        ),
+                    )}
+                  </div>
+                ) : (
+                  <EmptyTaskDetail>No notes available.</EmptyTaskDetail>
+                )}
+              </TaskDetailSection>
+
+              {(task.created_at || task.updated_at) && (
+                <TaskDetailSection title="Activity" icon={<Clock3 />}>
+                  <div className="grid gap-1 text-sm text-muted-foreground">
+                    {task.created_at && (
+                      <p>Created {formatTaskTimestamp(task.created_at)}</p>
+                    )}
+                    {task.updated_at && (
+                      <p>Updated {formatTaskTimestamp(task.updated_at)}</p>
+                    )}
+                  </div>
+                </TaskDetailSection>
+              )}
+            </div>
+
+            {!archived && (
+              <SheetFooter className="shrink-0 border-t sm:flex-row sm:justify-end">
+                {isSaving && (
+                  <span className="mr-auto self-center text-sm text-muted-foreground">
+                    Saving…
+                  </span>
+                )}
+                <Button
+                  variant="destructive"
+                  disabled={isDeleting}
+                  onClick={onDelete}
+                >
+                  <Trash2 />
+                  {isDeleting ? "Deleting…" : "Delete"}
+                </Button>
+              </SheetFooter>
+            )}
+          </>
+        )}
+      </SheetContent>
+    </Sheet>
+  );
+}
+
+function TaskDetailSection({
+  title,
+  icon,
+  children,
+}: {
+  title: string;
+  icon?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="grid gap-2">
+      <h3 className="flex items-center gap-2 text-sm font-semibold">
+        {icon && <span className="[&_svg]:size-4">{icon}</span>}
+        {title}
+      </h3>
+      {children}
+    </section>
+  );
+}
+
+function EmptyTaskDetail({ children }: { children: React.ReactNode }) {
+  return <p className="text-sm text-muted-foreground">{children}</p>;
+}
+
+function TaskLinkList({ items }: { items: BoardTask["resources"] }) {
+  return (
+    <div className="grid gap-2">
+      {items.map((item) => (
+        <div key={item.uuid} className="rounded-md border px-3 py-2 text-sm">
+          <p className="font-medium">{item.title}</p>
+          {item.type && (
+            <p className="mt-0.5 text-xs text-muted-foreground">{item.type}</p>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function flattenNotes(nodes: NoteTreeNode[]): NoteTreeNode[] {
+  return nodes.flatMap((node) => [node, ...flattenNotes(node.children)]);
+}
+
+function toggleSelection(items: string[], uuid: string) {
+  return items.includes(uuid)
+    ? items.filter((item) => item !== uuid)
+    : [...items, uuid];
+}
+
+function formatTaskTimestamp(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(date);
 }
 
 function moveLocally(
