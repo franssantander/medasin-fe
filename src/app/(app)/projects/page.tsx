@@ -1,10 +1,5 @@
-import PageHeader from "@/components/shared/page-header";
-import React from "react";
+import { ProjectList } from "@/features/projects/components/project-list";
 
-export default function page() {
-  return (
-    <div className="w-full">
-      <PageHeader title="Projects" />
-    </div>
-  );
+export default function ProjectsPage() {
+  return <ProjectList />;
 }

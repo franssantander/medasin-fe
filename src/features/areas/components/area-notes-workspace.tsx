@@ -620,7 +620,7 @@ function NoteEditorPanel({
               <Button
                 type="button"
                 variant="ghost"
-                size="icon-xs"
+                size="icon-sm"
                 aria-label="Undo editor change"
                 title="Undo"
                 disabled={archived || !historyState.canUndo}
@@ -632,7 +632,7 @@ function NoteEditorPanel({
               <Button
                 type="button"
                 variant="ghost"
-                size="icon-xs"
+                size="icon-sm"
                 aria-label="Redo editor change"
                 title="Redo"
                 disabled={archived || !historyState.canRedo}
@@ -840,10 +840,7 @@ function NoteTree({
   );
   const visibleExpandedUuids = useMemo(
     () =>
-      new Set([
-        ...expandedUuids,
-        ...findAncestorUuids(nodes, selectedUuid),
-      ]),
+      new Set([...expandedUuids, ...findAncestorUuids(nodes, selectedUuid)]),
     [expandedUuids, nodes, selectedUuid],
   );
 
@@ -1057,7 +1054,9 @@ function RootNoteCard({
           )}
           {hasChildren && (
             <AccordionHeader>
-              <AccordionTrigger aria-label={`Toggle ${node.title || "Untitled"} child pages`} />
+              <AccordionTrigger
+                aria-label={`Toggle ${node.title || "Untitled"} child pages`}
+              />
             </AccordionHeader>
           )}
         </div>
@@ -1153,7 +1152,9 @@ function ChildNoteRow({
         )}
         {hasChildren && (
           <AccordionHeader className="absolute top-1/2 right-1 -translate-y-1/2">
-            <AccordionTrigger aria-label={`Toggle ${node.title || "Untitled"} child pages`} />
+            <AccordionTrigger
+              aria-label={`Toggle ${node.title || "Untitled"} child pages`}
+            />
           </AccordionHeader>
         )}
       </div>

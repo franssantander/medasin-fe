@@ -52,10 +52,10 @@ const tabs: { value: AreaTab; label: string; icon: typeof FolderKanban }[] = [
   { value: "resources", label: "Resources", icon: LucideLibraryBig },
 ];
 
-export function AreaDetail() {
+export function AreaDetail({ initialTab = "projects" }: { initialTab?: AreaTab }) {
   const { uuid } = useParams<{ uuid: string }>();
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<AreaTab>("projects");
+  const [activeTab, setActiveTab] = useState<AreaTab>(initialTab);
   const [page, setPage] = useState(1);
   const [goalFilter, setGoalFilter] = useState<GoalFilter>("all");
   const [areaFormOpen, setAreaFormOpen] = useState(false);
@@ -125,6 +125,7 @@ export function AreaDetail() {
   const changeTab = (tab: AreaTab) => {
     setActiveTab(tab);
     setPage(1);
+    router.replace(`/areas/${uuid}?tab=${tab}`, { scroll: false });
   };
   const confirmAreaAction = async () => {
     if (confirmationAction === "archive") {
