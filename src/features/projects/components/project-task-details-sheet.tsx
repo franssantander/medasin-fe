@@ -284,8 +284,10 @@ export function TaskDetailsSheet({
                   />
                 )}
               </SheetTitle>
-              <SheetDescription>
-                <div className="w-full grid grid-cols-2 gap-4">
+              <SheetDescription className="sr-only">
+                View and update the task details.
+              </SheetDescription>
+              <div className="grid w-full grid-cols-2 gap-4">
                   {archived ? (
                     <Badge
                       variant="secondary"
@@ -378,8 +380,7 @@ export function TaskDetailsSheet({
                       </SelectContent>
                     </Select>
                   )}
-                </div>
-              </SheetDescription>
+              </div>
             </SheetHeader>
 
             <div className="grid min-h-0 flex-1 content-start gap-6 overflow-y-auto p-4">
@@ -800,5 +801,4 @@ function LinkPickerItem({
     </Button>
   );
 }
-
 
