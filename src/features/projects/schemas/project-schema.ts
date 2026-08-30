@@ -11,7 +11,7 @@ export const projectSchema = z
       .regex(/^#[0-9a-f]{6}$/i, "Enter a valid 6-digit hex color."),
     start_date: z.string().optional(),
     due_date: z.string().optional(),
-    area_mode: z.enum(["existing", "new"]),
+    area_mode: z.enum(["inbox", "existing", "new"]),
     area_uuid: z.string().optional(),
     area_name: z.string().trim().max(120).optional(),
   })

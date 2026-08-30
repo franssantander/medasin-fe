@@ -1,7 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { StarCheck, Search } from "lucide-react";
+import { Flame, Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Controller, useForm, useWatch } from "react-hook-form";
 import { Button } from "@/components/ui/button";
@@ -98,7 +98,7 @@ export function HabitFormDialog({
     if (!open) return;
     reset({
       name: habit?.name ?? "",
-      icon: habit?.icon || "StarCheck",
+      icon: habit?.icon || "Flame",
       description: habit?.description ?? "",
       frequency: habit?.frequency ?? "daily",
       schedule_days: habit?.schedule?.days ?? [],
@@ -117,7 +117,7 @@ export function HabitFormDialog({
             : { days: values.schedule_days };
       await onSubmit({
         name: values.name,
-        icon: values.icon || "StarCheck",
+        icon: values.icon || "Flame",
         description: values.description,
         frequency: values.frequency,
         schedule,
@@ -156,7 +156,7 @@ export function HabitFormDialog({
       <DialogContent className="max-w-2xl">
         <DialogHeader>
           <div className="mb-2 flex size-10 items-center justify-center rounded-xl bg-primary text-primary-foreground">
-            <StarCheck className="size-5" />
+            <Flame className="size-5" />
           </div>
           <DialogTitle>{habit ? "Edit habit" : "Add habit"}</DialogTitle>
           <DialogDescription>
@@ -177,7 +177,7 @@ export function HabitFormDialog({
               <div className="flex items-center gap-3 border-b p-3">
                 <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground">
                   <AreaIcon
-                    name={selectedIcon || "StarCheck"}
+                    name={selectedIcon || "Flame"}
                     className="size-3.5"
                   />
                 </div>
@@ -198,7 +198,7 @@ export function HabitFormDialog({
                     type="button"
                     title={name}
                     aria-label={`Use ${name} icon`}
-                    aria-pressed={(selectedIcon || "StarCheck") === name}
+                    aria-pressed={(selectedIcon || "Flame") === name}
                     className="flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground aria-pressed:bg-primary aria-pressed:text-primary-foreground"
                     onClick={() =>
                       setValue("icon", name, {

@@ -3,15 +3,16 @@
 import {
   Archive,
   CalendarDays,
-  Flag,
-  ListChecks,
+  CirclePile,
+  Inbox,
   LoaderCircle,
   MoreHorizontal,
   Pencil,
+  StarCheck,
   Trash2,
   TriangleAlert,
 } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
@@ -28,13 +29,14 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { toast } from "@/components/ui/toast";
 import {
   goalStatusBadgeClassNames,
   goalStatusLabels,
 } from "@/features/areas/goal-status";
 import { areaKeys } from "@/features/areas/queries/area-query";
 import { areaService } from "@/features/areas/services/area-service";
-import { useProjectMutation } from "../queries/project-query";
+import { projectKeys, useProjectMutation } from "../queries/project-query";
 import type { ProjectListCard, ProjectStatus } from "../type";
 import { ProjectActionDialog } from "./project-action-dialog";
 import { ProjectIcon, projectBadgeStyle } from "./project-icons";
@@ -60,6 +62,7 @@ export function ProjectCard({
   project: ProjectListCard;
   onEdit: () => void;
 }) {
+  const queryClient = useQueryClient();
   const [confirmationAction, setConfirmationAction] =
     useState<ProjectConfirmationAction>();
   const [goalsMenuOpen, setGoalsMenuOpen] = useState(false);
@@ -71,7 +74,21 @@ export function ProjectCard({
   });
   const archive = useProjectMutation("archive", project.uuid);
   const remove = useProjectMutation("remove", project.uuid);
-  const isPending = archive.isPending || remove.isPending;
+  const moveToInbox = useMutation({
+    mutationFn: () => areaService.detachProject(areaUuid!, project.uuid),
+    onSuccess: async (response) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: projectKeys.all }),
+        queryClient.invalidateQueries({ queryKey: areaKeys.all }),
+      ]);
+      toast.add({ type: "success", description: response.message });
+    },
+    onError: (error) => {
+      toast.add({ type: "error", description: error.message });
+    },
+  });
+  const isPending =
+    archive.isPending || remove.isPending || moveToInbox.isPending;
   const progress = Math.min(100, Math.max(0, project.progress_percentage));
   const statusLabel =
     statusLabels[project.status] ?? project.status.replaceAll("_", " ");
@@ -95,6 +112,7 @@ export function ProjectCard({
                 <Button
                   variant="ghost"
                   size="icon-sm"
+                  disabled={isPending}
                   aria-label={`Actions for ${project.name}`}
                 />
               }
@@ -106,7 +124,17 @@ export function ProjectCard({
                 <Pencil />
                 Edit
               </DropdownMenuItem>
+              {project.area && (
+                <DropdownMenuItem
+                  disabled={isPending}
+                  onClick={() => moveToInbox.mutate()}
+                >
+                  <Inbox />
+                  Move to Inbox
+                </DropdownMenuItem>
+              )}
               <DropdownMenuItem
+                disabled={isPending}
                 onClick={() => setConfirmationAction("archive")}
               >
                 <Archive />
@@ -114,6 +142,7 @@ export function ProjectCard({
               </DropdownMenuItem>
               <DropdownMenuItem
                 destructive
+                disabled={isPending}
                 onClick={() => setConfirmationAction("delete")}
               >
                 <Trash2 />
@@ -181,13 +210,13 @@ export function ProjectCard({
                 size="sm"
                 className="min-w-0 justify-start"
               >
-                <Flag />
+                <CirclePile />
                 <span className="truncate">{project.area.name}</span>
               </Button>
             ) : (
               <div className="flex h-8 items-center gap-2 rounded-md border px-3 text-muted-foreground">
-                <Flag className="size-4" />
-                No area
+                <Inbox className="size-4" />
+                Inbox
               </div>
             )}
             {project.area ? (
@@ -205,7 +234,7 @@ export function ProjectCard({
                     />
                   }
                 >
-                  <ListChecks />
+                  <StarCheck />
                   {project.goals.count}{" "}
                   {project.goals.count === 1 ? "goal" : "goals"}
                 </DropdownMenuTrigger>
@@ -254,13 +283,12 @@ export function ProjectCard({
               </DropdownMenu>
             ) : (
               <div className="flex h-8 items-center gap-2 rounded-md border px-3 text-muted-foreground">
-                <ListChecks className="size-4" />
-                0 goals
+                <StarCheck className="size-4" />0 goals
               </div>
             )}
           </div>
 
-          <div className="flex items-start gap-2 border-t pt-3 text-xs text-muted-foreground">
+          <div className="flex items-center gap-2 border-t pt-3 text-xs text-muted-foreground">
             <CalendarDays className="mt-0.5 size-4 shrink-0" />
             <span>
               {project.start_date && project.due_date

@@ -61,7 +61,7 @@ export function GoalFormDialog({
     resolver: zodResolver(goalSchema),
     defaultValues: {
       title: "",
-      icon: "Target",
+      icon: "Star",
       description: "",
       status: "pending",
       start_date: "",
@@ -81,7 +81,7 @@ export function GoalFormDialog({
     if (open) {
       reset({
         title: goal?.title ?? "",
-        icon: goal?.icon || "Target",
+        icon: goal?.icon || "Star",
         description: goal?.description ?? "",
         status: goal?.status ?? "pending",
         start_date: goal?.start_date?.slice(0, 10) ?? "",
@@ -92,7 +92,7 @@ export function GoalFormDialog({
 
   const submit = handleSubmit(async (values) => {
     try {
-      await onSubmit({ ...values, icon: values.icon || "Target" });
+      await onSubmit({ ...values, icon: values.icon || "Star" });
       onOpenChange(false);
     } catch (error) {
       if (error instanceof ApiError && error.validationErrors) {
@@ -116,7 +116,7 @@ export function GoalFormDialog({
       <DialogContent className="max-w-2xl">
         <DialogHeader>
           <div className="mb-2 flex size-10 items-center justify-center rounded-xl bg-primary text-primary-foreground">
-            <AreaIcon name={selectedIcon || "Target"} className="size-5" />
+            <AreaIcon name={selectedIcon || "Star"} className="size-5" />
           </div>
           <DialogTitle>{goal ? "Edit goal" : "Add goal"}</DialogTitle>
           <DialogDescription>
@@ -141,7 +141,7 @@ export function GoalFormDialog({
               <div className="flex items-center gap-3 border-b p-3">
                 <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground">
                   <AreaIcon
-                    name={selectedIcon || "Target"}
+                    name={selectedIcon || "Star"}
                     className="size-3.5"
                   />
                 </div>
@@ -162,7 +162,7 @@ export function GoalFormDialog({
                     type="button"
                     title={name}
                     aria-label={`Use ${name} icon`}
-                    aria-pressed={(selectedIcon || "Target") === name}
+                    aria-pressed={(selectedIcon || "Star") === name}
                     className="flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground aria-pressed:bg-primary aria-pressed:text-primary-foreground"
                     onClick={() =>
                       setValue("icon", name, {

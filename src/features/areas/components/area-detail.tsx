@@ -3,13 +3,13 @@
 import { useMutation } from "@tanstack/react-query";
 import {
   ArrowLeft,
-  CircleStar,
   FileText,
-  Folder,
+  Flame,
   FolderKanban,
-  ListChecks,
   LucideLibraryBig,
   RefreshCw,
+  StarCheck,
+  Target,
 } from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
@@ -45,14 +45,18 @@ import { GoalFormDialog } from "./goal-form-dialog";
 import { HabitFormDialog } from "./habit-form-dialog";
 
 const tabs: { value: AreaTab; label: string; icon: typeof FolderKanban }[] = [
-  { value: "projects", label: "Projects", icon: Folder },
-  { value: "goals", label: "Goals", icon: ListChecks },
-  { value: "habits", label: "Habits", icon: CircleStar },
+  { value: "projects", label: "Projects", icon: Target },
+  { value: "goals", label: "Goals", icon: StarCheck },
+  { value: "habits", label: "Habits", icon: Flame },
   { value: "notes", label: "Notes", icon: FileText },
   { value: "resources", label: "Resources", icon: LucideLibraryBig },
 ];
 
-export function AreaDetail({ initialTab = "projects" }: { initialTab?: AreaTab }) {
+export function AreaDetail({
+  initialTab = "projects",
+}: {
+  initialTab?: AreaTab;
+}) {
   const { uuid } = useParams<{ uuid: string }>();
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<AreaTab>(initialTab);

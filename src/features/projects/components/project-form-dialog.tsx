@@ -1,7 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Check, Search } from "lucide-react";
+import { Check, Inbox, Search } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { Button } from "@/components/ui/button";
@@ -89,7 +89,7 @@ export function ProjectFormDialog({
       background: "#000000",
       start_date: "",
       due_date: "",
-      area_mode: "existing",
+      area_mode: "inbox",
       area_uuid: "",
       area_name: "",
     },
@@ -118,7 +118,7 @@ export function ProjectFormDialog({
       background: project?.background ?? "#000000",
       start_date: project?.start_date ?? "",
       due_date: project?.due_date ?? "",
-      area_mode: "existing",
+      area_mode: project?.area ? "existing" : "inbox",
       area_uuid: project?.area?.uuid ?? "",
       area_name: "",
     });
@@ -139,7 +139,9 @@ export function ProjectFormDialog({
       due_date: values.due_date || null,
       ...(values.area_mode === "existing"
         ? { area_uuid: values.area_uuid }
-        : { area_name: values.area_name?.trim() }),
+        : values.area_mode === "new"
+          ? { area_name: values.area_name?.trim() }
+          : {}),
     };
 
     try {
@@ -160,7 +162,8 @@ export function ProjectFormDialog({
         <DialogHeader>
           <DialogTitle>{project ? "Edit project" : "Create project"}</DialogTitle>
           <DialogDescription>
-            Define the outcome, timeline, and area this project supports.
+            Define the outcome and timeline. Projects without an area stay in
+            Inbox.
           </DialogDescription>
         </DialogHeader>
 
@@ -211,7 +214,20 @@ export function ProjectFormDialog({
           </div>
 
           <div className="grid gap-3">
-              <div className="flex gap-2" role="group" aria-label="Area source">
+              <div
+                className="flex flex-wrap gap-2"
+                role="group"
+                aria-label="Area source"
+              >
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={areaMode === "inbox" ? "default" : "outline"}
+                  onClick={() => setValue("area_mode", "inbox")}
+                >
+                  <Inbox />
+                  Inbox
+                </Button>
                 <Button
                   type="button"
                   size="sm"
@@ -230,7 +246,11 @@ export function ProjectFormDialog({
                 </Button>
               </div>
 
-              {areaMode === "existing" ? (
+              {areaMode === "inbox" ? (
+                <p className="text-sm text-muted-foreground">
+                  You can assign this project to an area later.
+                </p>
+              ) : areaMode === "existing" ? (
                 <FormField label="Area" error={errors.area_uuid?.message}>
                   <Select
                     value={selectedAreaUuid}
