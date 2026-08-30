@@ -100,7 +100,9 @@ export function ProjectFormDialog({
   const selectedAreaUuid = useWatch({ control, name: "area_uuid" });
   const selectedAreaName =
     areas.find((area) => area.uuid === selectedAreaUuid)?.name ??
-    (project?.area?.uuid === selectedAreaUuid ? project.area.name : undefined);
+    (project?.area && project.area.uuid === selectedAreaUuid
+      ? project.area.name
+      : undefined);
   const filteredIcons = useMemo(() => {
     const query = iconSearch.trim().toLowerCase();
     return query

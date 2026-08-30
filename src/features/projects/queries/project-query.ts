@@ -8,12 +8,35 @@ export const projectKeys = {
   all: ["projects"] as const,
   list: (status: ProjectArchiveFilter) =>
     ["projects", "list", status] as const,
+  detail: (projectUuid: string) =>
+    ["projects", "detail", projectUuid] as const,
+  board: (projectUuid: string, boardUuid: string) =>
+    ["projects", "detail", projectUuid, "boards", boardUuid] as const,
 };
 
 export function useProjectsQuery(status: ProjectArchiveFilter = "active") {
   return useQuery({
     queryKey: projectKeys.list(status),
     queryFn: () => projectService.list(status),
+  });
+}
+
+export function useProjectQuery(projectUuid: string) {
+  return useQuery({
+    queryKey: projectKeys.detail(projectUuid),
+    queryFn: () => projectService.show(projectUuid),
+    enabled: Boolean(projectUuid),
+  });
+}
+
+export function useProjectBoardQuery(
+  projectUuid: string,
+  boardUuid?: string,
+) {
+  return useQuery({
+    queryKey: projectKeys.board(projectUuid, boardUuid ?? ""),
+    queryFn: () => projectService.board(projectUuid, boardUuid!),
+    enabled: Boolean(projectUuid && boardUuid),
   });
 }
 

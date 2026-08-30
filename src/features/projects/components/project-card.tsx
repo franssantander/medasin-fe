@@ -105,7 +105,12 @@ export function ProjectCard({
   return (
     <>
       <Card className="relative gap-0 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg">
-        <div className="absolute right-4 top-4">
+        <Link
+          href={`/projects/${project.uuid}`}
+          className="absolute inset-0 z-0 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+          aria-label={`Open ${project.name}`}
+        />
+        <div className="absolute right-4 top-4 z-10">
           <DropdownMenu>
             <DropdownMenuTrigger
               render={
@@ -152,7 +157,7 @@ export function ProjectCard({
           </DropdownMenu>
         </div>
 
-        <CardContent className="gap-4 pr-14">
+        <CardContent className="pointer-events-none gap-4 pr-14">
           <div className="flex items-center gap-3">
             <div
               className="flex size-12 shrink-0 items-center justify-center rounded-xl shadow-md ring-4 ring-card"
@@ -208,7 +213,7 @@ export function ProjectCard({
                 nativeButton={false}
                 variant="outline"
                 size="sm"
-                className="min-w-0 justify-start"
+                className="pointer-events-auto relative z-10 min-w-0 justify-start"
               >
                 <CirclePile />
                 <span className="truncate">{project.area.name}</span>
@@ -229,7 +234,7 @@ export function ProjectCard({
                     <Button
                       variant="outline"
                       size="sm"
-                      className="justify-start"
+                      className="pointer-events-auto relative z-10 justify-start"
                       aria-label={`View goals for ${project.name}`}
                     />
                   }
