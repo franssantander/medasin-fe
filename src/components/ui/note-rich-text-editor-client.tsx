@@ -271,6 +271,7 @@ type PendingDialog =
   | undefined;
 
 export type NoteRichTextEditorClientProps = {
+  mode?: "note" | "task";
   documentId: string;
   content: string;
   editable: boolean;
@@ -281,6 +282,7 @@ export type NoteRichTextEditorClientProps = {
   onOpenNote: (uuid: string, options?: { focusTitle?: boolean }) => void;
   onEditorReady: (controls: NoteRichTextEditorControls | null) => void;
   onHistoryStateChange: (state: NoteEditorHistoryState) => void;
+  onBlur?: () => void;
 };
 
 export type NoteRichTextEditorControls = {
@@ -295,6 +297,7 @@ export type NoteEditorHistoryState = {
 };
 
 export function NoteRichTextEditorClient({
+  mode = "note",
   documentId,
   content,
   editable,
@@ -305,6 +308,7 @@ export function NoteRichTextEditorClient({
   onOpenNote,
   onEditorReady,
   onHistoryStateChange,
+  onBlur,
 }: NoteRichTextEditorClientProps) {
   const onChangeRef = useRef(onChange);
   const onUploadFileRef = useRef(onUploadFile);
@@ -312,6 +316,7 @@ export function NoteRichTextEditorClient({
   const onOpenNoteRef = useRef(onOpenNote);
   const onEditorReadyRef = useRef(onEditorReady);
   const onHistoryStateChangeRef = useRef(onHistoryStateChange);
+  const onBlurRef = useRef(onBlur);
   const editorShellRef = useRef<HTMLDivElement>(null);
   const selectedBlockIdRef = useRef<string | undefined>(undefined);
   const [pendingDialog, setPendingDialog] = useState<PendingDialog>();
@@ -325,6 +330,7 @@ export function NoteRichTextEditorClient({
     onOpenNoteRef.current = onOpenNote;
     onEditorReadyRef.current = onEditorReady;
     onHistoryStateChangeRef.current = onHistoryStateChange;
+    onBlurRef.current = onBlur;
   }, [
     onChange,
     onCreateChild,
@@ -332,6 +338,7 @@ export function NoteRichTextEditorClient({
     onHistoryStateChange,
     onOpenNote,
     onUploadFile,
+    onBlur,
   ]);
 
   const initialContent = useMemo(
@@ -609,11 +616,15 @@ export function NoteRichTextEditorClient({
     "Video",
     "Divider",
   ]);
+  const taskExcludedDefaults = new Set(["Image", "Video"]);
   const slashItems = [
     ...getDefaultReactSlashMenuItems(editor).filter((item) =>
-      allowedDefaults.has(item.title),
+      allowedDefaults.has(item.title) &&
+      (mode !== "task" || !taskExcludedDefaults.has(item.title)),
     ),
-    ...customItems,
+    ...(mode === "task"
+      ? [customItems[0], customItems[2], customItems[3], customItems[4]]
+      : customItems),
   ];
 
   const submitDialog = () => {
@@ -653,7 +664,16 @@ export function NoteRichTextEditorClient({
     <NoteEditorContext.Provider value={noteEditorContext}>
       <div
         ref={editorShellRef}
-        className="flex min-h-0 w-full min-w-0 flex-1 overflow-hidden bg-white"
+        className={
+          mode === "task"
+            ? "flex min-h-0 w-full min-w-0 flex-1 overflow-x-hidden overflow-y-auto bg-white"
+            : "flex min-h-0 w-full min-w-0 flex-1 overflow-hidden bg-white"
+        }
+        onBlurCapture={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget)) {
+            onBlurRef.current?.();
+          }
+        }}
         onKeyDownCapture={handleSelectedBlockKeyDown}
         onPointerDownCapture={(event) => {
           if (
@@ -665,7 +685,11 @@ export function NoteRichTextEditorClient({
         }}
       >
         <BlockNoteView
-          className="h-full min-h-0 w-full"
+          className={
+            mode === "task"
+              ? "h-auto min-h-full w-full"
+              : "h-full min-h-0 w-full"
+          }
           editor={editor}
           editable={editable}
           sideMenu={false}
