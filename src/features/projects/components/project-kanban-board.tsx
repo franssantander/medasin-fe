@@ -3,7 +3,7 @@ import {
   useSortable,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
-import { useDroppable } from "@dnd-kit/core";
+import { useDndContext, useDroppable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import { FileText, Link2, Plus } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -50,15 +50,24 @@ export function KanbanColumn({
   onDraftSubmit: () => void;
   onOpen: (task: BoardTask) => void;
 }) {
+  const stageDroppableId = `stage:${stage.key}`;
+  const { active, over } = useDndContext();
   const { setNodeRef, isOver } = useDroppable({
-    id: `stage:${stage.key}`,
+    id: stageDroppableId,
     disabled: archived,
   });
+  const overId = over ? String(over.id) : undefined;
+  const isDragOverStage = Boolean(
+    active &&
+      (isOver ||
+        overId === stageDroppableId ||
+        stage.tasks.some((task) => task.uuid === overId)),
+  );
 
   return (
     <section
       ref={setNodeRef}
-      className={`flex h-[34rem] min-w-0 flex-col rounded-xl border bg-muted/25 transition-colors ${isOver ? "border-primary/60 bg-primary/5" : ""}`}
+      className={`flex h-[34rem] min-w-0 flex-col rounded-xl border bg-muted/25 transition-[border-color,background-color,box-shadow] ${isDragOverStage ? "border-primary/70 bg-primary/5 ring-2 ring-primary/15" : ""}`}
     >
       <div className="flex items-center justify-between border-b p-3">
         <h3 className="flex items-center gap-1.5 font-semibold">
