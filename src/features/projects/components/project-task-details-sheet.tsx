@@ -285,7 +285,7 @@ export function TaskDetailsSheet({
         onOpenChange(open);
       }}
     >
-      <DrawerContent className="w-[46rem] ">
+      <DrawerContent className="w-full md:w-[46rem] ">
         {task && (
           <>
             <DrawerHeader className="shrink-0 gap-1.5 border-b p-4">
