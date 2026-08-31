@@ -224,7 +224,7 @@ function RecordCard({
       <CardHeader className={isProject ? "pointer-events-none" : undefined}>
         <CardTitle className="flex min-w-0 items-center gap-2">
           {isProject && (
-            <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground transition-colors group-hover/card:bg-primary group-hover/card:text-primary-foreground">
+            <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
               <FolderKanban className="size-4" />
             </span>
           )}
