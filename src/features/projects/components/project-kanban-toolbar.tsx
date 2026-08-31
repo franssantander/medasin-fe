@@ -60,7 +60,7 @@ export function ProjectKanbanToolbar({
           render={
             <Button
               variant="outline"
-              className="w-full justify-between sm:w-72"
+              className="w-fit max-w-full justify-between sm:max-w-96"
               aria-label="Select board"
             />
           }
@@ -82,7 +82,7 @@ export function ProjectKanbanToolbar({
           side="bottom"
           align="start"
           sideOffset={4}
-          className="w-72"
+          className="w-max min-w-(--anchor-width) max-w-[calc(100vw-2rem)] sm:max-w-96"
         >
           {boards.map((item) => (
             <DropdownMenuItem
@@ -94,9 +94,7 @@ export function ProjectKanbanToolbar({
             >
               <Check
                 className={
-                  item.uuid === selectedBoardUuid
-                    ? "opacity-100"
-                    : "opacity-0"
+                  item.uuid === selectedBoardUuid ? "opacity-100" : "opacity-0"
                 }
               />
               <span className="flex min-w-0 flex-1 items-center justify-between gap-3">
