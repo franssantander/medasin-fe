@@ -118,7 +118,9 @@ export function TaskDetailsSheet({
   onDelete: () => void;
 }) {
   const router = useRouter();
+  const taskUuid = task?.uuid;
   const initialDraft = createTaskDraft(task);
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const [draft, setDraft] = useState(initialDraft);
   const [saveState, setSaveState] = useState<TaskSaveState>("idle");
   const [linkPicker, setLinkPicker] = useState<"resources" | "notes">();
@@ -223,6 +225,16 @@ export function TaskDetailsSheet({
     };
   }, []);
 
+  useEffect(() => {
+    if (!taskUuid) return;
+
+    const animationFrame = window.requestAnimationFrame(() => {
+      setDrawerOpen(true);
+    });
+
+    return () => window.cancelAnimationFrame(animationFrame);
+  }, [taskUuid]);
+
   const updateDraft = (values: Partial<BoardTaskInput>) => {
     if (archived) return;
     autosaveCancelledRef.current = false;
@@ -277,12 +289,15 @@ export function TaskDetailsSheet({
 
   return (
     <Drawer
-      open={Boolean(task)}
+      open={drawerOpen}
       showSwipeHandle
       swipeDirection="right"
       onOpenChange={(open) => {
         if (!open) void flushDraftRef.current();
-        onOpenChange(open);
+        setDrawerOpen(open);
+      }}
+      onOpenChangeComplete={(open) => {
+        if (!open) onOpenChange(false);
       }}
     >
       <DrawerContent className="w-full md:w-[46rem] ">
