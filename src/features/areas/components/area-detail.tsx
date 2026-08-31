@@ -192,6 +192,12 @@ export function AreaDetail({
     backContext === "projects" && sourceProjectUuid
       ? "project details"
       : backContext;
+  const projectDetailBasePath =
+    routeContext === "archives"
+      ? "/archives/projects"
+      : routeContext === "projects"
+        ? "/projects"
+        : `/areas/${uuid}/projects`;
 
   return (
     <div className="flex min-h-full flex-col gap-5">
@@ -261,6 +267,7 @@ export function AreaDetail({
               }
               archived={archived}
               areaUuid={uuid}
+              projectDetailBasePath={projectDetailBasePath}
               page={page}
               setPage={setPage}
               refetch={() => {

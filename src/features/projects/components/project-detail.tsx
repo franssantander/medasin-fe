@@ -39,11 +39,16 @@ function formatDate(value: string) {
 }
 
 export function ProjectDetail({
-  archiveRoute = false,
+  projectUuid,
+  routeContext = "projects",
+  sourceAreaUuid,
 }: {
-  archiveRoute?: boolean;
+  projectUuid?: string;
+  routeContext?: "projects" | "archives" | "areas";
+  sourceAreaUuid?: string;
 }) {
-  const { uuid } = useParams<{ uuid: string }>();
+  const params = useParams<{ uuid?: string }>();
+  const uuid = projectUuid ?? params.uuid ?? "";
   const router = useRouter();
   const [goalsOpen, setGoalsOpen] = useState(false);
   const projectQuery = useProjectQuery(uuid);
@@ -75,18 +80,31 @@ export function ProjectDetail({
 
   const archived = Boolean(project.archived_at);
   const progress = Math.min(100, Math.max(0, project.progress_percentage));
+  const backContext =
+    routeContext === "projects" && archived ? "archives" : routeContext;
+  const backHref =
+    backContext === "archives"
+      ? "/archives"
+      : backContext === "areas" && sourceAreaUuid
+        ? `/areas/${sourceAreaUuid}?tab=projects`
+        : "/projects";
+  const backLabel = backContext === "areas" ? "area" : backContext;
+  const areaHref =
+    routeContext === "areas" && sourceAreaUuid
+      ? `/areas/${sourceAreaUuid}?tab=projects`
+      : `/projects/${project.uuid}/areas/${project.area?.uuid}`;
 
   return (
     <div className="grid min-w-0 gap-5">
       <div>
         <Button
-          render={<Link href={archived ? "/archives" : "/projects"} />}
+          render={<Link href={backHref} />}
           nativeButton={false}
           variant="ghost"
           size="sm"
         >
           <ArrowLeft />
-          Back to {archived ? "archives" : "projects"}
+          Back to {backLabel}
         </Button>
       </div>
       <Card className="overflow-hidden">
@@ -126,7 +144,8 @@ export function ProjectDetail({
                   onClick={() =>
                     restore.mutate(undefined, {
                       onSuccess: () => {
-                        if (archiveRoute) router.replace(`/projects/${uuid}`);
+                        if (routeContext === "archives")
+                          router.replace(`/projects/${uuid}`);
                       },
                     })
                   }
@@ -137,11 +156,7 @@ export function ProjectDetail({
               )}
               {project.area ? (
                 <Button
-                  render={
-                    <Link
-                      href={`/projects/${project.uuid}/areas/${project.area.uuid}`}
-                    />
-                  }
+                  render={<Link href={areaHref} />}
                   nativeButton={false}
                   variant="outline"
                   size="sm"

@@ -1,7 +1,8 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ExternalLink, Link2, Unlink } from "lucide-react";
+import { ExternalLink, FolderKanban, Link2, Unlink } from "lucide-react";
+import Link from "next/link";
 import { useState, type ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -13,6 +14,13 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "@/components/ui/toast";
 import { areaService } from "../services/area-service";
@@ -44,6 +52,7 @@ export function AreaSectionContent({
   error,
   archived,
   areaUuid,
+  projectDetailBasePath,
   page,
   setPage,
   refetch,
@@ -61,6 +70,7 @@ export function AreaSectionContent({
   error: boolean;
   archived: boolean;
   areaUuid: string;
+  projectDetailBasePath: string;
   page: number;
   setPage: (page: number) => void;
   refetch: () => void;
@@ -119,7 +129,7 @@ export function AreaSectionContent({
 
   return (
     <div className="grid gap-4">
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="font-semibold capitalize">{tab}</h2>
           <p className="text-sm text-muted-foreground">
@@ -149,6 +159,7 @@ export function AreaSectionContent({
               record={record}
               archived={archived}
               areaUuid={areaUuid}
+              projectDetailBasePath={projectDetailBasePath}
               onChanged={onChanged}
             />
           ))}
@@ -166,12 +177,14 @@ function RecordCard({
   record,
   archived,
   areaUuid,
+  projectDetailBasePath,
   onChanged,
 }: {
   tab: AreaTab;
   record: AreaRecord;
   archived: boolean;
   areaUuid: string;
+  projectDetailBasePath: string;
   onChanged: (message: string) => Promise<void>;
 }) {
   const queryClient = useQueryClient();
@@ -190,10 +203,33 @@ function RecordCard({
       toast.add({ type: "error", description: error.message }),
   });
   const { title, description, badge } = getRecordDisplay(tab, record);
+  const isProject = tab === "projects";
+
   return (
-    <Card size="sm">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">{title}</CardTitle>
+    <Card
+      size="sm"
+      className={
+        isProject
+          ? "relative gap-0 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md"
+          : undefined
+      }
+    >
+      {isProject && (
+        <Link
+          href={`${projectDetailBasePath}/${record.uuid}`}
+          className="absolute inset-0 z-0 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+          aria-label={`Open ${String(title)}`}
+        />
+      )}
+      <CardHeader className={isProject ? "pointer-events-none" : undefined}>
+        <CardTitle className="flex min-w-0 items-center gap-2">
+          {isProject && (
+            <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground transition-colors group-hover/card:bg-primary group-hover/card:text-primary-foreground">
+              <FolderKanban className="size-4" />
+            </span>
+          )}
+          <span className="truncate">{title}</span>
+        </CardTitle>
         <CardDescription>{description}</CardDescription>
         {badge && (
           <CardAction>
@@ -204,10 +240,11 @@ function RecordCard({
         )}
       </CardHeader>
       {!archived && (
-        <CardContent className="flex-row justify-end">
+        <CardContent className="pointer-events-none relative z-10 flex-row justify-end">
           <Button
             variant="ghost"
             size="sm"
+            className="pointer-events-auto"
             disabled={detach.isPending}
             onClick={() => detach.mutate()}
           >
@@ -226,6 +263,7 @@ function RecordCard({
               nativeButton={false}
               variant="ghost"
               size="icon-sm"
+              className="pointer-events-auto"
               aria-label="Open resource"
             >
               <ExternalLink />
@@ -260,6 +298,19 @@ function LinkPicker({
   const options = (query.data?.data ?? []).filter(
     (item) => !linkedIds.has(item.uuid),
   );
+  const selectedItem = options.find((item) => item.uuid === selected);
+  const selectedLabel = selectedItem
+    ? "name" in selectedItem
+      ? selectedItem.name
+      : selectedItem.title
+    : undefined;
+  const selectPlaceholder = query.isLoading
+    ? `Loading ${kind}…`
+    : query.isError
+      ? `${kind === "projects" ? "Projects" : "Resources"} unavailable`
+      : options.length === 0
+        ? `No ${kind} available`
+        : `Choose ${kind === "projects" ? "a project" : "a resource"}`;
   const mutation = useMutation<ApiResponse<Project | Resource>>({
     mutationFn: () =>
       kind === "projects"
@@ -273,35 +324,47 @@ function LinkPicker({
       toast.add({ type: "error", description: error.message }),
   });
   return (
-    <div className="flex max-w-md flex-1 justify-end gap-2">
-      <select
-        aria-label={`Select ${kind}`}
-        className="h-8 min-w-0 flex-1 rounded-md border bg-background px-2 text-sm"
+    <div className="flex w-full gap-2 sm:max-w-md sm:flex-1 sm:justify-end">
+      <Select
         value={selected}
-        onChange={(event) => setSelected(event.target.value)}
-        disabled={query.isLoading}
+        onValueChange={(value) => setSelected(value ?? "")}
+        disabled={query.isLoading || query.isError || options.length === 0}
       >
-        <option value="">
-          {query.isLoading
-            ? "Loading…"
-            : `Select ${kind === "projects" ? "a project" : "a resource"}`}
-        </option>
-        {options.map((item) => (
-          <option key={item.uuid} value={item.uuid}>
-            {"name" in item ? item.name : item.title}
-            {kind === "projects" && "area" in item && item.area
-              ? ` (move from ${item.area.name})`
-              : ""}
-          </option>
-        ))}
-      </select>
+        <SelectTrigger
+          size="sm"
+          className="min-w-0 flex-1 bg-background"
+          aria-label={`Select ${kind === "projects" ? "a project" : "a resource"} to link`}
+        >
+          {kind === "projects" && <FolderKanban />}
+          <SelectValue placeholder={selectPlaceholder}>
+            {selectedLabel}
+          </SelectValue>
+        </SelectTrigger>
+        <SelectContent align="start">
+          {options.map((item) => {
+            const label = "name" in item ? item.name : item.title;
+            return (
+              <SelectItem key={item.uuid} value={item.uuid}>
+                <span className="min-w-0">
+                  <span className="block truncate">{label}</span>
+                  {kind === "projects" && "area" in item && item.area && (
+                    <span className="block truncate text-xs text-muted-foreground">
+                      Move from {item.area.name}
+                    </span>
+                  )}
+                </span>
+              </SelectItem>
+            );
+          })}
+        </SelectContent>
+      </Select>
       <Button
         size="sm"
         disabled={!selected || mutation.isPending}
         onClick={() => mutation.mutate()}
       >
         <Link2 />
-        Link
+        {mutation.isPending ? "Linking…" : "Link"}
       </Button>
     </div>
   );
