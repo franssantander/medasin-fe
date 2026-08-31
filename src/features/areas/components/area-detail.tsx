@@ -58,12 +58,17 @@ export function AreaDetail({
   initialTab = "projects",
   initialNoteUuid,
   routeContext = "areas",
+  areaUuid,
+  sourceProjectUuid,
 }: {
   initialTab?: AreaTab;
   initialNoteUuid?: string;
   routeContext?: AreaDetailRouteContext;
+  areaUuid?: string;
+  sourceProjectUuid?: string;
 }) {
-  const { uuid } = useParams<{ uuid: string }>();
+  const params = useParams<{ uuid?: string }>();
+  const uuid = areaUuid ?? params.uuid ?? "";
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<AreaTab>(initialTab);
   const [page, setPage] = useState(1);
@@ -139,7 +144,9 @@ export function AreaDetail({
       routeContext === "archives"
         ? `/archives/areas/${uuid}`
         : routeContext === "projects"
-          ? `/projects/areas/${uuid}`
+          ? sourceProjectUuid
+            ? `/projects/${sourceProjectUuid}/areas/${uuid}`
+            : `/projects/areas/${uuid}`
           : `/areas/${uuid}`;
     router.replace(`${detailPath}?tab=${tab}`, { scroll: false });
   };
@@ -161,7 +168,13 @@ export function AreaDetail({
     if (confirmationAction === "delete") {
       await removeArea.mutateAsync();
       setConfirmationAction(undefined);
-      router.replace(routeContext === "projects" ? "/projects" : "/areas");
+      router.replace(
+        routeContext === "projects" && sourceProjectUuid
+          ? `/projects/${sourceProjectUuid}`
+          : routeContext === "projects"
+            ? "/projects"
+            : "/areas",
+      );
     }
   };
 
@@ -171,8 +184,14 @@ export function AreaDetail({
     backContext === "archives"
       ? "/archives"
       : backContext === "projects"
-        ? "/projects"
+        ? sourceProjectUuid
+          ? `/projects/${sourceProjectUuid}`
+          : "/projects"
         : "/areas";
+  const backLabel =
+    backContext === "projects" && sourceProjectUuid
+      ? "project details"
+      : backContext;
 
   return (
     <div className="flex min-h-full flex-col gap-5">
@@ -184,7 +203,7 @@ export function AreaDetail({
           size="sm"
         >
           <ArrowLeft />
-          Back to {backContext}
+          Back to {backLabel}
         </Button>
       </div>
       <div>

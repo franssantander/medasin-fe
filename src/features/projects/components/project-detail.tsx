@@ -138,7 +138,9 @@ export function ProjectDetail({
               {project.area ? (
                 <Button
                   render={
-                    <Link href={`/projects/areas/${project.area.uuid}`} />
+                    <Link
+                      href={`/projects/${project.uuid}/areas/${project.area.uuid}`}
+                    />
                   }
                   nativeButton={false}
                   variant="outline"
