@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  ArchiveRestore,
   ArrowLeft,
   CalendarDays,
   CirclePile,
@@ -26,7 +27,7 @@ import {
   projectStatusBadgeClassNames,
   projectStatusLabels,
 } from "../project-status";
-import { useProjectQuery } from "../queries/project-query";
+import { useProjectMutation, useProjectQuery } from "../queries/project-query";
 import { ProjectIcon, projectBadgeStyle } from "./project-icons";
 import { ProjectGoalsDialog } from "./project-goals-dialog";
 import { ProjectKanban } from "./project-kanban";
@@ -41,6 +42,7 @@ export function ProjectDetail() {
   const { uuid } = useParams<{ uuid: string }>();
   const [goalsOpen, setGoalsOpen] = useState(false);
   const projectQuery = useProjectQuery(uuid);
+  const restore = useProjectMutation("restore", uuid);
   const project = projectQuery.data?.data;
 
   if (projectQuery.isLoading)
@@ -111,6 +113,17 @@ export function ProjectDetail() {
               </p>
             </div>
             <div className="grid min-w-44 gap-2 text-sm">
+              {archived && (
+                <Button
+                  size="sm"
+                  className="justify-start"
+                  disabled={restore.isPending}
+                  onClick={() => restore.mutate()}
+                >
+                  <ArchiveRestore />
+                  {restore.isPending ? "Restoring…" : "Restore"}
+                </Button>
+              )}
               {project.area ? (
                 <Button
                   render={<Link href={`/areas/${project.area.uuid}`} />}
@@ -147,6 +160,11 @@ export function ProjectDetail() {
               )}
             </div>
           </div>
+          {archived && (
+            <p className="rounded-lg border bg-muted/50 px-3 py-2 text-sm text-muted-foreground">
+              This Project is read-only. Restore it before making changes.
+            </p>
+          )}
           <div className="grid gap-3 border-t pt-4 sm:grid-cols-[1fr_auto] sm:items-end">
             <div className="grid gap-2">
               <div className="flex items-center justify-between text-xs">

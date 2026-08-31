@@ -33,7 +33,12 @@ export function useAreaMutation(
       return areaService.remove(areaUuid!) as Promise<ApiResponse<Area | null>>;
     },
     onSuccess: async (response) => {
-      await queryClient.invalidateQueries({ queryKey: areaKeys.all });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: areaKeys.all }),
+        ...(action === "archive"
+          ? [queryClient.invalidateQueries({ queryKey: ["projects"] })]
+          : []),
+      ]);
       toast.add({ type: "success", description: response.message });
     },
     onError: (error) => {

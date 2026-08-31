@@ -36,7 +36,7 @@ export function AreaActionDialog({
           <DialogDescription>
             {isDeleting
               ? `“${area.name}” will be permanently deleted. This action cannot be undone.`
-              : `“${area.name}” will be moved to your archived areas. You can restore it later.`}
+              : `“${area.name}” will be moved to your archived areas. Active projects in this area will move to Inbox, while archived projects will stay linked for history. Restoring the area later will not move projects back automatically.`}
           </DialogDescription>
         </DialogHeader>
         <DialogFooter>

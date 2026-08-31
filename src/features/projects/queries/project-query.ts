@@ -64,7 +64,11 @@ export function useProjectMutation(
     },
     onSuccess: async (response) => {
       await queryClient.invalidateQueries({ queryKey: projectKeys.all });
-      if (action === "create" || action === "updateArea") {
+      if (
+        action === "create" ||
+        action === "updateArea" ||
+        action === "restore"
+      ) {
         await queryClient.invalidateQueries({ queryKey: areaKeys.all });
       }
       toast.add({ type: "success", description: response.message });

@@ -1,6 +1,7 @@
 "use client";
 
 import { ArchiveRestore, FolderKanban } from "lucide-react";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -71,8 +72,13 @@ function ArchivedProjectCard({ project }: { project: ProjectListCard }) {
   const restore = useProjectMutation("restore", project.uuid);
 
   return (
-    <Card>
-      <CardContent className="gap-4">
+    <Card className="relative gap-0 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg">
+      <Link
+        href={`/projects/${project.uuid}`}
+        className="absolute inset-0 z-0 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+        aria-label={`Open ${project.name}`}
+      />
+      <CardContent className="pointer-events-none gap-4">
         <div className="flex items-center gap-3">
           <div
             className="flex size-11 shrink-0 items-center justify-center rounded-xl shadow-sm"
@@ -97,7 +103,7 @@ function ArchivedProjectCard({ project }: { project: ProjectListCard }) {
         <Button
           variant="outline"
           size="sm"
-          className="self-start"
+          className="pointer-events-auto relative z-10 self-start"
           disabled={restore.isPending}
           onClick={() => restore.mutate()}
         >
