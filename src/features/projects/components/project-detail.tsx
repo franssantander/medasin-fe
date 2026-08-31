@@ -19,17 +19,15 @@ import {
   CardDescription,
   CardTitle,
 } from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  projectStatusBadgeClassNames,
+  projectStatusLabels,
+} from "../project-status";
 import { useProjectQuery } from "../queries/project-query";
-import type { ProjectStatus } from "../type";
 import { ProjectIcon, projectBadgeStyle } from "./project-icons";
 import { ProjectKanban } from "./project-kanban";
-
-const statusLabels: Record<ProjectStatus, string> = {
-  not_started: "Not started",
-  in_progress: "In progress",
-  completed: "Completed",
-};
 
 function formatDate(value: string) {
   return new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(
@@ -98,11 +96,10 @@ export function ProjectDetail() {
                   {project.name}
                 </h1>
                 <Badge
-                  variant={
-                    project.status === "completed" ? "default" : "secondary"
-                  }
+                  variant="outline"
+                  className={projectStatusBadgeClassNames[project.status]}
                 >
-                  {statusLabels[project.status]}
+                  {projectStatusLabels[project.status]}
                 </Badge>
                 {archived && <Badge variant="outline">Archived</Badge>}
               </div>
@@ -141,18 +138,7 @@ export function ProjectDetail() {
                 <span className="font-medium">Project progress</span>
                 <span className="text-muted-foreground">{progress}%</span>
               </div>
-              <div
-                className="h-2 overflow-hidden rounded-full bg-muted"
-                role="progressbar"
-                aria-valuemin={0}
-                aria-valuemax={100}
-                aria-valuenow={progress}
-              >
-                <div
-                  className="h-full rounded-full bg-primary transition-[width]"
-                  style={{ width: `${progress}%` }}
-                />
-              </div>
+              <Progress value={progress} aria-label="Project progress" />
             </div>
           </div>
           <div className="flex items-center justify-end gap-2 text-xs text-muted-foreground">

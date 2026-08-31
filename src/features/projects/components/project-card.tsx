@@ -29,6 +29,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Progress } from "@/components/ui/progress";
 import { toast } from "@/components/ui/toast";
 import {
   goalStatusBadgeClassNames,
@@ -36,18 +37,16 @@ import {
 } from "@/features/areas/goal-status";
 import { areaKeys } from "@/features/areas/queries/area-query";
 import { areaService } from "@/features/areas/services/area-service";
+import {
+  projectStatusBadgeClassNames,
+  projectStatusLabels,
+} from "../project-status";
 import { projectKeys, useProjectMutation } from "../queries/project-query";
-import type { ProjectListCard, ProjectStatus } from "../type";
+import type { ProjectListCard } from "../type";
 import { ProjectActionDialog } from "./project-action-dialog";
 import { ProjectIcon, projectBadgeStyle } from "./project-icons";
 
 type ProjectConfirmationAction = "archive" | "delete";
-
-const statusLabels: Record<ProjectStatus, string> = {
-  not_started: "Not started",
-  in_progress: "In progress",
-  completed: "Completed",
-};
 
 function formatDate(value: string) {
   return new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(
@@ -91,7 +90,7 @@ export function ProjectCard({
     archive.isPending || remove.isPending || moveToInbox.isPending;
   const progress = Math.min(100, Math.max(0, project.progress_percentage));
   const statusLabel =
-    statusLabels[project.status] ?? project.status.replaceAll("_", " ");
+    projectStatusLabels[project.status] ?? project.status.replaceAll("_", " ");
 
   const confirmAction = async () => {
     if (confirmationAction === "archive") {
@@ -172,10 +171,8 @@ export function ProjectCard({
                 {project.name}
               </CardTitle>
               <Badge
-                variant={
-                  project.status === "completed" ? "default" : "secondary"
-                }
-                className="mt-1"
+                variant="outline"
+                className={`mt-1 ${projectStatusBadgeClassNames[project.status]}`}
               >
                 {statusLabel}
               </Badge>
@@ -191,19 +188,10 @@ export function ProjectCard({
               <span className="font-medium">Progress</span>
               <span className="text-muted-foreground">{progress}%</span>
             </div>
-            <div
-              className="h-2 overflow-hidden rounded-full bg-muted"
-              role="progressbar"
+            <Progress
+              value={progress}
               aria-label={`${project.name} progress`}
-              aria-valuemin={0}
-              aria-valuemax={100}
-              aria-valuenow={progress}
-            >
-              <div
-                className="h-full rounded-full bg-primary transition-[width]"
-                style={{ width: `${progress}%` }}
-              />
-            </div>
+            />
           </div>
 
           <div className="grid grid-cols-2 gap-2 text-xs">
