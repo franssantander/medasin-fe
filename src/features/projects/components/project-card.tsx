@@ -197,7 +197,9 @@ export function ProjectCard({
           <div className="grid grid-cols-2 gap-2 text-xs">
             {project.area ? (
               <Button
-                render={<Link href={`/areas/${project.area.uuid}`} />}
+                render={
+                  <Link href={`/projects/areas/${project.area.uuid}`} />
+                }
                 nativeButton={false}
                 variant="outline"
                 size="sm"
@@ -251,7 +253,7 @@ export function ProjectCard({
                         key={goal.uuid}
                         render={
                           <Link
-                            href={`/areas/${project.area!.uuid}?tab=goals`}
+                            href={`/projects/areas/${project.area!.uuid}?tab=goals`}
                           />
                         }
                         className="items-start justify-between gap-3"

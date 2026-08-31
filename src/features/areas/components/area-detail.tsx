@@ -52,14 +52,16 @@ const tabs: { value: AreaTab; label: string; icon: typeof FolderKanban }[] = [
   { value: "resources", label: "Resources", icon: LucideLibraryBig },
 ];
 
+type AreaDetailRouteContext = "areas" | "archives" | "projects";
+
 export function AreaDetail({
   initialTab = "projects",
   initialNoteUuid,
-  archiveRoute = false,
+  routeContext = "areas",
 }: {
   initialTab?: AreaTab;
   initialNoteUuid?: string;
-  archiveRoute?: boolean;
+  routeContext?: AreaDetailRouteContext;
 }) {
   const { uuid } = useParams<{ uuid: string }>();
   const router = useRouter();
@@ -133,15 +135,18 @@ export function AreaDetail({
   const changeTab = (tab: AreaTab) => {
     setActiveTab(tab);
     setPage(1);
-    const detailPath = archiveRoute
-      ? `/archives/areas/${uuid}`
-      : `/areas/${uuid}`;
+    const detailPath =
+      routeContext === "archives"
+        ? `/archives/areas/${uuid}`
+        : routeContext === "projects"
+          ? `/projects/areas/${uuid}`
+          : `/areas/${uuid}`;
     router.replace(`${detailPath}?tab=${tab}`, { scroll: false });
   };
   const restoreArchivedArea = () => {
     restoreArea.mutate(undefined, {
       onSuccess: () => {
-        if (archiveRoute) {
+        if (routeContext === "archives") {
           router.replace(`/areas/${uuid}?tab=${activeTab}`, { scroll: false });
         }
       },
@@ -156,21 +161,30 @@ export function AreaDetail({
     if (confirmationAction === "delete") {
       await removeArea.mutateAsync();
       setConfirmationAction(undefined);
-      router.replace("/areas");
+      router.replace(routeContext === "projects" ? "/projects" : "/areas");
     }
   };
+
+  const backContext =
+    routeContext === "areas" && archived ? "archives" : routeContext;
+  const backHref =
+    backContext === "archives"
+      ? "/archives"
+      : backContext === "projects"
+        ? "/projects"
+        : "/areas";
 
   return (
     <div className="flex min-h-full flex-col gap-5">
       <div>
         <Button
-          render={<Link href={archived ? "/archives" : "/areas"} />}
+          render={<Link href={backHref} />}
           nativeButton={false}
           variant="ghost"
           size="sm"
         >
           <ArrowLeft />
-          Back to {archived ? "archives" : "areas"}
+          Back to {backContext}
         </Button>
       </div>
       <div>

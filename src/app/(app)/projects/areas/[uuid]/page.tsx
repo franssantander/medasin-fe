@@ -9,7 +9,7 @@ const areaTabs: AreaTab[] = [
   "resources",
 ];
 
-export default async function ArchivedAreaDetailPage({
+export default async function ProjectAreaDetailPage({
   searchParams,
 }: {
   searchParams: Promise<{
@@ -29,7 +29,7 @@ export default async function ArchivedAreaDetailPage({
     <AreaDetail
       initialTab={initialTab}
       initialNoteUuid={initialNoteUuid}
-      routeContext="archives"
+      routeContext="projects"
     />
   );
 }
