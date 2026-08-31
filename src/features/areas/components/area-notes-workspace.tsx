@@ -51,9 +51,18 @@ import type {
 } from "@/components/ui/note-rich-text-editor-client";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "@/components/ui/toast";
+import { parseApiError } from "@/lib/axios";
 import { cn } from "@/lib/utils";
 import { areaService } from "../services/area-service";
-import type { ApiResponse, Note, NoteInput, NoteTreeNode } from "../type";
+import type {
+  ApiResponse,
+  Note,
+  NoteInput,
+  NoteMedia,
+  NoteTreeNode,
+} from "../type";
+
+const MAX_NOTE_MEDIA_REQUEST_BYTES = 8 * 1024 * 1024;
 
 const noteKeys = {
   tree: (areaUuid: string) =>
@@ -664,13 +673,44 @@ function NoteEditorPanel({
           scheduleSave();
         }}
         onUploadFile={async (file) => {
-          const uuid = await ensureNote(currentInput());
-          const response = await areaService.uploadNoteMedia(
-            areaUuid,
-            uuid,
-            file,
-          );
-          return response.data.url;
+          try {
+            if (file.size >= MAX_NOTE_MEDIA_REQUEST_BYTES) {
+              const mediaType = file.type.startsWith("image/")
+                ? "Images"
+                : "Files";
+              throw new Error(`${mediaType} must be smaller than 8 MB.`);
+            }
+
+            const uuid = await ensureNote(currentInput());
+            const response = await areaService.uploadNoteMedia(
+              areaUuid,
+              uuid,
+              file,
+            );
+            const uploadResponse = response as
+              | ApiResponse<NoteMedia>
+              | NoteMedia
+              | undefined;
+            const media =
+              uploadResponse && "data" in uploadResponse
+                ? uploadResponse.data
+                : uploadResponse;
+
+            if (!media?.url) {
+              throw new Error("The upload response did not include a media URL.");
+            }
+
+            return media.url;
+          } catch (error) {
+            const uploadError = parseApiError(error);
+            const description = uploadError.message.includes(
+              "POST Content-Length",
+            )
+              ? `${file.type.startsWith("image/") ? "Images" : "Files"} must be smaller than 8 MB.`
+              : uploadError.message;
+            toast.add({ type: "error", description });
+            throw uploadError;
+          }
         }}
         onCreateChild={async () => {
           const parentUuid = await ensureNote(currentInput());

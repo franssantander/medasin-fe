@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "@/components/ui/toast";
 import { areaKeys } from "@/features/areas/queries/area-query";
 import { projectService } from "../services/project-service";
-import type { ProjectArchiveFilter, ProjectInput } from "../type";
+import type { ProjectArchiveFilter, ProjectInput } from "../type"; 
 
 export const projectKeys = {
   all: ["projects"] as const,
