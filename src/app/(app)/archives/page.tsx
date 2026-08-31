@@ -1,11 +1,14 @@
+import { Archive } from "lucide-react";
 import { AreaArchives } from "@/features/areas/components/area-archives";
 import { ProjectArchives } from "@/features/projects/components/project-archives";
 
 export default function ArchivesPage() {
   return (
-    <div className="grid gap-8">
+    <div className="grid gap-10">
       <AreaArchives />
-      <ProjectArchives />
+      <div className="border-t pt-8">
+        <ProjectArchives />
+      </div>
     </div>
   );
 }
