@@ -37,6 +37,7 @@ export function ProjectKanbanToolbar({
   selectedBoardUuid,
   archived,
   boardName,
+  labelCount,
   onSelectBoard,
   onOpenLabels,
   onOpenBoardDialog,
@@ -46,6 +47,7 @@ export function ProjectKanbanToolbar({
   selectedBoardUuid?: string;
   archived: boolean;
   boardName?: string;
+  labelCount?: number;
   onSelectBoard: (boardUuid: string) => void;
   onOpenLabels: () => void;
   onOpenBoardDialog: (dialog: BoardDialogValue) => void;
@@ -107,9 +109,17 @@ export function ProjectKanbanToolbar({
       </DropdownMenu>
       {!archived && (
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={onOpenLabels}>
+          <Button
+            variant="outline"
+            size="sm"
+            aria-label="Manage board labels"
+            onClick={onOpenLabels}
+          >
             <Tags />
             Labels
+            {Boolean(labelCount) && (
+              <Badge variant="secondary">{labelCount}</Badge>
+            )}
           </Button>
           <DropdownMenu>
             <DropdownMenuTrigger

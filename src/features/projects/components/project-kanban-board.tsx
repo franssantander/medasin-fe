@@ -19,10 +19,7 @@ import { Input } from "@/components/ui/input";
 import { getNoteDocumentPreview } from "@/components/ui/note-editor-document";
 import type { BoardStage, BoardStageKey, BoardTask } from "../type";
 import { LabelBadge } from "./project-kanban-shared";
-import {
-  priorityStyles,
-  stageCountStyles,
-} from "./project-kanban-utils";
+import { priorityStyles, stageCountStyles } from "./project-kanban-utils";
 
 export type TaskDraftValue = {
   stage: BoardStageKey;
@@ -59,9 +56,9 @@ export function KanbanColumn({
   const overId = over ? String(over.id) : undefined;
   const isDragOverStage = Boolean(
     active &&
-      (isOver ||
-        overId === stageDroppableId ||
-        stage.tasks.some((task) => task.uuid === overId)),
+    (isOver ||
+      overId === stageDroppableId ||
+      stage.tasks.some((task) => task.uuid === overId)),
   );
 
   return (
@@ -249,10 +246,7 @@ export function TaskCard({
                 return;
               }
 
-              if (
-                !isDragging &&
-                (event.key === "Enter" || event.key === " ")
-              ) {
+              if (!isDragging && (event.key === "Enter" || event.key === " ")) {
                 event.preventDefault();
                 onOpen?.();
               }

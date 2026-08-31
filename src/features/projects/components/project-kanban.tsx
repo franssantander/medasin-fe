@@ -144,6 +144,7 @@ export function ProjectKanban({
         selectedBoardUuid={selectedBoardUuid}
         archived={archived}
         boardName={board?.name}
+        labelCount={board?.labels.length}
         onSelectBoard={handleSelectBoard}
         onOpenLabels={() => setLabelsOpen(true)}
         onOpenBoardDialog={setBoardDialog}
