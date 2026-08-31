@@ -69,7 +69,7 @@ export function useProjectKanbanMutations({
         taskUuid,
         input,
       ),
-    onSuccess: (response) => refresh(response.message),
+    onSuccess: () => refresh(),
     onError: mutationError,
   });
 

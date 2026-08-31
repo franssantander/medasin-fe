@@ -68,6 +68,32 @@ import {
   toggleSelection,
 } from "./project-kanban-utils";
 
+type TaskSaveState = "idle" | "dirty" | "saving" | "saved" | "error";
+
+function createTaskDraft(task?: BoardTask): BoardTaskInput {
+  return {
+    title: task?.title ?? "",
+    description: task?.description ?? null,
+    priority: task?.priority ?? "medium",
+    stage: task?.stage ?? "backlog",
+    label_uuids: task?.labels.slice(0, 1).map((label) => label.uuid) ?? [],
+    resource_uuids: task?.resources.map((resource) => resource.uuid) ?? [],
+    note_uuids: task?.notes.map((note) => note.uuid) ?? [],
+  };
+}
+
+function normalizeTaskDraft(draft: BoardTaskInput): BoardTaskInput {
+  return {
+    ...draft,
+    title: draft.title.trim(),
+    description: draft.description?.trim() || null,
+  };
+}
+
+function taskDraftsMatch(left: BoardTaskInput, right: BoardTaskInput) {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
 export function TaskDetailsSheet({
   task,
   stages,
@@ -90,29 +116,18 @@ export function TaskDetailsSheet({
   onDelete: () => void;
 }) {
   const router = useRouter();
-  const [title, setTitle] = useState(task?.title ?? "");
-  const [description, setDescription] = useState(task?.description ?? "");
-  const [descriptionSaveState, setDescriptionSaveState] = useState<
-    "idle" | "dirty" | "saving" | "saved" | "error"
-  >("idle");
-  const [priority, setPriority] = useState<BoardTask["priority"]>(
-    task?.priority ?? "medium",
-  );
-  const [stage, setStage] = useState<BoardStageKey>(task?.stage ?? "backlog");
-  const [labelUuids, setLabelUuids] = useState<string[]>(
-    task?.labels.slice(0, 1).map((label) => label.uuid) ?? [],
-  );
-  const [resourceUuids, setResourceUuids] = useState<string[]>(
-    task?.resources.map((resource) => resource.uuid) ?? [],
-  );
-  const [noteUuids, setNoteUuids] = useState<string[]>(
-    task?.notes.map((note) => note.uuid) ?? [],
-  );
+  const initialDraft = createTaskDraft(task);
+  const [draft, setDraft] = useState(initialDraft);
+  const [saveState, setSaveState] = useState<TaskSaveState>("idle");
   const [linkPicker, setLinkPicker] = useState<"resources" | "notes">();
-  const descriptionRef = useRef(task?.description ?? "");
-  const savedDescriptionRef = useRef(task?.description ?? "");
-  const descriptionTimerRef = useRef<number | undefined>(undefined);
-  const flushDescriptionRef = useRef<() => void>(() => undefined);
+  const draftRef = useRef(initialDraft);
+  const savedDraftRef = useRef(normalizeTaskDraft(initialDraft));
+  const saveTimerRef = useRef<number | undefined>(undefined);
+  const saveInFlightRef = useRef<Promise<void> | null>(null);
+  const flushAgainRef = useRef(false);
+  const autosaveCancelledRef = useRef(false);
+  const mountedRef = useRef(true);
+  const flushDraftRef = useRef<() => Promise<void>>(async () => undefined);
   const areasQuery = useQuery({
     queryKey: areaKeys.list("active"),
     queryFn: () => areaService.list("active"),
@@ -139,91 +154,93 @@ export function TaskDetailsSheet({
     enabled: Boolean(task) && Boolean(areasQuery.data),
   });
 
-  const save = async (
-    values: Partial<{
-      title: string;
-      description: string;
-      priority: BoardTask["priority"];
-      stage: BoardStageKey;
-      labelUuids: string[];
-      resourceUuids: string[];
-      noteUuids: string[];
-    }>,
-  ) => {
-    if (!task) return;
-    await onSave({
-      title: values.title ?? title,
-      description:
-        (values.description ?? descriptionRef.current).trim() || null,
-      priority: values.priority ?? priority,
-      stage: values.stage ?? stage,
-      label_uuids: values.labelUuids ?? labelUuids,
-      resource_uuids: values.resourceUuids ?? resourceUuids,
-      note_uuids: values.noteUuids ?? noteUuids,
-    });
-  };
+  const flushDraft = () => {
+    if (saveTimerRef.current) {
+      window.clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = undefined;
+    }
+    if (!task || archived || autosaveCancelledRef.current) {
+      return Promise.resolve();
+    }
+    if (saveInFlightRef.current) {
+      flushAgainRef.current = true;
+      return saveInFlightRef.current;
+    }
 
-  const saveTitle = async () => {
-    const nextTitle = title.trim();
-    if (!task || nextTitle === task.title) {
-      if (task) setTitle(task.title);
-      return;
+    const snapshot = normalizeTaskDraft(draftRef.current);
+    if (!snapshot.title) {
+      if (mountedRef.current) setSaveState("dirty");
+      return Promise.resolve();
     }
-    if (!nextTitle) {
-      setTitle(task.title);
-      return;
+    if (taskDraftsMatch(snapshot, savedDraftRef.current)) {
+      if (mountedRef.current) setSaveState("saved");
+      return Promise.resolve();
     }
-    setTitle(nextTitle);
-    try {
-      await save({ title: nextTitle });
-    } catch {
-      setTitle(task.title);
-    }
-  };
 
-  const flushDescription = () => {
-    if (!task || archived) return;
-    if (descriptionTimerRef.current) {
-      window.clearTimeout(descriptionTimerRef.current);
-      descriptionTimerRef.current = undefined;
-    }
-    const nextDescription = descriptionRef.current;
-    if (nextDescription === savedDescriptionRef.current) return;
-
-    setDescriptionSaveState("saving");
-    void save({ description: nextDescription })
+    if (mountedRef.current) setSaveState("saving");
+    let succeeded = false;
+    const request = onSave(snapshot)
       .then(() => {
-        savedDescriptionRef.current = nextDescription;
-        setDescriptionSaveState("saved");
+        succeeded = true;
+        savedDraftRef.current = snapshot;
+        if (mountedRef.current) {
+          setSaveState(
+            taskDraftsMatch(
+              normalizeTaskDraft(draftRef.current),
+              savedDraftRef.current,
+            )
+              ? "saved"
+              : "dirty",
+          );
+        }
       })
-      .catch(() => setDescriptionSaveState("error"));
+      .catch(() => {
+        if (mountedRef.current) setSaveState("error");
+      })
+      .finally(() => {
+        saveInFlightRef.current = null;
+        const shouldFlushAgain = flushAgainRef.current;
+        flushAgainRef.current = false;
+        if (succeeded && shouldFlushAgain) {
+          void flushDraftRef.current();
+        }
+      });
+    saveInFlightRef.current = request;
+    return request;
   };
 
   useEffect(() => {
-    flushDescriptionRef.current = flushDescription;
+    flushDraftRef.current = flushDraft;
   });
 
-  useEffect(
-    () => () => {
-      if (descriptionTimerRef.current) {
-        window.clearTimeout(descriptionTimerRef.current);
-      }
-      flushDescriptionRef.current();
-    },
-    [],
-  );
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      void flushDraftRef.current();
+    };
+  }, []);
 
-  const scheduleDescriptionSave = (content: string) => {
-    setDescription(content);
-    descriptionRef.current = content;
-    setDescriptionSaveState("dirty");
-    if (descriptionTimerRef.current) {
-      window.clearTimeout(descriptionTimerRef.current);
-    }
-    descriptionTimerRef.current = window.setTimeout(
-      () => flushDescriptionRef.current(),
+  const updateDraft = (values: Partial<BoardTaskInput>) => {
+    if (archived) return;
+    autosaveCancelledRef.current = false;
+    const nextDraft = { ...draftRef.current, ...values };
+    draftRef.current = nextDraft;
+    setDraft(nextDraft);
+    setSaveState("dirty");
+    if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = window.setTimeout(
+      () => void flushDraftRef.current(),
       750,
     );
+  };
+
+  const cancelPendingAutosave = () => {
+    autosaveCancelledRef.current = true;
+    if (saveTimerRef.current) {
+      window.clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = undefined;
+    }
   };
 
   const editorNoteOptions = useMemo(
@@ -248,39 +265,50 @@ export function TaskDetailsSheet({
   };
 
   const updateLabel = (labelUuid?: string) => {
-    const next = labelUuid ? [labelUuid] : [];
-    setLabelUuids(next);
-    void save({ labelUuids: next }).catch(() =>
-      setLabelUuids(task?.labels.slice(0, 1).map((label) => label.uuid) ?? []),
-    );
+    updateDraft({ label_uuids: labelUuid ? [labelUuid] : [] });
   };
 
-  const selectedLabel = labelUuids[0]
-    ? (labels.find((label) => label.uuid === labelUuids[0]) ??
-      task?.labels.find((label) => label.uuid === labelUuids[0]))
+  const selectedLabel = draft.label_uuids[0]
+    ? (labels.find((label) => label.uuid === draft.label_uuids[0]) ??
+      task?.labels.find((label) => label.uuid === draft.label_uuids[0]))
     : undefined;
 
   return (
-    <Sheet open={Boolean(task)} onOpenChange={onOpenChange}>
-      <SheetContent className="top-0 right-0 bottom-0 m-0 h-dvh w-full max-w-none gap-0 overflow-hidden rounded-none border-l sm:h-auto sm:max-w-[72rem] sm:border">
+    <Sheet
+      open={Boolean(task)}
+      onOpenChange={(open) => {
+        if (!open) void flushDraftRef.current();
+        onOpenChange(open);
+      }}
+    >
+      <SheetContent>
         {task && (
           <>
             <SheetHeader className="shrink-0 border-b pr-14">
-              <SheetTitle>
+              <SheetTitle className="leading-tight">
                 {archived ? (
-                  <span className="text-lg leading-snug">{task.title}</span>
+                  <span className="text-2xl font-semibold leading-tight sm:text-3xl">
+                    {task.title}
+                  </span>
                 ) : (
                   <Input
-                    value={title}
-                    onChange={(event) => setTitle(event.target.value)}
-                    onBlur={() => void saveTitle()}
+                    value={draft.title}
+                    onChange={(event) =>
+                      updateDraft({ title: event.target.value })
+                    }
+                    onBlur={() => {
+                      const nextTitle = draftRef.current.title.trim();
+                      updateDraft({
+                        title: nextTitle || savedDraftRef.current.title,
+                      });
+                      void flushDraftRef.current();
+                    }}
                     onKeyDown={(event) => {
                       if (event.key === "Enter") event.currentTarget.blur();
                     }}
-                    disabled={isSaving}
                     maxLength={120}
                     aria-label="Task title"
-                    className="h-auto border-0 px-0 text-lg font-semibold shadow-none focus-visible:ring-0"
+                    className="h-auto border-0 px-0 text-2xl font-semibold leading-tight shadow-none focus-visible:ring-0 sm:text-3xl md:text-3xl"
                   />
                 )}
               </SheetTitle>
@@ -288,98 +316,91 @@ export function TaskDetailsSheet({
                 View and update the task details.
               </SheetDescription>
               <div className="grid w-full grid-cols-2 gap-4">
-                  {archived ? (
-                    <Badge
-                      variant="secondary"
-                      className="w-fit gap-1.5 capitalize"
-                    >
-                      <StatusDot color={stageDotColors[task.stage]} />
-                      {stages.find((item) => item.key === task.stage)?.name ??
-                        task.stage.replace("_", " ")}
-                    </Badge>
-                  ) : (
-                    <Select
-                      value={stage}
-                      disabled={isSaving}
-                      onValueChange={(value) => {
-                        const nextStage = value as BoardStageKey;
-                        setStage(nextStage);
-                        void save({ stage: nextStage }).catch(() =>
-                          setStage(task.stage),
-                        );
-                      }}
-                    >
-                      <SelectTrigger className="w-full bg-background">
-                        <StatusValue
-                          color={stageDotColors[stage]}
-                          label={
-                            stages.find((item) => item.key === stage)?.name ??
-                            stage.replace("_", " ")
-                          }
-                        />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {stages.map((item) => (
-                          <SelectItem key={item.key} value={item.key}>
-                            <StatusValue
-                              color={stageDotColors[item.key]}
-                              label={item.name}
-                            />
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  )}
+                {archived ? (
+                  <Badge
+                    variant="secondary"
+                    className="w-fit gap-1.5 capitalize"
+                  >
+                    <StatusDot color={stageDotColors[task.stage]} />
+                    {stages.find((item) => item.key === task.stage)?.name ??
+                      task.stage.replace("_", " ")}
+                  </Badge>
+                ) : (
+                  <Select
+                    value={draft.stage}
+                    onValueChange={(value) => {
+                      const nextStage = value as BoardStageKey;
+                      updateDraft({ stage: nextStage });
+                    }}
+                  >
+                    <SelectTrigger className="w-full bg-background">
+                      <StatusValue
+                        color={stageDotColors[draft.stage]}
+                        label={
+                          stages.find((item) => item.key === draft.stage)
+                            ?.name ?? draft.stage.replace("_", " ")
+                        }
+                      />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {stages.map((item) => (
+                        <SelectItem key={item.key} value={item.key}>
+                          <StatusValue
+                            color={stageDotColors[item.key]}
+                            label={item.name}
+                          />
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
 
-                  {archived ? (
-                    <Badge
-                      className={`w-fit gap-1.5 capitalize ${priorityStyles[task.priority]}`}
-                    >
-                      <StatusDot color={priorityDotColors[task.priority]} />
-                      {task.priority}
-                    </Badge>
-                  ) : (
-                    <Select
-                      value={priority}
-                      disabled={isSaving}
-                      onValueChange={(value) => {
-                        const nextPriority = value as BoardTask["priority"];
-                        setPriority(nextPriority);
-                        void save({ priority: nextPriority }).catch(() =>
-                          setPriority(task.priority),
-                        );
-                      }}
-                    >
-                      <SelectTrigger className="w-full bg-background">
+                {archived ? (
+                  <Badge
+                    className={`w-fit gap-1.5 capitalize ${priorityStyles[task.priority]}`}
+                  >
+                    <StatusDot color={priorityDotColors[task.priority]} />
+                    {task.priority}
+                  </Badge>
+                ) : (
+                  <Select
+                    value={draft.priority}
+                    onValueChange={(value) => {
+                      const nextPriority = value as BoardTask["priority"];
+                      updateDraft({ priority: nextPriority });
+                    }}
+                  >
+                    <SelectTrigger className="w-full bg-background">
+                      <StatusValue
+                        color={priorityDotColors[draft.priority]}
+                        label={
+                          draft.priority.charAt(0).toUpperCase() +
+                          draft.priority.slice(1)
+                        }
+                      />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="low">
                         <StatusValue
-                          color={priorityDotColors[priority]}
-                          label={
-                            priority.charAt(0).toUpperCase() + priority.slice(1)
-                          }
+                          color={priorityDotColors.low}
+                          label="Low"
                         />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="low">
-                          <StatusValue
-                            color={priorityDotColors.low}
-                            label="Low"
-                          />
-                        </SelectItem>
-                        <SelectItem value="medium">
-                          <StatusValue
-                            color={priorityDotColors.medium}
-                            label="Medium"
-                          />
-                        </SelectItem>
-                        <SelectItem value="high">
-                          <StatusValue
-                            color={priorityDotColors.high}
-                            label="High"
-                          />
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
-                  )}
+                      </SelectItem>
+                      <SelectItem value="medium">
+                        <StatusValue
+                          color={priorityDotColors.medium}
+                          label="Medium"
+                        />
+                      </SelectItem>
+                      <SelectItem value="high">
+                        <StatusValue
+                          color={priorityDotColors.high}
+                          label="High"
+                        />
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
             </SheetHeader>
 
@@ -389,11 +410,13 @@ export function TaskDetailsSheet({
                   <NoteRichTextEditor
                     mode="task"
                     documentId={`task-description-${task.uuid}`}
-                    content={description}
+                    content={draft.description ?? ""}
                     editable={!archived}
                     noteOptions={editorNoteOptions}
-                    onChange={scheduleDescriptionSave}
-                    onBlur={() => flushDescriptionRef.current()}
+                    onChange={(content) =>
+                      updateDraft({ description: content })
+                    }
+                    onBlur={() => void flushDraftRef.current()}
                     onOpenNote={openEditorNote}
                     onUploadFile={() =>
                       Promise.reject(
@@ -432,7 +455,7 @@ export function TaskDetailsSheet({
                             type="button"
                             size="icon-sm"
                             variant="outline"
-                            disabled={isSaving || labels.length === 0}
+                            disabled={labels.length === 0}
                             aria-label={
                               selectedLabel ? "Update label" : "Add label"
                             }
@@ -450,7 +473,7 @@ export function TaskDetailsSheet({
                             <span className="flex-1">
                               <LabelBadge label={label} />
                             </span>
-                            {label.uuid === labelUuids[0] && <Check />}
+                            {label.uuid === draft.label_uuids[0] && <Check />}
                           </DropdownMenuItem>
                         ))}
                         {selectedLabel && (
@@ -535,27 +558,32 @@ export function TaskDetailsSheet({
 
             {!archived && (
               <SheetFooter className="shrink-0 border-t sm:flex-row sm:justify-end">
-                {descriptionSaveState === "error" ? (
+                {saveState === "error" ? (
                   <button
                     type="button"
                     className="mr-auto self-center text-sm text-destructive underline underline-offset-4"
-                    onClick={() => flushDescriptionRef.current()}
+                    onClick={() => void flushDraftRef.current()}
                   >
-                    Retry description save
+                    Retry save
                   </button>
-                ) : isSaving ||
-                  descriptionSaveState === "dirty" ||
-                  descriptionSaveState === "saving" ? (
+                ) : saveState !== "idle" ? (
                   <span className="mr-auto self-center text-sm text-muted-foreground">
-                    {descriptionSaveState === "dirty"
+                    {saveState === "dirty"
                       ? "Unsaved changes"
-                      : "Saving…"}
+                      : saveState === "saving" || isSaving
+                        ? "Saving…"
+                        : "Saved"}
                   </span>
                 ) : null}
                 <Button
                   variant="destructive"
-                  disabled={isDeleting}
-                  onClick={onDelete}
+                  disabled={isDeleting || isSaving}
+                  onClick={() => {
+                    if (window.confirm(`Delete “${task.title}”?`)) {
+                      cancelPendingAutosave();
+                      onDelete();
+                    }
+                  }}
                 >
                   <Trash2 />
                   {isDeleting ? "Deleting…" : "Delete"}
@@ -567,7 +595,10 @@ export function TaskDetailsSheet({
               <Dialog
                 open={Boolean(linkPicker)}
                 onOpenChange={(open) => {
-                  if (!open) setLinkPicker(undefined);
+                  if (!open) {
+                    setLinkPicker(undefined);
+                    void flushDraftRef.current();
+                  }
                 }}
               >
                 <DialogContent className="max-w-lg">
@@ -585,7 +616,7 @@ export function TaskDetailsSheet({
                         <EmptyTaskDetail>Loading resources…</EmptyTaskDetail>
                       ) : resourcesQuery.data?.data.length ? (
                         resourcesQuery.data.data.map((resource) => {
-                          const selected = resourceUuids.includes(
+                          const selected = draft.resource_uuids.includes(
                             resource.uuid,
                           );
                           return (
@@ -594,18 +625,12 @@ export function TaskDetailsSheet({
                               title={resource.title}
                               icon={<Link2 />}
                               selected={selected}
-                              disabled={isSaving}
                               onClick={() => {
                                 const next = toggleSelection(
-                                  resourceUuids,
+                                  draftRef.current.resource_uuids,
                                   resource.uuid,
                                 );
-                                setResourceUuids(next);
-                                void save({ resourceUuids: next }).catch(() =>
-                                  setResourceUuids(
-                                    task.resources.map((item) => item.uuid),
-                                  ),
-                                );
+                                updateDraft({ resource_uuids: next });
                               }}
                             />
                           );
@@ -626,25 +651,21 @@ export function TaskDetailsSheet({
                                 {area.name}
                               </p>
                               {notes.map((note) => {
-                                const selected = noteUuids.includes(note.uuid);
+                                const selected = draft.note_uuids.includes(
+                                  note.uuid,
+                                );
                                 return (
                                   <LinkPickerItem
                                     key={note.uuid}
                                     title={note.title}
                                     icon={<FileText />}
                                     selected={selected}
-                                    disabled={isSaving}
                                     onClick={() => {
                                       const next = toggleSelection(
-                                        noteUuids,
+                                        draftRef.current.note_uuids,
                                         note.uuid,
                                       );
-                                      setNoteUuids(next);
-                                      void save({ noteUuids: next }).catch(() =>
-                                        setNoteUuids(
-                                          task.notes.map((item) => item.uuid),
-                                        ),
-                                      );
+                                      updateDraft({ note_uuids: next });
                                     }}
                                   />
                                 );
@@ -660,7 +681,10 @@ export function TaskDetailsSheet({
                     <Button
                       type="button"
                       variant="outline"
-                      onClick={() => setLinkPicker(undefined)}
+                      onClick={() => {
+                        setLinkPicker(undefined);
+                        void flushDraftRef.current();
+                      }}
                     >
                       Done
                     </Button>
@@ -783,7 +807,7 @@ function LinkPickerItem({
   icon: React.ReactNode;
   title: string;
   selected: boolean;
-  disabled: boolean;
+  disabled?: boolean;
   onClick: () => void;
 }) {
   return (
@@ -801,4 +825,3 @@ function LinkPickerItem({
     </Button>
   );
 }
-

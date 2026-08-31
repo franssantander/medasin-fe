@@ -225,10 +225,7 @@ export function ProjectKanban({
             .then(() => undefined);
         }}
         onDelete={() => {
-          if (
-            selectedTask &&
-            window.confirm(`Delete “${selectedTask.title}”?`)
-          ) {
+          if (selectedTask) {
             mutations.deleteTask.mutate(selectedTask.uuid);
           }
         }}
