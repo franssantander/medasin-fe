@@ -1,0 +1,364 @@
+# Theme
+
+## Compact token summary
+
+- Primary font: Manrope via `--font-sans`; brand wordmark uses EB Garamond via `--font-garamond-sans`; Spectral is available via `--font-spectral-sans`.
+- Light palette: white background/card/popover; near-black foreground/primary; neutral gray secondary, muted, borders, and rings.
+- Dark palette: near-black background, dark neutral cards/popovers, white foreground/primary, and translucent light borders.
+- Status colors: slate for not started, blue for in progress, emerald for completed, amber/destructive treatments for overdue or destructive states.
+- Base radius: `0.625rem`; Shadcn radius tokens scale from 0.6× to 2.6×.
+- Spacing uses Tailwind's default 0.25rem scale. Main app content uses `p-4 sm:p-6`, card gaps commonly use 1rem–1.5rem, and controls are 2rem–2.5rem tall.
+- Shadows are restrained (`shadow-xs` cards, `shadow-xl` dialogs) with thin neutral borders/rings.
+- Standard Tailwind responsive breakpoints are used, especially `sm`, `md`, and `xl`.
+- Motion: 150–300ms opacity/transform transitions for dialogs, cards, and progress; interactive controls expose hover, active, and focus-visible states.
+
+## Raw source: `src/app/globals.css`
+
+```css
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@source "../../node_modules/@blocknote/shadcn/dist/blocknote-shadcn.js";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-sans);
+  --font-spectral: var(--font-spectral-sans);
+  --font-garamond: var(--font-garamond-sans);
+  --font-heading: var(--font-sans);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+:root {
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
+  --primary: oklch(0.205 0 0);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.97 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: oklch(0.708 0 0);
+  --chart-1: oklch(0.87 0 0);
+  --chart-2: oklch(0.556 0 0);
+  --chart-3: oklch(0.439 0 0);
+  --chart-4: oklch(0.371 0 0);
+  --chart-5: oklch(0.269 0 0);
+  --radius: 0.625rem;
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.145 0 0);
+  --sidebar-primary: oklch(0.205 0 0);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar-accent-foreground: oklch(0.205 0 0);
+  --sidebar-border: oklch(0.922 0 0);
+  --sidebar-ring: oklch(0.708 0 0);
+}
+
+.dark {
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.205 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.922 0 0);
+  --primary-foreground: oklch(0.205 0 0);
+  --secondary: oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.556 0 0);
+  --chart-1: oklch(0.87 0 0);
+  --chart-2: oklch(0.556 0 0);
+  --chart-3: oklch(0.439 0 0);
+  --chart-4: oklch(0.371 0 0);
+  --chart-5: oklch(0.269 0 0);
+  --sidebar: oklch(0.205 0 0);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.556 0 0);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply relative bg-background text-foreground;
+  }
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+  html {
+    @apply font-sans;
+  }
+}
+
+@layer components {
+  .notes-list-scrollbar {
+    scrollbar-color: color-mix(in oklab, var(--muted-foreground) 45%, transparent)
+      transparent;
+    scrollbar-width: thin;
+  }
+
+  .notes-list-scrollbar::-webkit-scrollbar {
+    width: 8px;
+  }
+
+  .notes-list-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .notes-list-scrollbar::-webkit-scrollbar-thumb {
+    border: 2px solid transparent;
+    border-radius: 9999px;
+    background: color-mix(
+      in oklab,
+      var(--muted-foreground) 45%,
+      transparent
+    );
+    background-clip: padding-box;
+  }
+
+  .notes-list-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: color-mix(
+      in oklab,
+      var(--muted-foreground) 65%,
+      transparent
+    );
+    background-clip: padding-box;
+  }
+
+  .note-rich-text,
+  .note-rich-text .bn-container,
+  .note-rich-text .bn-editor,
+  .note-rich-text .ProseMirror {
+    box-sizing: border-box;
+    min-width: 0;
+    width: 100%;
+    max-width: none;
+    background: white;
+    color: oklch(0% 0 0);
+  }
+
+  .note-rich-text .bn-container {
+    height: 100%;
+    min-height: 0;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  .note-rich-text .bn-editor {
+    height: 100%;
+    min-height: 0;
+    flex: 1;
+    border-radius: 0;
+    padding-block: 1rem;
+    /* Keep BlockNote's controls inside the clipped editor while aligning the
+       document with the title's 3.25rem inset. */
+    padding-inline: 3.25rem;
+    scrollbar-color: color-mix(in oklab, var(--muted-foreground) 45%, transparent)
+      transparent;
+    scrollbar-width: thin;
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+
+  .note-rich-text .bn-side-menu .bn-button[draggable="true"] {
+    cursor: grab;
+  }
+
+  .note-rich-text .bn-side-menu .bn-button[draggable="true"]:active {
+    cursor: grabbing;
+  }
+
+  .note-rich-text .bn-editor::-webkit-scrollbar {
+    width: 8px;
+  }
+
+  .note-rich-text .bn-editor::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .note-rich-text .bn-editor::-webkit-scrollbar-thumb {
+    border: 2px solid transparent;
+    border-radius: 9999px;
+    background: color-mix(
+      in oklab,
+      var(--muted-foreground) 45%,
+      transparent
+    );
+    background-clip: padding-box;
+  }
+
+  .note-rich-text .bn-editor::-webkit-scrollbar-thumb:hover {
+    background: color-mix(
+      in oklab,
+      var(--muted-foreground) 65%,
+      transparent
+    );
+    background-clip: padding-box;
+  }
+
+  .note-rich-text .bn-default-styles {
+    font-family: var(--font-sans);
+  }
+
+  .note-rich-text .bn-editor > .bn-block-group,
+  .note-rich-text .bn-editor > .bn-block-group > .bn-block-outer,
+  .note-rich-text .bn-block-content,
+  .note-rich-text [data-content-type="paragraph"] {
+    box-sizing: border-box;
+    min-width: 0;
+    width: 100%;
+    max-width: none;
+  }
+
+  .note-rich-text .bn-block-content {
+    position: relative;
+    border-radius: 0.375rem;
+    transition:
+      background-color 160ms ease,
+      box-shadow 160ms ease;
+  }
+
+  .note-rich-text .bn-block-content[data-note-block-selected="true"] {
+    background-color: color-mix(in oklab, #64a0ff 16%, white);
+    box-shadow: inset 0 0 0 1px
+      color-mix(in oklab, #64a0ff 32%, transparent);
+  }
+
+  /* Replace BlockNote's heavier inner selection outline with one smooth box
+     around the complete selected block. */
+  .note-rich-text .bn-block-content.ProseMirror-selectednode > *::after,
+  .note-rich-text .ProseMirror-selectednode > .bn-block-content > *::after,
+  .note-rich-text .bn-block-content .ProseMirror-selectednode::after,
+  .note-rich-text .bn-inline-content .ProseMirror-selectednode::after {
+    background-color: transparent;
+    box-shadow: none;
+  }
+
+  .note-rich-text
+    .bn-block-content:has(.ProseMirror-trailingBreak:only-child)::after {
+    position: absolute;
+    inset-block-start: 3px;
+    inset-inline: 0;
+    width: 100%;
+    margin-inline: 0;
+  }
+
+  .note-rich-text .bn-inline-content {
+    min-width: 0;
+    width: 100%;
+    max-width: 100%;
+    flex: 1;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+}
+```
+
+## Raw source: `components.json`
+
+```json
+{
+  "$schema": "https://ui.shadcn.com/schema.json",
+  "style": "base-vega",
+  "rsc": true,
+  "tsx": true,
+  "tailwind": {
+    "config": "",
+    "css": "app/globals.css",
+    "baseColor": "neutral",
+    "cssVariables": true,
+    "prefix": ""
+  },
+  "iconLibrary": "lucide",
+  "rtl": false,
+  "aliases": {
+    "components": "@/components",
+    "utils": "@/lib/utils",
+    "ui": "@/components/ui",
+    "lib": "@/lib",
+    "hooks": "@/hooks"
+  },
+  "menuColor": "default",
+  "menuAccent": "subtle",
+  "registries": {}
+}
+```
+
+## Raw source: `src/providers/theme-provider.tsx`
+
+```tsx
+"use client";
+
+import * as React from "react";
+import { ThemeProvider as NextThemesProvider } from "next-themes";
+
+export function ThemeProvider({
+  children,
+  ...props
+}: React.ComponentProps<typeof NextThemesProvider>) {
+  return <NextThemesProvider {...props}>{children}</NextThemesProvider>;
+}
+```

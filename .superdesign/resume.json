@@ -1,0 +1,56 @@
+{
+  "schemaVersion": 1,
+  "targets": {
+    "projects-calendar-timeline": {
+      "targetKind": "new-ui",
+      "projectId": "5c7ae836-737f-430c-8239-0ad5197a42af",
+      "activeDraftId": "522b6548-64ef-4150-9328-ec8dca297ebf",
+      "designSystemPath": ".superdesign/design-system.md",
+      "referenceIds": [
+        "public-images-medasin-logo.svg"
+      ],
+      "brandAssets": {
+        "logo": {
+          "assetKey": "public-images-medasin-logo.svg",
+          "url": "https://vgbujcuwptvheqijyjbe.supabase.co/storage/v1/object/public/hmac-uploads/projects/5c7ae836-737f-430c-8239-0ad5197a42af/brand-assets/public-images-medasin-logo.svg/medasin-logo.svg",
+          "sourcePath": "public/images/medasin-logo.svg"
+        }
+      },
+      "contextFiles": [
+        ".superdesign/design-system.md",
+        "src/app/globals.css",
+        "src/app/(app)/layout.tsx",
+        "src/features/home/components/dashboard-header.tsx",
+        "src/features/home/components/dashboard-sidebar.tsx",
+        "src/features/projects/components/project-list.tsx",
+        "src/features/projects/components/project-card.tsx",
+        "src/features/projects/components/project-icons.tsx",
+        "src/features/projects/project-status.ts",
+        "src/components/shared/page-header.tsx",
+        "src/components/ui/dialog.tsx"
+      ],
+      "fingerprints": {
+        ".superdesign/design-system.md": "0426bf7d2f1680e54761d4f2040d1a849b96ac7c4edb23851a5d9a50ed69391e",
+        "src/app/globals.css": "fe1e860577957115ec9ff2511ba591bf2fa101c4efd0fc05dd973bd5586792d8",
+        "src/app/(app)/layout.tsx": "30bf46f62ca91b49dce413a940415a35570f7ba94c62b332b40d38654640af61",
+        "src/features/home/components/dashboard-header.tsx": "f1d358e50a330f99537b7742942f8a50e9bd023c938e121393de0e7a2b45002a",
+        "src/features/home/components/dashboard-sidebar.tsx": "3f59036222f5b1dff9cc94b3618db6769aa19c28181de9f0721b578d1a3e53b1",
+        "src/features/projects/components/project-list.tsx": "4a9e1174f395a3a607fecf62b94612edfdd4f5d5a333ff2ede8a91317532fc41",
+        "src/features/projects/components/project-card.tsx": "30240019e7126078782bf537d92cc76ee567d729acf789e1490ce136c782373c",
+        "src/features/projects/components/project-icons.tsx": "a784f64cad42836f2da282777b0326f6ab266cb752f91fa93dd9dbbfd109127d",
+        "src/features/projects/project-status.ts": "5943a6fa5f5f8bff152979044fe2911e0d93c531d984f6cdf624f9f8578fc931",
+        "src/components/shared/page-header.tsx": "99874fd8797b82f05449480fd36d132d22a053684f4dc0dd6474d7d6f617fac6",
+        "src/components/ui/dialog.tsx": "0cf1bc1253e9e86160c8c1a2a392f31e7f20ac40299799ebc1e0a5f41d729969"
+      },
+      "components": [],
+      "drafts": {
+        "522b6548-64ef-4150-9328-ec8dca297ebf": {
+          "title": "Project Calendar Timeline",
+          "visualDirection": "Existing Medasin Projects UI with a status-colored month timeline dialog",
+          "currentVersion": 2
+        }
+      },
+      "updatedAt": "2026-08-31T05:35:53.115Z"
+    }
+  }
+}

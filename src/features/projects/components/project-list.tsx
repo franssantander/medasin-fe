@@ -1,6 +1,7 @@
 "use client";
 
-import { FolderKanban, Plus } from "lucide-react";
+import { CalendarDays, FolderKanban, Plus } from "lucide-react";
+import { useState } from "react";
 import PageHeader from "@/components/shared/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
@@ -8,21 +9,34 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useProjectFormDialog } from "../hooks/use-project-form-dialog";
 import { useProjectsQuery } from "../queries/project-query";
 import { ProjectCard } from "./project-card";
+import { ProjectCalendarTimelineDialog } from "./project-calendar-timeline-dialog";
 import { ProjectFormDialog } from "./project-form-dialog";
 
 export function ProjectList() {
   const { data, isLoading, isError, refetch } = useProjectsQuery("active");
   const projectForm = useProjectFormDialog();
+  const [calendarOpen, setCalendarOpen] = useState(false);
 
   return (
     <div className="grid gap-6">
       <PageHeader
         title="Projects"
         action={
-          <Button onClick={projectForm.openCreate}>
-            <Plus />
-            New project
-          </Button>
+          <>
+            <Button
+              variant="outline"
+              disabled={!data}
+              aria-haspopup="dialog"
+              onClick={() => setCalendarOpen(true)}
+            >
+              <CalendarDays />
+              Calendar
+            </Button>
+            <Button onClick={projectForm.openCreate}>
+              <Plus />
+              New project
+            </Button>
+          </>
         }
       />
 
@@ -81,6 +95,12 @@ export function ProjectList() {
         project={projectForm.project}
         isPending={projectForm.isPending}
         onSubmit={projectForm.submit}
+      />
+
+      <ProjectCalendarTimelineDialog
+        open={calendarOpen}
+        onOpenChange={setCalendarOpen}
+        projects={data?.data ?? []}
       />
     </div>
   );
