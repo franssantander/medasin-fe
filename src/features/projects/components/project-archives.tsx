@@ -32,11 +32,8 @@ export function ProjectArchives() {
     <section className="grid gap-5" aria-labelledby="archived-projects-title">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex items-start gap-3">
-          <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
-            <Target className="size-4" />
-          </div>
           <div>
-            <h2 id="archived-projects-title" className="font-semibold">
+            <h2 id="archived-projects-title" className="font-bold text-lg">
               Archived projects
             </h2>
             <p className="max-w-2xl text-sm text-muted-foreground">

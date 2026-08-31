@@ -22,11 +22,8 @@ export function AreaArchives() {
     <section className="grid gap-5" aria-labelledby="archived-areas-title">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex items-start gap-3">
-          <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
-            <CirclePile className="size-4" />
-          </div>
           <div>
-            <h2 id="archived-areas-title" className="font-semibold">
+            <h2 id="archived-areas-title" className="font-bold text-lg">
               Archived areas
             </h2>
             <p className="max-w-2xl text-sm text-muted-foreground">
