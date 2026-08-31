@@ -12,11 +12,17 @@ import {
 } from "@blocknote/core/extensions";
 import {
   createReactBlockSpec,
+  FormattingToolbar,
+  FormattingToolbarController,
+  getFormattingToolbarItems,
   getDefaultReactSlashMenuItems,
   SideMenu,
   SideMenuController,
   SuggestionMenuController,
+  useBlockNoteEditor,
+  useComponentsContext,
   useCreateBlockNote,
+  useEditorState,
   useExtensionState,
   type DefaultReactSuggestionItem,
   type ReactCustomBlockRenderProps,
@@ -28,6 +34,7 @@ import "@blocknote/shadcn/style.css";
 import {
   BellRing,
   Bookmark,
+  Crop,
   FilePlus2,
   Link2,
   LoaderCircle,
@@ -54,9 +61,15 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import {
+  ImageCropDialog,
+  type ImageCropAspectOption,
+} from "@/components/ui/image-crop-dialog";
+import {
   parseNoteDocument,
   serializeNoteDocument,
 } from "@/components/ui/note-editor-document";
+import { toast } from "@/components/ui/toast";
+import { getImageAspectRatio, imageUrlToFile } from "@/lib/image/crop-image";
 
 type NoteLinkTarget = { uuid: string; title: string; depth: number };
 
@@ -99,6 +112,71 @@ function NoteBlockSideMenu(props: SideMenuProps) {
     >
       <SideMenu {...props} />
     </div>
+  );
+}
+
+type CropImageRequest = {
+  blockId: string;
+  url: string;
+  name: string;
+};
+
+function ImageCropToolbarButton({
+  onCropImage,
+}: {
+  onCropImage: (request: CropImageRequest) => void;
+}) {
+  const Components = useComponentsContext();
+  const editor = useBlockNoteEditor();
+  const image = useEditorState({
+    editor,
+    selector: ({ editor }) => {
+      if (!editor.isEditable) return undefined;
+
+      const selectedBlocks = editor.getSelection()?.blocks || [
+        editor.getTextCursorPosition().block,
+      ];
+      if (selectedBlocks.length !== 1) return undefined;
+
+      const block = selectedBlocks[0];
+      if (block.type !== "image" || !block.props.url) return undefined;
+
+      return {
+        blockId: block.id,
+        url: block.props.url,
+        name: block.props.name,
+      };
+    },
+  });
+
+  if (!Components || !image) return null;
+
+  return (
+    <Components.FormattingToolbar.Button
+      className="bn-button"
+      label="Crop image"
+      mainTooltip="Crop image"
+      icon={<Crop size={16} />}
+      onClick={() => onCropImage(image)}
+    />
+  );
+}
+
+function NoteFormattingToolbar({
+  allowImageCrop,
+  onCropImage,
+}: {
+  allowImageCrop: boolean;
+  onCropImage: (request: CropImageRequest) => void;
+}) {
+  const defaultItems = getFormattingToolbarItems();
+
+  return (
+    <FormattingToolbar>
+      {defaultItems.slice(0, 4)}
+      {allowImageCrop && <ImageCropToolbarButton onCropImage={onCropImage} />}
+      {defaultItems.slice(4)}
+    </FormattingToolbar>
   );
 }
 
@@ -270,6 +348,12 @@ type PendingDialog =
   | { kind: "link" | "bookmark" | "note"; blockId: string }
   | undefined;
 
+type ImageCropSession = CropImageRequest & {
+  file: File;
+  source: string;
+  originalAspect: number;
+};
+
 export type NoteRichTextEditorClientProps = {
   mode?: "note" | "task";
   documentId: string;
@@ -323,6 +407,7 @@ export function NoteRichTextEditorClient({
   const [url, setUrl] = useState("");
   const [label, setLabel] = useState("");
   const [selectedNoteUuid, setSelectedNoteUuid] = useState("");
+  const [imageCrop, setImageCrop] = useState<ImageCropSession>();
   useEffect(() => {
     onChangeRef.current = onChange;
     onUploadFileRef.current = onUploadFile;
@@ -358,6 +443,41 @@ export function NoteRichTextEditorClient({
     },
     [documentId],
   );
+  const prepareImageCrop = useCallback(async (request: CropImageRequest) => {
+    let source: string | undefined;
+
+    try {
+      const file = await imageUrlToFile(request.url, request.name);
+      source = URL.createObjectURL(file);
+      const originalAspect = await getImageAspectRatio(source);
+      setImageCrop({ ...request, file, source, originalAspect });
+    } catch (error) {
+      if (source) URL.revokeObjectURL(source);
+      toast.add({
+        type: "error",
+        description:
+          error instanceof Error
+            ? error.message
+            : "The image could not be prepared for cropping.",
+      });
+    }
+  }, []);
+  const noteFormattingToolbar = useCallback(
+    () => (
+      <NoteFormattingToolbar
+        allowImageCrop={mode === "note"}
+        onCropImage={(request) => void prepareImageCrop(request)}
+      />
+    ),
+    [mode, prepareImageCrop],
+  );
+
+  useEffect(
+    () => () => {
+      if (imageCrop) URL.revokeObjectURL(imageCrop.source);
+    },
+    [imageCrop],
+  );
   const noteTitles = useMemo(
     () => new Map(noteOptions.map((note) => [note.uuid, note.title])),
     [noteOptions],
@@ -381,9 +501,8 @@ export function NoteRichTextEditorClient({
           '[data-node-type="blockOuter"][data-id]',
         ) ?? [],
       ).find((element) => element.dataset.id === blockId);
-      const blockContent = blockOuter?.querySelector<HTMLElement>(
-        ".bn-block-content",
-      );
+      const blockContent =
+        blockOuter?.querySelector<HTMLElement>(".bn-block-content");
 
       if (!blockContent) return;
       blockContent.dataset.noteBlockSelected = "true";
@@ -400,10 +519,8 @@ export function NoteRichTextEditorClient({
       | undefined;
 
     onHistoryStateChangeRef.current({
-      canUndo:
-        historyExtension?.undoCommand(editor.prosemirrorState) ?? false,
-      canRedo:
-        historyExtension?.redoCommand(editor.prosemirrorState) ?? false,
+      canUndo: historyExtension?.undoCommand(editor.prosemirrorState) ?? false,
+      canRedo: historyExtension?.redoCommand(editor.prosemirrorState) ?? false,
     });
   }, [editor]);
   const editorControls = useMemo<NoteRichTextEditorControls>(
@@ -564,8 +681,7 @@ export function NoteRichTextEditorClient({
             // Let BlockNote emit the parent document change before navigating
             // away, so the new child link is included in the parent's save.
             window.setTimeout(
-              () =>
-                onOpenNoteRef.current(note.uuid, { focusTitle: true }),
+              () => onOpenNoteRef.current(note.uuid, { focusTitle: true }),
               0,
             );
           })
@@ -618,9 +734,10 @@ export function NoteRichTextEditorClient({
   ]);
   const taskExcludedDefaults = new Set(["Image", "Video"]);
   const slashItems = [
-    ...getDefaultReactSlashMenuItems(editor).filter((item) =>
-      allowedDefaults.has(item.title) &&
-      (mode !== "task" || !taskExcludedDefaults.has(item.title)),
+    ...getDefaultReactSlashMenuItems(editor).filter(
+      (item) =>
+        allowedDefaults.has(item.title) &&
+        (mode !== "task" || !taskExcludedDefaults.has(item.title)),
     ),
     ...(mode === "task"
       ? [customItems[0], customItems[2], customItems[3], customItems[4]]
@@ -686,12 +803,11 @@ export function NoteRichTextEditorClient({
       >
         <BlockNoteView
           className={
-            mode === "task"
-              ? "h-full min-h-0 w-full"
-              : "h-full min-h-0 w-full"
+            mode === "task" ? "h-full min-h-0 w-full" : "h-full min-h-0 w-full"
           }
           editor={editor}
           editable={editable}
+          formattingToolbar={false}
           sideMenu={false}
           slashMenu={false}
           theme="light"
@@ -699,6 +815,9 @@ export function NoteRichTextEditorClient({
         >
           {editable && (
             <>
+              <FormattingToolbarController
+                formattingToolbar={noteFormattingToolbar}
+              />
               <SideMenuController sideMenu={NoteBlockSideMenu} />
               <SuggestionMenuController
                 triggerCharacter="/"
@@ -711,6 +830,44 @@ export function NoteRichTextEditorClient({
           )}
         </BlockNoteView>
       </div>
+      {imageCrop && (
+        <ImageCropDialog
+          open
+          source={imageCrop.source}
+          file={imageCrop.file}
+          aspect={imageCrop.originalAspect}
+          aspectOptions={
+            [
+              { label: "Free", value: undefined },
+              { label: "Original", value: imageCrop.originalAspect },
+              { label: "Square", value: 1 },
+              { label: "4:3", value: 4 / 3 },
+              { label: "16:9", value: 16 / 9 },
+            ] satisfies ImageCropAspectOption[]
+          }
+          onOpenChange={(open) => {
+            if (!open) setImageCrop(undefined);
+          }}
+          onCrop={async (file) => {
+            const currentBlock = editor.getBlock(imageCrop.blockId);
+            if (!currentBlock || currentBlock.type !== "image") {
+              throw new Error("The image is no longer available to crop.");
+            }
+
+            const uploadedUrl = await onUploadFileRef.current(file);
+            const latestBlock = editor.getBlock(imageCrop.blockId);
+            if (!latestBlock || latestBlock.type !== "image") {
+              throw new Error(
+                "The image was removed before cropping finished.",
+              );
+            }
+
+            editor.updateBlock(imageCrop.blockId, {
+              props: { url: uploadedUrl },
+            });
+          }}
+        />
+      )}
       <Dialog
         open={Boolean(pendingDialog)}
         onOpenChange={(open) => {

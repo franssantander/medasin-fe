@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { ImageCropDialog } from "@/components/ui/image-crop-dialog";
 import { ApiError } from "@/lib/axios";
 import {
   AREA_IMAGE_MAX_SIZE,
@@ -25,7 +26,6 @@ import {
 import type { Area, AreaInput } from "../type";
 import { AREA_ICONS, AreaIcon, areaBadgeStyle } from "./area-icons";
 import { FormField } from "./form-field";
-import { ImageCropDialog } from "./image-crop-dialog";
 
 export const DEFAULT_AREA_BACKGROUND =
   "https://images.unsplash.com/photo-1763936783251-4a3eb135f07f?auto=format&fit=crop&w=1200&q=80&sat=-100";
@@ -371,6 +371,8 @@ export function AreaFormDialog({
           open
           source={cropSource.url}
           file={cropSource.file}
+          aspect={16 / 9}
+          title="Crop background image"
           onOpenChange={(cropOpen) => {
             if (!cropOpen) setCropSource(null);
           }}
