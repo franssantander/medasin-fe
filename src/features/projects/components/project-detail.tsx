@@ -11,7 +11,7 @@ import {
   TriangleAlert,
 } from "lucide-react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -38,8 +38,13 @@ function formatDate(value: string) {
   );
 }
 
-export function ProjectDetail() {
+export function ProjectDetail({
+  archiveRoute = false,
+}: {
+  archiveRoute?: boolean;
+}) {
   const { uuid } = useParams<{ uuid: string }>();
+  const router = useRouter();
   const [goalsOpen, setGoalsOpen] = useState(false);
   const projectQuery = useProjectQuery(uuid);
   const restore = useProjectMutation("restore", uuid);
@@ -118,7 +123,13 @@ export function ProjectDetail() {
                   size="sm"
                   className="justify-start"
                   disabled={restore.isPending}
-                  onClick={() => restore.mutate()}
+                  onClick={() =>
+                    restore.mutate(undefined, {
+                      onSuccess: () => {
+                        if (archiveRoute) router.replace(`/projects/${uuid}`);
+                      },
+                    })
+                  }
                 >
                   <ArchiveRestore />
                   {restore.isPending ? "Restoring…" : "Restore"}

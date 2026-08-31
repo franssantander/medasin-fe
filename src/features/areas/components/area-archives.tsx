@@ -60,7 +60,7 @@ function ArchivedAreaCard({ area }: { area: Area }) {
   return (
     <Card className="relative gap-0 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg">
       <Link
-        href={`/areas/${area.uuid}`}
+        href={`/archives/areas/${area.uuid}`}
         className="absolute inset-0 z-0 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
         aria-label={`Open ${area.name}`}
       />

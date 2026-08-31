@@ -55,9 +55,11 @@ const tabs: { value: AreaTab; label: string; icon: typeof FolderKanban }[] = [
 export function AreaDetail({
   initialTab = "projects",
   initialNoteUuid,
+  archiveRoute = false,
 }: {
   initialTab?: AreaTab;
   initialNoteUuid?: string;
+  archiveRoute?: boolean;
 }) {
   const { uuid } = useParams<{ uuid: string }>();
   const router = useRouter();
@@ -131,7 +133,19 @@ export function AreaDetail({
   const changeTab = (tab: AreaTab) => {
     setActiveTab(tab);
     setPage(1);
-    router.replace(`/areas/${uuid}?tab=${tab}`, { scroll: false });
+    const detailPath = archiveRoute
+      ? `/archives/areas/${uuid}`
+      : `/areas/${uuid}`;
+    router.replace(`${detailPath}?tab=${tab}`, { scroll: false });
+  };
+  const restoreArchivedArea = () => {
+    restoreArea.mutate(undefined, {
+      onSuccess: () => {
+        if (archiveRoute) {
+          router.replace(`/areas/${uuid}?tab=${activeTab}`, { scroll: false });
+        }
+      },
+    });
   };
   const confirmAreaAction = async () => {
     if (confirmationAction === "archive") {
@@ -164,7 +178,7 @@ export function AreaDetail({
           area={area}
           archived={archived}
           restorePending={restoreArea.isPending}
-          onRestore={() => restoreArea.mutate()}
+          onRestore={restoreArchivedArea}
           onEdit={() => setAreaFormOpen(true)}
           onAction={setConfirmationAction}
         />
