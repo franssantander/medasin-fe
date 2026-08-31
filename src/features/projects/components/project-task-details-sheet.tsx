@@ -9,6 +9,7 @@ import {
   Link2,
   Plus,
   Trash2,
+  XIcon,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -39,13 +40,14 @@ import {
   SelectTrigger,
 } from "@/components/ui/select";
 import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
+  Drawer,
+  DrawerClose,
+  DrawerContent,
+  DrawerDescription,
+  DrawerFooter,
+  DrawerHeader,
+  DrawerTitle,
+} from "@/components/ui/drawer";
 import { areaKeys } from "@/features/areas/queries/area-query";
 import { areaService } from "@/features/areas/services/area-service";
 import type {
@@ -274,18 +276,20 @@ export function TaskDetailsSheet({
     : undefined;
 
   return (
-    <Sheet
+    <Drawer
       open={Boolean(task)}
+      showSwipeHandle
+      swipeDirection="right"
       onOpenChange={(open) => {
         if (!open) void flushDraftRef.current();
         onOpenChange(open);
       }}
     >
-      <SheetContent>
+      <DrawerContent className="w-[46rem] ">
         {task && (
           <>
-            <SheetHeader className="shrink-0 border-b pr-14">
-              <SheetTitle className="leading-tight">
+            <DrawerHeader className="shrink-0 gap-1.5 border-b p-4">
+              <DrawerTitle className="leading-tight">
                 {archived ? (
                   <span className="text-2xl font-semibold leading-tight sm:text-3xl">
                     {task.title}
@@ -311,11 +315,24 @@ export function TaskDetailsSheet({
                     className="h-auto border-0 px-0 text-2xl font-semibold leading-tight shadow-none focus-visible:ring-0 sm:text-3xl md:text-3xl"
                   />
                 )}
-              </SheetTitle>
-              <SheetDescription className="sr-only">
+              </DrawerTitle>
+              <DrawerDescription className="sr-only">
                 View and update the task details.
-              </SheetDescription>
-              <div className="grid w-full grid-cols-2 gap-4">
+              </DrawerDescription>
+              <DrawerClose
+                render={
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    className="absolute top-4 right-4"
+                    aria-label="Close task details"
+                  />
+                }
+              >
+                <XIcon />
+              </DrawerClose>
+              <div className="flex items-center gap-4">
                 {archived ? (
                   <Badge
                     variant="secondary"
@@ -333,7 +350,7 @@ export function TaskDetailsSheet({
                       updateDraft({ stage: nextStage });
                     }}
                   >
-                    <SelectTrigger className="w-full bg-background">
+                    <SelectTrigger className="bg-background">
                       <StatusValue
                         color={stageDotColors[draft.stage]}
                         label={
@@ -370,7 +387,7 @@ export function TaskDetailsSheet({
                       updateDraft({ priority: nextPriority });
                     }}
                   >
-                    <SelectTrigger className="w-full bg-background">
+                    <SelectTrigger className="bg-background">
                       <StatusValue
                         color={priorityDotColors[draft.priority]}
                         label={
@@ -402,11 +419,11 @@ export function TaskDetailsSheet({
                   </Select>
                 )}
               </div>
-            </SheetHeader>
+            </DrawerHeader>
 
             <div className="grid min-h-0 flex-1 content-start gap-6 overflow-y-auto p-4">
               <TaskDetailSection title="Description">
-                <div className="h-80 min-h-64 overflow-hidden rounded-lg">
+                <div className="h-[26rem] min-h-64 overflow-hidden rounded-lg">
                   <NoteRichTextEditor
                     mode="task"
                     documentId={`task-description-${task.uuid}`}
@@ -557,7 +574,7 @@ export function TaskDetailsSheet({
             </div>
 
             {!archived && (
-              <SheetFooter className="shrink-0 border-t sm:flex-row sm:justify-end">
+              <DrawerFooter className="shrink-0 border-t p-4 sm:flex-row sm:justify-end">
                 {saveState === "error" ? (
                   <button
                     type="button"
@@ -588,7 +605,7 @@ export function TaskDetailsSheet({
                   <Trash2 />
                   {isDeleting ? "Deleting…" : "Delete"}
                 </Button>
-              </SheetFooter>
+              </DrawerFooter>
             )}
 
             {!archived && (
@@ -694,8 +711,8 @@ export function TaskDetailsSheet({
             )}
           </>
         )}
-      </SheetContent>
-    </Sheet>
+      </DrawerContent>
+    </Drawer>
   );
 }
 
