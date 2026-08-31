@@ -34,10 +34,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "@/components/ui/toast";
-import {
-  goalStatusBadgeClassNames,
-  goalStatusLabels,
-} from "../goal-status";
+import { goalStatusBadgeClassNames, goalStatusLabels } from "../goal-status";
 import { areaService } from "../services/area-service";
 import type { Goal, GoalFilter, GoalStatus, Paginated } from "../type";
 import { AreaIcon } from "./area-icons";
@@ -69,6 +66,8 @@ export function GoalTracker({
   onAdd,
   onEdit,
   onChanged,
+  showHeader = true,
+  allowDelete = true,
 }: {
   goals: Goal[];
   counts?: Record<GoalFilter, number>;
@@ -82,6 +81,8 @@ export function GoalTracker({
   onAdd: () => void;
   onEdit: (goal: Goal) => void;
   onChanged: (message: string) => Promise<void>;
+  showHeader?: boolean;
+  allowDelete?: boolean;
 }) {
   const [goalToDelete, setGoalToDelete] = useState<Goal>();
   const statusMutation = useMutation({
@@ -112,20 +113,22 @@ export function GoalTracker({
 
   return (
     <div className="grid gap-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="font-semibold">Goals</h2>
-          <p className="text-sm text-muted-foreground">
-            Track what matters and keep moving forward.
-          </p>
+      {showHeader && (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="font-semibold">Goals</h2>
+            <p className="text-sm text-muted-foreground">
+              Track what matters and keep moving forward.
+            </p>
+          </div>
+          {!archived && (
+            <Button size="sm" onClick={onAdd}>
+              <Plus />
+              Add goal
+            </Button>
+          )}
         </div>
-        {!archived && (
-          <Button size="sm" onClick={onAdd}>
-            <Plus />
-            Add goal
-          </Button>
-        )}
-      </div>
+      )}
       <div
         className="flex gap-2 overflow-x-auto pb-1"
         aria-label="Filter goals"
@@ -256,13 +259,15 @@ export function GoalTracker({
                         <Pencil />
                         Edit
                       </DropdownMenuItem>
-                      <DropdownMenuItem
-                        destructive
-                        onClick={() => setGoalToDelete(goal)}
-                      >
-                        <Trash2 />
-                        Delete
-                      </DropdownMenuItem>
+                      {allowDelete && (
+                        <DropdownMenuItem
+                          destructive
+                          onClick={() => setGoalToDelete(goal)}
+                        >
+                          <Trash2 />
+                          Delete
+                        </DropdownMenuItem>
+                      )}
                     </DropdownMenuContent>
                   </DropdownMenu>
                 )}

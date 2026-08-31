@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
+import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -27,6 +28,7 @@ import {
 } from "../project-status";
 import { useProjectQuery } from "../queries/project-query";
 import { ProjectIcon, projectBadgeStyle } from "./project-icons";
+import { ProjectGoalsDialog } from "./project-goals-dialog";
 import { ProjectKanban } from "./project-kanban";
 
 function formatDate(value: string) {
@@ -37,6 +39,7 @@ function formatDate(value: string) {
 
 export function ProjectDetail() {
   const { uuid } = useParams<{ uuid: string }>();
+  const [goalsOpen, setGoalsOpen] = useState(false);
   const projectQuery = useProjectQuery(uuid);
   const project = projectQuery.data?.data;
 
@@ -125,11 +128,23 @@ export function ProjectDetail() {
                   Inbox
                 </div>
               )}
-              <div className="flex h-8 items-center gap-2 rounded-md border px-3 text-muted-foreground">
-                <StarCheck className="size-4" />
-                {project.goals.count}{" "}
-                {project.goals.count === 1 ? "goal" : "goals"}
-              </div>
+              {project.area ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="justify-start"
+                  aria-label={`Manage goals for ${project.name}`}
+                  onClick={() => setGoalsOpen(true)}
+                >
+                  <StarCheck />
+                  {project.goals.count}{" "}
+                  {project.goals.count === 1 ? "goal" : "goals"}
+                </Button>
+              ) : (
+                <div className="flex h-8 items-center gap-2 rounded-md border px-3 text-muted-foreground">
+                  <StarCheck className="size-4" />0 goals
+                </div>
+              )}
             </div>
           </div>
           <div className="grid gap-3 border-t pt-4 sm:grid-cols-[1fr_auto] sm:items-end">
@@ -168,6 +183,16 @@ export function ProjectDetail() {
         boards={project.boards}
         archived={archived}
       />
+      {project.area && (
+        <ProjectGoalsDialog
+          open={goalsOpen}
+          onOpenChange={setGoalsOpen}
+          areaUuid={project.area.uuid}
+          areaName={project.area.name}
+          projectName={project.name}
+          archived={archived}
+        />
+      )}
     </div>
   );
 }
