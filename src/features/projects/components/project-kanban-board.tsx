@@ -5,7 +5,7 @@ import {
 } from "@dnd-kit/sortable";
 import { useDroppable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
-import { FileText, GripVertical, Link2, Plus } from "lucide-react";
+import { FileText, Link2, Plus } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -194,7 +194,8 @@ function SortableTask({
       <TaskCard
         task={task}
         disabled={disabled}
-        dragProps={{ ...attributes, ...listeners }}
+        isDragging={isDragging}
+        dragProps={disabled ? undefined : { ...attributes, ...listeners }}
         onOpen={onOpen}
       />
     </div>
@@ -205,22 +206,27 @@ export function TaskCard({
   task,
   disabled,
   overlay,
+  isDragging,
   dragProps,
   onOpen,
 }: {
   task: BoardTask;
   disabled?: boolean;
   overlay?: boolean;
-  dragProps?: React.HTMLAttributes<HTMLButtonElement>;
+  isDragging?: boolean;
+  dragProps?: React.HTMLAttributes<HTMLDivElement>;
   onOpen?: () => void;
 }) {
+  const { onKeyDown: onDragKeyDown, ...cardDragProps } = dragProps ?? {};
+
   return (
     <Card
+      {...cardDragProps}
       size="sm"
       className={
         overlay
           ? "w-[19rem] rotate-2 shadow-xl"
-          : "gap-3 cursor-pointer transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          : `gap-3 transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${disabled ? "cursor-pointer" : "cursor-grab active:cursor-grabbing"}`
       }
       role={overlay ? undefined : "button"}
       tabIndex={overlay ? undefined : 0}
@@ -229,7 +235,15 @@ export function TaskCard({
         overlay
           ? undefined
           : (event) => {
-              if (event.key === "Enter" || event.key === " ") {
+              if (!disabled && event.key === " ") {
+                onDragKeyDown?.(event);
+                return;
+              }
+
+              if (
+                !isDragging &&
+                (event.key === "Enter" || event.key === " ")
+              ) {
                 event.preventDefault();
                 onOpen?.();
               }
@@ -237,27 +251,13 @@ export function TaskCard({
       }
     >
       <CardHeader className="gap-2">
-        <div className="flex items-start gap-2">
-          {!disabled && (
-            <button
-              type="button"
-              className="mt-0.5 cursor-grab text-muted-foreground active:cursor-grabbing"
-              aria-label={`Move ${task.title}`}
-              {...dragProps}
-              onClick={(event) => event.stopPropagation()}
-              onKeyDown={(event) => event.stopPropagation()}
-            >
-              <GripVertical className="size-4" />
-            </button>
+        <div className="min-w-0">
+          <CardTitle className="text-sm leading-snug">{task.title}</CardTitle>
+          {task.description && (
+            <CardDescription className="mt-1 line-clamp-2 text-xs">
+              {getNoteDocumentPreview(task.description)}
+            </CardDescription>
           )}
-          <div className="min-w-0 flex-1">
-            <CardTitle className="text-sm leading-snug">{task.title}</CardTitle>
-            {task.description && (
-              <CardDescription className="mt-1 line-clamp-2 text-xs">
-                {getNoteDocumentPreview(task.description)}
-              </CardDescription>
-            )}
-          </div>
         </div>
       </CardHeader>
       <CardContent className="grid gap-2">
