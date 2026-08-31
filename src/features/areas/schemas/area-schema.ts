@@ -1,5 +1,16 @@
 import { z } from "zod";
 
+export const AREA_IMAGE_MAX_SIZE = 5 * 1024 * 1024;
+export const AREA_IMAGE_TYPES = [
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+] as const;
+
+function isFile(value: unknown): value is File {
+  return typeof File !== "undefined" && value instanceof File;
+}
+
 const nullableText = z
   .string()
   .trim()
@@ -22,9 +33,17 @@ export const areaSchema = z.object({
     .optional()
     .transform((value) => value || null),
   background_image: z
-    .custom<File>(
-      (value) => value instanceof File,
-      "Choose a valid image file.",
+    .custom<File>(isFile, "Choose a valid image file.")
+    .refine(
+      (file) =>
+        AREA_IMAGE_TYPES.includes(
+          file.type as (typeof AREA_IMAGE_TYPES)[number],
+        ),
+      "Choose a JPG, PNG, or WebP image.",
+    )
+    .refine(
+      (file) => file.size <= AREA_IMAGE_MAX_SIZE,
+      "Choose an image up to 5 MB.",
     )
     .nullable()
     .optional(),

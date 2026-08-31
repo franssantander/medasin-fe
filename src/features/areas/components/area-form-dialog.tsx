@@ -16,10 +16,16 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { ApiError } from "@/lib/axios";
-import { areaSchema, type AreaFormValues } from "../schemas/area-schema";
+import {
+  AREA_IMAGE_MAX_SIZE,
+  AREA_IMAGE_TYPES,
+  areaSchema,
+  type AreaFormValues,
+} from "../schemas/area-schema";
 import type { Area, AreaInput } from "../type";
 import { AREA_ICONS, AreaIcon, areaBadgeStyle } from "./area-icons";
 import { FormField } from "./form-field";
+import { ImageCropDialog } from "./image-crop-dialog";
 
 export const DEFAULT_AREA_BACKGROUND =
   "https://images.unsplash.com/photo-1763936783251-4a3eb135f07f?auto=format&fit=crop&w=1200&q=80&sat=-100";
@@ -65,11 +71,16 @@ export function AreaFormDialog({
   onSubmit: (input: AreaInput) => Promise<void>;
 }) {
   const [iconSearch, setIconSearch] = useState("");
+  const [cropSource, setCropSource] = useState<{
+    file: File;
+    url: string;
+  } | null>(null);
   const {
     control,
     register,
     handleSubmit,
     reset,
+    clearErrors,
     setError,
     setValue,
     formState: { errors },
@@ -105,6 +116,13 @@ export function AreaFormDialog({
     [uploadPreview],
   );
 
+  useEffect(
+    () => () => {
+      if (cropSource) URL.revokeObjectURL(cropSource.url);
+    },
+    [cropSource],
+  );
+
   useEffect(() => {
     if (open) {
       reset({
@@ -117,10 +135,15 @@ export function AreaFormDialog({
     }
   }, [area, open, reset]);
 
+  const changeDialogOpen = (nextOpen: boolean) => {
+    if (!nextOpen) setCropSource(null);
+    onOpenChange(nextOpen);
+  };
+
   const submit = handleSubmit(async (values) => {
     try {
       await onSubmit(values);
-      onOpenChange(false);
+      changeDialogOpen(false);
     } catch (error) {
       if (error instanceof ApiError && error.validationErrors) {
         Object.entries(error.validationErrors).forEach(([field, messages]) => {
@@ -130,8 +153,31 @@ export function AreaFormDialog({
     }
   });
 
+  const selectImage = (file: File | undefined) => {
+    if (!file) return;
+
+    if (
+      !AREA_IMAGE_TYPES.includes(
+        file.type as (typeof AREA_IMAGE_TYPES)[number],
+      )
+    ) {
+      setError("background_image", {
+        message: "Choose a JPG, PNG, or WebP image.",
+      });
+      return;
+    }
+
+    if (file.size > AREA_IMAGE_MAX_SIZE) {
+      setError("background_image", { message: "Choose an image up to 5 MB." });
+      return;
+    }
+
+    clearErrors("background_image");
+    setCropSource({ file, url: URL.createObjectURL(file) });
+  };
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={changeDialogOpen}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{area ? "Edit area" : "Create area"}</DialogTitle>
@@ -169,13 +215,10 @@ export function AreaFormDialog({
                 type="file"
                 accept="image/jpeg,image/png,image/webp"
                 className="sr-only"
-                onChange={(event) =>
-                  setValue(
-                    "background_image",
-                    event.target.files?.[0] ?? null,
-                    { shouldValidate: true },
-                  )
-                }
+                onChange={(event) => {
+                  selectImage(event.target.files?.[0]);
+                  event.currentTarget.value = "";
+                }}
               />
             </label>
             <p className="text-xs text-muted-foreground">
@@ -313,7 +356,7 @@ export function AreaFormDialog({
           <Button
             type="button"
             variant="outline"
-            onClick={() => onOpenChange(false)}
+            onClick={() => changeDialogOpen(false)}
           >
             Cancel
           </Button>
@@ -322,6 +365,23 @@ export function AreaFormDialog({
           </Button>
         </DialogFooter>
       </DialogContent>
+
+      {cropSource && (
+        <ImageCropDialog
+          open
+          source={cropSource.url}
+          file={cropSource.file}
+          onOpenChange={(cropOpen) => {
+            if (!cropOpen) setCropSource(null);
+          }}
+          onCrop={(file) =>
+            setValue("background_image", file, {
+              shouldDirty: true,
+              shouldValidate: true,
+            })
+          }
+        />
+      )}
     </Dialog>
   );
 }
