@@ -20,6 +20,8 @@ export type ResourceAttachment = {
   size: number | null;
 };
 export type Resource = AreaResource & {
+  icon: string | null;
+  background: string | null;
   archived_at: string | null;
   created_at: string | null;
   updated_at: string | null;
@@ -41,6 +43,8 @@ export type ResourcePage = ApiResponse<
 >;
 export type ResourceInput = {
   title: string;
+  icon?: string | null;
+  background?: string | null;
   content?: ResourceDocument | null;
   links: string[];
   files: File[];

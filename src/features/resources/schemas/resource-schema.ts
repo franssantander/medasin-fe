@@ -2,6 +2,11 @@ import { z } from "zod";
 
 export const resourceSchema = z.object({
   title: z.string().trim().min(1, "Enter a title.").max(255),
+  icon: z.string().trim().max(50).optional(),
+  background: z
+    .string()
+    .trim()
+    .regex(/^#[0-9a-f]{6}$/i, "Enter a valid 6-digit hex color."),
   links: z
     .array(
       z

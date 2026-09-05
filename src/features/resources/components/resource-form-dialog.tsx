@@ -1,8 +1,15 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useMemo, useState, type FormEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Plus, X } from "lucide-react";
+import { Check, Plus, Search, X } from "lucide-react";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionHeader,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -24,9 +31,19 @@ import {
 import { resourceSchema } from "../schemas/resource-schema";
 import { safeResourceUrl, toResourceDocument } from "../resource-document";
 import { ResourceEditor } from "./resource-editor";
+import {
+  RESOURCE_BADGE_COLORS,
+  RESOURCE_ICONS,
+  ResourceIcon,
+  resourceBadgeStyle,
+} from "./resource-icons";
 
 export function ResourceFormDialog({ onClose }: { onClose: () => void }) {
   const [title, setTitle] = useState("");
+  const [icon, setIcon] = useState("BookOpen");
+  const [background, setBackground] = useState("#000000");
+  const [iconSearch, setIconSearch] = useState("");
+  const [appearanceOpen, setAppearanceOpen] = useState(false);
   const [content, setContent] = useState(EMPTY_NOTE_DOCUMENT);
   const [links, setLinks] = useState<string[]>([]);
   const [link, setLink] = useState("");
@@ -47,6 +64,12 @@ export function ResourceFormDialog({ onClose }: { onClose: () => void }) {
     queryFn: () => areaService.list("active"),
   });
   const create = useCreateResource();
+  const filteredIcons = useMemo(() => {
+    const query = iconSearch.trim().toLowerCase();
+    return query
+      ? RESOURCE_ICONS.filter(({ name }) => name.toLowerCase().includes(query))
+      : RESOURCE_ICONS;
+  }, [iconSearch]);
 
   function addLink() {
     const value = link.trim();
@@ -97,6 +120,8 @@ export function ResourceFormDialog({ onClose }: { onClose: () => void }) {
     }
     const parsed = resourceSchema.safeParse({
       title,
+      icon,
+      background,
       links,
       files,
       tag_names: tagNames,
@@ -105,6 +130,13 @@ export function ResourceFormDialog({ onClose }: { onClose: () => void }) {
       area_uuid: area || undefined,
     });
     if (!parsed.success) {
+      if (
+        parsed.error.issues.some(
+          (issue) => issue.path[0] === "icon" || issue.path[0] === "background",
+        )
+      ) {
+        setAppearanceOpen(true);
+      }
       setErrors(
         parsed.error.issues.map(
           (issue) => `${issue.path.join(".")}: ${issue.message}`,
@@ -120,6 +152,13 @@ export function ResourceFormDialog({ onClose }: { onClose: () => void }) {
       });
       onClose();
     } catch (error) {
+      if (
+        error instanceof ApiError &&
+        error.validationErrors &&
+        (error.validationErrors.icon || error.validationErrors.background)
+      ) {
+        setAppearanceOpen(true);
+      }
       setErrors(
         error instanceof ApiError && error.validationErrors
           ? Object.entries(error.validationErrors).flatMap(
@@ -165,6 +204,167 @@ export function ResourceFormDialog({ onClose }: { onClose: () => void }) {
                 placeholder="Give your resource a title"
               />
             </div>
+            <Accordion
+              multiple
+              value={appearanceOpen ? ["appearance"] : []}
+              onValueChange={(value) =>
+                setAppearanceOpen(value.includes("appearance"))
+              }
+            >
+              <AccordionItem
+                value="appearance"
+                className="overflow-hidden rounded-xl border"
+              >
+                <div className="flex items-center gap-3 bg-muted/20 p-3">
+                  <div
+                    className="flex size-10 shrink-0 items-center justify-center rounded-xl shadow-sm"
+                    style={resourceBadgeStyle(background)}
+                  >
+                    <ResourceIcon name={icon} className="size-5" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium">Customize appearance</p>
+                    <p className="truncate text-xs text-muted-foreground">
+                      Optional · {icon} · {background.toUpperCase()}
+                    </p>
+                  </div>
+                  <AccordionHeader>
+                    <AccordionTrigger
+                      className="size-auto gap-1.5 px-2.5"
+                      aria-label="Customize resource appearance"
+                    >
+                      <span className="hidden text-sm sm:inline">
+                        {appearanceOpen ? "Hide" : "Customize"}
+                      </span>
+                    </AccordionTrigger>
+                  </AccordionHeader>
+                </div>
+                <AccordionContent>
+                  <div className="grid gap-5 border-t p-4">
+                    <div className="flex items-center gap-4 rounded-xl border bg-muted/30 p-4">
+                      <div
+                        className="flex size-14 shrink-0 items-center justify-center rounded-xl shadow-sm"
+                        style={resourceBadgeStyle(background)}
+                      >
+                        <ResourceIcon name={icon} className="size-6" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="truncate font-medium">
+                          {title.trim() || "Resource preview"}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          Preview of the resource badge and title.
+                        </p>
+                      </div>
+                    </div>
+                    <div className="grid gap-3">
+                      <div>
+                        <p className="text-sm font-medium">Badge color</p>
+                        <p className="text-xs text-muted-foreground">
+                          Icon contrast adjusts automatically.
+                        </p>
+                      </div>
+                      <div className="grid grid-cols-8 gap-2 sm:grid-cols-12">
+                        {RESOURCE_BADGE_COLORS.map((color) => {
+                          const isSelected =
+                            background.toLowerCase() ===
+                            color.value.toLowerCase();
+
+                          return (
+                            <button
+                              key={color.value}
+                              type="button"
+                              title={color.name}
+                              aria-label={`Use ${color.name} (${color.value})`}
+                              aria-pressed={isSelected}
+                              className="flex aspect-square items-center justify-center rounded-full border border-black/10 shadow-sm outline-none transition-transform hover:scale-110 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                              style={{ backgroundColor: color.value }}
+                              onClick={() => setBackground(color.value)}
+                            >
+                              {isSelected && (
+                                <Check
+                                  className="size-4 drop-shadow-sm"
+                                  strokeWidth={3}
+                                  style={{
+                                    color: resourceBadgeStyle(color.value).color,
+                                  }}
+                                />
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <div
+                          className="flex size-10 shrink-0 items-center justify-center rounded-xl shadow-sm"
+                          style={resourceBadgeStyle(background)}
+                        >
+                          <ResourceIcon name={icon} className="size-5" />
+                        </div>
+                        <div className="grid min-w-0 flex-1 gap-1.5">
+                          <label
+                            htmlFor="resource-badge-color"
+                            className="text-xs font-medium"
+                          >
+                            Custom hex color
+                          </label>
+                          <Input
+                            id="resource-badge-color"
+                            value={background}
+                            onChange={(event) =>
+                              setBackground(event.target.value)
+                            }
+                            maxLength={7}
+                            placeholder="#000000"
+                            spellCheck={false}
+                            aria-invalid={
+                              !/^#[0-9a-f]{6}$/i.test(background)
+                            }
+                            className="font-mono uppercase"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                    <div className="grid gap-2">
+                      <p className="text-sm font-medium">Icon</p>
+                      <div className="overflow-hidden rounded-xl border">
+                        <div className="relative border-b p-3">
+                          <Search className="absolute left-5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                          <Input
+                            value={iconSearch}
+                            onChange={(event) =>
+                              setIconSearch(event.target.value)
+                            }
+                            placeholder={`Search ${RESOURCE_ICONS.length} Lucide icons…`}
+                            className="pl-9"
+                          />
+                        </div>
+                        <div className="grid max-h-48 grid-cols-[repeat(auto-fill,2rem)] justify-between gap-1 overflow-y-auto p-3">
+                          {filteredIcons.map(({ name, icon: Icon }) => (
+                            <button
+                              key={name}
+                              type="button"
+                              title={name}
+                              aria-label={`Use ${name} icon`}
+                              aria-pressed={icon === name}
+                              className="flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground aria-pressed:bg-black aria-pressed:text-white"
+                              onClick={() => setIcon(name)}
+                            >
+                              <Icon className="size-3.5" />
+                            </button>
+                          ))}
+                        </div>
+                        {filteredIcons.length === 0 && (
+                          <p className="px-3 pb-4 text-center text-sm text-muted-foreground">
+                            No icons match “{iconSearch}”.
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </AccordionContent>
+              </AccordionItem>
+            </Accordion>
             <div className="grid gap-2">
               <p className="text-sm font-medium">Notes</p>
               <ResourceEditor

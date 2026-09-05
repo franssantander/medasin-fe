@@ -17,6 +17,7 @@ import { fromResourceDocument, safeResourceUrl } from "../resource-document";
 import { resourceService } from "../services/resource-service";
 import type { Resource, ResourceAttachment } from "../type";
 import { ResourceEditor } from "./resource-editor";
+import { ResourceIcon, resourceBadgeStyle } from "./resource-icons";
 
 function PrivateAttachment({
   resourceUuid,
@@ -148,7 +149,15 @@ export function ResourceDetailDialog({
     >
       <DialogContent className="max-w-3xl">
         <DialogHeader>
-          <DialogTitle className="break-words">{resource.title}</DialogTitle>
+          <div className="flex min-w-0 items-center gap-3">
+            <div
+              className="flex size-11 shrink-0 items-center justify-center rounded-xl shadow-sm"
+              style={resourceBadgeStyle(resource.background)}
+            >
+              <ResourceIcon name={resource.icon} className="size-5" />
+            </div>
+            <DialogTitle className="break-words">{resource.title}</DialogTitle>
+          </div>
           <DialogDescription>
             Resource details and attachments
           </DialogDescription>

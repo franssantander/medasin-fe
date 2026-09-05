@@ -31,6 +31,8 @@ export const resourceService = {
     if (files.length) {
       body = new FormData();
       body.append("title", values.title);
+      if (values.icon) body.append("icon", values.icon);
+      if (values.background) body.append("background", values.background);
       if (values.content)
         body.append("content", JSON.stringify(values.content));
       for (const field of ["project_uuid", "area_uuid"] as const) {

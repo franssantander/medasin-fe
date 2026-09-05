@@ -30,6 +30,7 @@ import {
 import { resourcePreview } from "../resource-document";
 import type { Resource, ResourceType } from "../type";
 import { ResourceDetailDialog } from "./resource-detail-dialog";
+import { ResourceIcon, resourceBadgeStyle } from "./resource-icons";
 
 const typeIcons: Record<ResourceType, typeof BookOpen> = {
   note: BookOpen,
@@ -159,7 +160,15 @@ function ArchivedResourceCard({
       />
       <CardHeader className="pointer-events-none relative z-10 grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
         <div className="grid min-w-0 gap-2">
-          <CardTitle className="break-words">{resource.title}</CardTitle>
+          <div className="flex min-w-0 items-center gap-3">
+            <div
+              className="flex size-10 shrink-0 items-center justify-center rounded-xl shadow-sm"
+              style={resourceBadgeStyle(resource.background)}
+            >
+              <ResourceIcon name={resource.icon} className="size-5" />
+            </div>
+            <CardTitle className="break-words">{resource.title}</CardTitle>
+          </div>
           <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
             {resource.types.map((type) => {
               const Icon = typeIcons[type];
