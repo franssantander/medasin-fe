@@ -77,7 +77,7 @@ export function ResourceListCard({
               <ResourceIcon name={resource.icon} className="size-5" />
             </div>
             <CardTitle>
-              <span className="break-words group-hover/card:underline">
+              <span className="break-words">
                 {resource.title}
               </span>
             </CardTitle>

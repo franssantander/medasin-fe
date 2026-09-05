@@ -6,6 +6,7 @@ import type {
   ResourceInput,
   ResourcePage,
   ResourceTag,
+  ResourceUpdateInput,
 } from "../type";
 
 export const resourceService = {
@@ -49,6 +50,40 @@ export const resourceService = {
       await axiosClient.post<ApiResponse<Resource>>("/resource", body, {
         timeout: 120000,
       })
+    ).data;
+  },
+  async update(input: ResourceUpdateInput): Promise<ApiResponse<Resource>> {
+    const { resourceUuid, ...values } = input;
+    return (
+      await axiosClient.patch<ApiResponse<Resource>>(
+        `/resource/${resourceUuid}`,
+        values,
+      )
+    ).data;
+  },
+  async addAttachments(
+    resourceUuid: string,
+    input: { links?: string[]; files?: File[] },
+  ): Promise<ApiResponse<Resource>> {
+    const body = new FormData();
+    input.links?.forEach((value) => body.append("links[]", value));
+    input.files?.forEach((value) => body.append("files[]", value));
+    return (
+      await axiosClient.post<ApiResponse<Resource>>(
+        `/resource/${resourceUuid}/attachments`,
+        body,
+        { timeout: 120000 },
+      )
+    ).data;
+  },
+  async deleteAttachment(
+    resourceUuid: string,
+    attachmentUuid: string,
+  ): Promise<ApiResponse<Resource>> {
+    return (
+      await axiosClient.delete<ApiResponse<Resource>>(
+        `/resource/${resourceUuid}/attachments/${attachmentUuid}`,
+      )
     ).data;
   },
   async archive(resourceUuid: string): Promise<ApiResponse<Resource>> {

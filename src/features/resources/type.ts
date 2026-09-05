@@ -53,3 +53,14 @@ export type ResourceInput = {
   project_uuid?: string;
   area_uuid?: string;
 };
+export type ResourceUpdateInput = {
+  resourceUuid: string;
+  title: string;
+  icon?: string | null;
+  background?: string | null;
+  content?: ResourceDocument | null;
+  tag_names: string[];
+  tag_uuids: string[];
+  project_uuid?: string | null;
+  area_uuid?: string | null;
+};

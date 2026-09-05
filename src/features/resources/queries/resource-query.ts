@@ -41,6 +41,43 @@ export function useCreateResource() {
   });
 }
 
+function useResourceMutationInvalidation() {
+  const client = useQueryClient();
+  return async () => {
+    await Promise.all([
+      client.invalidateQueries({ queryKey: ["resources"] }),
+      client.invalidateQueries({ queryKey: ["areas"] }),
+      client.invalidateQueries({ queryKey: ["projects"] }),
+    ]);
+  };
+}
+
+export function useUpdateResource() {
+  const invalidate = useResourceMutationInvalidation();
+  return useMutation({
+    mutationFn: resourceService.update,
+    onSuccess: invalidate,
+  });
+}
+
+export function useAddResourceAttachments() {
+  const invalidate = useResourceMutationInvalidation();
+  return useMutation({
+    mutationFn: ({ resourceUuid, ...input }: { resourceUuid: string; links?: string[]; files?: File[] }) =>
+      resourceService.addAttachments(resourceUuid, input),
+    onSuccess: invalidate,
+  });
+}
+
+export function useDeleteResourceAttachment() {
+  const invalidate = useResourceMutationInvalidation();
+  return useMutation({
+    mutationFn: ({ resourceUuid, attachmentUuid }: { resourceUuid: string; attachmentUuid: string }) =>
+      resourceService.deleteAttachment(resourceUuid, attachmentUuid),
+    onSuccess: invalidate,
+  });
+}
+
 export function useArchiveResource() {
   const client = useQueryClient();
   return useMutation({
