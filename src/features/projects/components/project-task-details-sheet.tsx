@@ -130,6 +130,7 @@ export function TaskDetailsSheet({
   const [draft, setDraft] = useState(initialDraft);
   const [saveState, setSaveState] = useState<TaskSaveState>("idle");
   const [linkPicker, setLinkPicker] = useState<"resources" | "notes">();
+  const [deleteConfirmationOpen, setDeleteConfirmationOpen] = useState(false);
   const [selectedResourceUuid, setSelectedResourceUuid] = useState<string>();
   const draftRef = useRef(initialDraft);
   const savedDraftRef = useRef(normalizeTaskDraft(initialDraft));
@@ -645,14 +646,10 @@ export function TaskDetailsSheet({
                   </span>
                 ) : null}
                 <Button
+                  type="button"
                   variant="destructive"
                   disabled={isDeleting || isSaving}
-                  onClick={() => {
-                    if (window.confirm(`Delete “${task.title}”?`)) {
-                      cancelPendingAutosave();
-                      onDelete();
-                    }
-                  }}
+                  onClick={() => setDeleteConfirmationOpen(true)}
                 >
                   <Trash2 />
                   {isDeleting ? "Deleting…" : "Delete"}
@@ -764,6 +761,47 @@ export function TaskDetailsSheet({
                       }}
                     >
                       Done
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+            )}
+
+            {!archived && (
+              <Dialog
+                open={deleteConfirmationOpen}
+                onOpenChange={(open) => {
+                  if (!isDeleting) setDeleteConfirmationOpen(open);
+                }}
+              >
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Delete task?</DialogTitle>
+                    <DialogDescription>
+                      “{task.title}” will be permanently deleted. This action
+                      cannot be undone.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <DialogFooter>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={isDeleting}
+                      onClick={() => setDeleteConfirmationOpen(false)}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      disabled={isDeleting}
+                      onClick={() => {
+                        cancelPendingAutosave();
+                        onDelete();
+                      }}
+                    >
+                      <Trash2 />
+                      {isDeleting ? "Deleting…" : "Delete task"}
                     </Button>
                   </DialogFooter>
                 </DialogContent>
