@@ -90,7 +90,11 @@ export function useArchiveResource() {
   return useMutation({
     mutationFn: resourceService.archive,
     onSuccess: async (response) => {
-      await client.invalidateQueries({ queryKey: ["resources"] });
+      await Promise.all([
+        client.invalidateQueries({ queryKey: ["resources"] }),
+        client.invalidateQueries({ queryKey: ["areas"] }),
+        client.invalidateQueries({ queryKey: ["projects"] }),
+      ]);
       toast.add({ type: "success", description: response.message });
     },
     onError: (error) => {
