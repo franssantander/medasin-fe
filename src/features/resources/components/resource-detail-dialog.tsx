@@ -268,6 +268,14 @@ export function ResourceDetailDialog({
     queryFn: () => areaService.list("active"),
     enabled: editable,
   });
+  const selectedProjectName = project
+    ? (projects.data?.data.find((item) => item.uuid === project)?.name ??
+      current.projects.find((item) => item.uuid === project)?.name)
+    : "No project";
+  const selectedAreaName = area
+    ? (areas.data?.data.find((item) => item.uuid === area)?.name ??
+      current.areas.find((item) => item.uuid === area)?.name)
+    : "No area";
   const icons = useMemo(() => {
     const search = iconSearch.trim().toLowerCase();
     return search
@@ -530,14 +538,14 @@ export function ResourceDetailDialog({
                     </p>
                   </div>
                   <AccordionHeader>
-                    <AccordionTrigger className="size-auto px-2.5">
+                    <AccordionTrigger className="size-auto px-2.5 text-sm">
                       Customize
                     </AccordionTrigger>
                   </AccordionHeader>
                 </div>
                 <AccordionContent>
                   <div className="grid gap-4 border-t p-4">
-                    <div className="grid grid-cols-8 gap-2 sm:grid-cols-12">
+                    <div className="grid grid-cols-[repeat(auto-fill,2rem)] gap-2">
                       {RESOURCE_BADGE_COLORS.map((color) => (
                         <button
                           key={color.value}
@@ -547,7 +555,7 @@ export function ResourceDetailDialog({
                             background.toLowerCase() ===
                             color.value.toLowerCase()
                           }
-                          className="flex aspect-square items-center justify-center rounded-full border transition-transform hover:scale-110 focus-visible:ring-2"
+                          className="flex size-8 items-center justify-center rounded-full border border-black/10 shadow-sm outline-none transition-transform hover:scale-110 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                           style={{ backgroundColor: color.value }}
                           onClick={() => setBackground(color.value)}
                         >
@@ -634,7 +642,9 @@ export function ResourceDetailDialog({
                       placeholder={
                         projects.isLoading ? "Loading projects…" : "No project"
                       }
-                    />
+                    >
+                      {selectedProjectName}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent align="start">
                     <SelectItem value="none">No project</SelectItem>
@@ -657,7 +667,9 @@ export function ResourceDetailDialog({
                       placeholder={
                         areas.isLoading ? "Loading areas…" : "No area"
                       }
-                    />
+                    >
+                      {selectedAreaName}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent align="start">
                     <SelectItem value="none">No area</SelectItem>

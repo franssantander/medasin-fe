@@ -158,6 +158,12 @@ export function ResourceFormDialog({ onClose }: { onClose: () => void }) {
     queryKey: ["areas", "list", "active"],
     queryFn: () => areaService.list("active"),
   });
+  const selectedProjectName = project
+    ? projects.data?.data.find((item) => item.uuid === project)?.name
+    : "No project";
+  const selectedAreaName = area
+    ? areas.data?.data.find((item) => item.uuid === area)?.name
+    : "No area";
   const create = useCreateResource();
   const filteredIcons = useMemo(() => {
     const query = iconSearch.trim().toLowerCase();
@@ -704,7 +710,9 @@ export function ResourceFormDialog({ onClose }: { onClose: () => void }) {
                             ? "Loading projects…"
                             : "No project"
                         }
-                      />
+                      >
+                        {selectedProjectName}
+                      </SelectValue>
                     </SelectTrigger>
                     <SelectContent align="start">
                       <SelectItem value="none">No project</SelectItem>
@@ -744,7 +752,9 @@ export function ResourceFormDialog({ onClose }: { onClose: () => void }) {
                         placeholder={
                           areas.isLoading ? "Loading areas…" : "No area"
                         }
-                      />
+                      >
+                        {selectedAreaName}
+                      </SelectValue>
                     </SelectTrigger>
                     <SelectContent align="start">
                       <SelectItem value="none">No area</SelectItem>
