@@ -1,4 +1,5 @@
-import { BookOpen } from "lucide-react";
+import { BookOpen, LoaderCircle, Unlink } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { resourcePreview } from "@/features/resources/resource-document";
 import type { Resource } from "@/features/resources/type";
@@ -10,9 +11,13 @@ import {
 export function ProjectResourceRow({
   resources,
   onOpen,
+  onRemove,
+  removingResourceUuid,
 }: {
   resources: Resource[];
   onOpen: (resource: Resource) => void;
+  onRemove?: (resource: Resource) => void;
+  removingResourceUuid?: string;
 }) {
   if (resources.length === 0) {
     return (
@@ -31,7 +36,7 @@ export function ProjectResourceRow({
       {resources.map((resource) => (
         <Card
           key={resource.uuid}
-          className="w-72 shrink-0 snap-start gap-3 p-4 transition-colors hover:border-primary/40 hover:bg-muted/30"
+          className="relative w-72 shrink-0 snap-start gap-3 p-4 transition-colors hover:border-primary/40 hover:bg-muted/30"
         >
           <button
             type="button"
@@ -47,7 +52,11 @@ export function ProjectResourceRow({
               >
                 <ResourceIcon name={resource.icon} className="size-5" />
               </span>
-              <span className="truncate font-semibold">{resource.title}</span>
+              <span
+                className={`min-w-0 flex-1 truncate font-semibold ${onRemove ? "pr-8" : ""}`}
+              >
+                {resource.title}
+              </span>
             </span>
             <span className="line-clamp-2 min-h-10 break-words text-sm text-muted-foreground">
               {resourcePreview(resource.content) ||
@@ -56,6 +65,23 @@ export function ProjectResourceRow({
                 "Open to view this resource."}
             </span>
           </button>
+          {onRemove && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              className="absolute right-3 top-3 text-muted-foreground hover:text-destructive"
+              aria-label={`Remove ${resource.title} from project`}
+              disabled={Boolean(removingResourceUuid)}
+              onClick={() => onRemove(resource)}
+            >
+              {removingResourceUuid === resource.uuid ? (
+                <LoaderCircle className="animate-spin" />
+              ) : (
+                <Unlink />
+              )}
+            </Button>
+          )}
         </Card>
       ))}
     </div>

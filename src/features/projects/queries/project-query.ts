@@ -97,3 +97,22 @@ export function useAttachProjectResources(projectUuid: string) {
     },
   });
 }
+
+export function useDetachProjectResource(projectUuid: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (resourceUuid: string) =>
+      projectService.detachResource(projectUuid, resourceUuid),
+    onSuccess: async (response) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: projectKeys.all }),
+        queryClient.invalidateQueries({ queryKey: ["resources"] }),
+      ]);
+      toast.add({ type: "success", description: response.message });
+    },
+    onError: (error) => {
+      toast.add({ type: "error", description: error.message });
+    },
+  });
+}

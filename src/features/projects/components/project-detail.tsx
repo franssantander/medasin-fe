@@ -40,12 +40,17 @@ import {
   projectStatusBadgeClassNames,
   projectStatusLabels,
 } from "../project-status";
-import { useProjectMutation, useProjectQuery } from "../queries/project-query";
+import {
+  useDetachProjectResource,
+  useProjectMutation,
+  useProjectQuery,
+} from "../queries/project-query";
 import { ProjectIcon, projectBadgeStyle } from "./project-icons";
 import { ProjectGoalsDialog } from "./project-goals-dialog";
 import { ProjectKanban } from "./project-kanban";
 import { ProjectLinkResourcesDialog } from "./project-link-resources-dialog";
 import { ProjectResourceRow } from "./project-resource-row";
+import { ProjectUnlinkResourceDialog } from "./project-unlink-resource-dialog";
 
 function formatDate(value: string) {
   return new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(
@@ -67,9 +72,11 @@ export function ProjectDetail({
   const router = useRouter();
   const [goalsOpen, setGoalsOpen] = useState(false);
   const [selectedResource, setSelectedResource] = useState<Resource>();
+  const [resourceToRemove, setResourceToRemove] = useState<Resource>();
   const [resourceAction, setResourceAction] = useState<"create" | "link">();
   const projectQuery = useProjectQuery(uuid);
   const restore = useProjectMutation("restore", uuid);
+  const detachResource = useDetachProjectResource(uuid);
   const project = projectQuery.data?.data;
 
   if (projectQuery.isLoading)
@@ -281,6 +288,10 @@ export function ProjectDetail({
             <ProjectResourceRow
               resources={project.resources}
               onOpen={setSelectedResource}
+              onRemove={archived ? undefined : setResourceToRemove}
+              removingResourceUuid={
+                detachResource.isPending ? resourceToRemove?.uuid : undefined
+              }
             />
           </section>
         </CardContent>
@@ -321,6 +332,17 @@ export function ProjectDetail({
           onClose={() => setResourceAction(undefined)}
         />
       )}
+      <ProjectUnlinkResourceDialog
+        resource={resourceToRemove}
+        isPending={detachResource.isPending}
+        onClose={() => setResourceToRemove(undefined)}
+        onConfirm={() => {
+          if (!resourceToRemove) return;
+          detachResource.mutate(resourceToRemove.uuid, {
+            onSuccess: () => setResourceToRemove(undefined),
+          });
+        }}
+      />
     </div>
   );
 }

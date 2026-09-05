@@ -170,6 +170,13 @@ export const projectService = {
       ),
     );
   },
+  detachResource(projectUuid: string, resourceUuid: string) {
+    return unwrap(
+      axiosClient.delete<ProjectApiResponse<null>>(
+        `/project/${projectUuid}/resources/${resourceUuid}`,
+      ),
+    );
+  },
   remove(projectUuid: string) {
     return unwrap(
       axiosClient.delete<ProjectApiResponse<null>>(`/project/${projectUuid}`),
