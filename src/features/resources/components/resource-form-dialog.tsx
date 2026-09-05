@@ -123,7 +123,13 @@ function SelectedImageCard({
   );
 }
 
-export function ResourceFormDialog({ onClose }: { onClose: () => void }) {
+export function ResourceFormDialog({
+  onClose,
+  initialProjectUuids = [],
+}: {
+  onClose: () => void;
+  initialProjectUuids?: string[];
+}) {
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState("");
   const [icon, setIcon] = useState("BookOpen");
@@ -138,7 +144,8 @@ export function ResourceFormDialog({ onClose }: { onClose: () => void }) {
   const [tagNames, setTagNames] = useState<string[]>([]);
   const [tagIds, setTagIds] = useState<string[]>([]);
   const [tag, setTag] = useState("");
-  const [projectUuids, setProjectUuids] = useState<string[]>([]);
+  const [projectUuids, setProjectUuids] =
+    useState<string[]>(initialProjectUuids);
   const [areaUuids, setAreaUuids] = useState<string[]>([]);
   const [errors, setErrors] = useState<string[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);

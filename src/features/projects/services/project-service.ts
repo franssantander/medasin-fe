@@ -162,6 +162,14 @@ export const projectService = {
       ),
     );
   },
+  attachResources(projectUuid: string, resourceUuids: string[]) {
+    return unwrap(
+      axiosClient.post<ProjectApiResponse<null>>(
+        `/project/${projectUuid}/resources`,
+        { resource_uuids: resourceUuids },
+      ),
+    );
+  },
   remove(projectUuid: string) {
     return unwrap(
       axiosClient.delete<ProjectApiResponse<null>>(`/project/${projectUuid}`),

@@ -3,9 +3,13 @@
 import {
   ArchiveRestore,
   ArrowLeft,
+  BookOpen,
   CalendarDays,
   CirclePile,
+  FilePlus2,
   Inbox,
+  Link2,
+  Plus,
   RefreshCw,
   StarCheck,
   TriangleAlert,
@@ -24,7 +28,14 @@ import {
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ResourceDetailDialog } from "@/features/resources/components/resource-detail-dialog";
+import { ResourceFormDialog } from "@/features/resources/components/resource-form-dialog";
 import type { Resource } from "@/features/resources/type";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   projectStatusBadgeClassNames,
   projectStatusLabels,
@@ -33,6 +44,7 @@ import { useProjectMutation, useProjectQuery } from "../queries/project-query";
 import { ProjectIcon, projectBadgeStyle } from "./project-icons";
 import { ProjectGoalsDialog } from "./project-goals-dialog";
 import { ProjectKanban } from "./project-kanban";
+import { ProjectLinkResourcesDialog } from "./project-link-resources-dialog";
 import { ProjectResourceRow } from "./project-resource-row";
 
 function formatDate(value: string) {
@@ -55,6 +67,7 @@ export function ProjectDetail({
   const router = useRouter();
   const [goalsOpen, setGoalsOpen] = useState(false);
   const [selectedResource, setSelectedResource] = useState<Resource>();
+  const [resourceAction, setResourceAction] = useState<"create" | "link">();
   const projectQuery = useProjectQuery(uuid);
   const restore = useProjectMutation("restore", uuid);
   const project = projectQuery.data?.data;
@@ -229,12 +242,41 @@ export function ProjectDetail({
             </div>
           )}
           <section className="grid min-w-0 gap-3 border-t pt-4">
-            <div className="flex items-center justify-between gap-3">
-              <h2 className="font-semibold">Resources</h2>
-              <span className="text-xs text-muted-foreground">
-                {project.resources.length}{" "}
-                {project.resources.length === 1 ? "resource" : "resources"}
-              </span>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h2 className="font-semibold flex items-center gap-1.5">
+                <BookOpen className="size-3.5" />
+                Resources
+              </h2>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">
+                  {project.resources.length}{" "}
+                  {project.resources.length === 1 ? "resource" : "resources"}
+                </span>
+                {!archived && (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger
+                      render={<Button type="button" size="sm" />}
+                    >
+                      <Plus />
+                      Add resource
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent side="bottom" align="end">
+                      <DropdownMenuItem
+                        onClick={() => setResourceAction("create")}
+                      >
+                        <FilePlus2 />
+                        Create new
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() => setResourceAction("link")}
+                      >
+                        <Link2 />
+                        Link existing
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                )}
+              </div>
             </div>
             <ProjectResourceRow
               resources={project.resources}
@@ -262,6 +304,21 @@ export function ProjectDetail({
         <ResourceDetailDialog
           resource={selectedResource}
           onClose={() => setSelectedResource(undefined)}
+        />
+      )}
+      {resourceAction === "create" && (
+        <ResourceFormDialog
+          initialProjectUuids={[project.uuid]}
+          onClose={() => setResourceAction(undefined)}
+        />
+      )}
+      {resourceAction === "link" && (
+        <ProjectLinkResourcesDialog
+          projectUuid={project.uuid}
+          excludedResourceUuids={project.resources.map(
+            (resource) => resource.uuid,
+          )}
+          onClose={() => setResourceAction(undefined)}
         />
       )}
     </div>
