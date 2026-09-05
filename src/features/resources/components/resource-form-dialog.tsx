@@ -22,6 +22,13 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -123,6 +130,7 @@ function SelectedImageCard({
 }
 
 export function ResourceFormDialog({ onClose }: { onClose: () => void }) {
+  const [open, setOpen] = useState(false);
   const [title, setTitle] = useState("");
   const [icon, setIcon] = useState("BookOpen");
   const [background, setBackground] = useState("#000000");
@@ -157,6 +165,11 @@ export function ResourceFormDialog({ onClose }: { onClose: () => void }) {
       ? RESOURCE_ICONS.filter(({ name }) => name.toLowerCase().includes(query))
       : RESOURCE_ICONS;
   }, [iconSearch]);
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => setOpen(true));
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
 
   function addLink() {
     const value = link.trim();
@@ -253,7 +266,7 @@ export function ResourceFormDialog({ onClose }: { onClose: () => void }) {
         ...parsed.data,
         content: toResourceDocument(content),
       });
-      onClose();
+      setOpen(false);
     } catch (error) {
       if (
         error instanceof ApiError &&
@@ -278,14 +291,14 @@ export function ResourceFormDialog({ onClose }: { onClose: () => void }) {
   }
   const imageFiles = files.filter((file) => file.type.startsWith("image/"));
   const documentFiles = files.filter((file) => !file.type.startsWith("image/"));
-  const selectClass = "h-9 w-full rounded-lg border bg-background px-3 text-sm";
   return (
     <>
       <Dialog
-        open
-        onOpenChange={(open) => {
-          if (!open && !create.isPending) onClose();
+        open={open}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen && !create.isPending) setOpen(false);
         }}
+        onOpenChangeComplete={(nextOpen) => !nextOpen && onClose()}
       >
         <DialogContent className="max-w-3xl">
           <DialogHeader>
@@ -677,22 +690,31 @@ export function ResourceFormDialog({ onClose }: { onClose: () => void }) {
                   >
                     Project (optional)
                   </label>
-                  <select
-                    id="resource-project"
-                    className={selectClass}
-                    value={project}
+                  <Select
+                    value={project || "none"}
                     disabled={projects.isLoading || projects.isError}
-                    onChange={(event) => setProject(event.target.value)}
+                    onValueChange={(value) =>
+                      setProject(value === "none" ? "" : (value ?? ""))
+                    }
                   >
-                    <option value="">
-                      {projects.isLoading ? "Loading projects…" : "No project"}
-                    </option>
-                    {projects.data?.data.map((item) => (
-                      <option key={item.uuid} value={item.uuid}>
-                        {item.name}
-                      </option>
-                    ))}
-                  </select>
+                    <SelectTrigger id="resource-project" className="w-full">
+                      <SelectValue
+                        placeholder={
+                          projects.isLoading
+                            ? "Loading projects…"
+                            : "No project"
+                        }
+                      />
+                    </SelectTrigger>
+                    <SelectContent align="start">
+                      <SelectItem value="none">No project</SelectItem>
+                      {projects.data?.data.map((item) => (
+                        <SelectItem key={item.uuid} value={item.uuid}>
+                          {item.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                   {projects.isError && (
                     <Button
                       type="button"
@@ -710,22 +732,29 @@ export function ResourceFormDialog({ onClose }: { onClose: () => void }) {
                   >
                     Area (optional)
                   </label>
-                  <select
-                    id="resource-area"
-                    className={selectClass}
-                    value={area}
+                  <Select
+                    value={area || "none"}
                     disabled={areas.isLoading || areas.isError}
-                    onChange={(event) => setArea(event.target.value)}
+                    onValueChange={(value) =>
+                      setArea(value === "none" ? "" : (value ?? ""))
+                    }
                   >
-                    <option value="">
-                      {areas.isLoading ? "Loading areas…" : "No area"}
-                    </option>
-                    {areas.data?.data.map((item) => (
-                      <option key={item.uuid} value={item.uuid}>
-                        {item.name}
-                      </option>
-                    ))}
-                  </select>
+                    <SelectTrigger id="resource-area" className="w-full">
+                      <SelectValue
+                        placeholder={
+                          areas.isLoading ? "Loading areas…" : "No area"
+                        }
+                      />
+                    </SelectTrigger>
+                    <SelectContent align="start">
+                      <SelectItem value="none">No area</SelectItem>
+                      {areas.data?.data.map((item) => (
+                        <SelectItem key={item.uuid} value={item.uuid}>
+                          {item.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                   {areas.isError && (
                     <Button
                       type="button"

@@ -20,6 +20,13 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Accordion,
   AccordionContent,
   AccordionHeader,
@@ -220,6 +227,7 @@ export function ResourceDetailDialog({
   resource: Resource;
   onClose: () => void;
 }) {
+  const [open, setOpen] = useState(false);
   const editable = resource.archived_at === null;
   const [current, setCurrent] = useState(resource);
   const [title, setTitle] = useState(resource.title);
@@ -295,6 +303,11 @@ export function ResourceDetailDialog({
   const signature = JSON.stringify(draft);
 
   useEffect(() => {
+    const frame = window.requestAnimationFrame(() => setOpen(true));
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
+
+  useEffect(() => {
     if (!lastSaved.current) {
       lastSaved.current = signature;
       return;
@@ -339,7 +352,7 @@ export function ResourceDetailDialog({
     ) {
       return;
     }
-    onClose();
+    setOpen(false);
   }
 
   async function addLink() {
@@ -420,11 +433,12 @@ export function ResourceDetailDialog({
   const images = current.attachments.filter((item) => item.kind === "image");
   const files = current.attachments.filter((item) => item.kind === "file");
   const links = current.attachments.filter((item) => item.kind === "link");
-  const selectClass =
-    "h-9 w-full rounded-lg border bg-background px-3 text-sm";
-
   return (
-    <Dialog open onOpenChange={(open) => !open && close()}>
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => !nextOpen && close()}
+      onOpenChangeComplete={(nextOpen) => !nextOpen && onClose()}
+    >
       <DialogContent className="max-h-[92vh] max-w-4xl overflow-y-auto p-0">
         <DialogHeader className="sticky top-0 z-20 border-b bg-background/95 px-6 py-5 backdrop-blur">
           <div className="flex items-start gap-3 pr-8">
@@ -608,30 +622,52 @@ export function ResourceDetailDialog({
                 </p>
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
-                <select
-                  className={selectClass}
-                  value={project}
-                  onChange={(event) => setProject(event.target.value)}
+                <Select
+                  value={project || "none"}
+                  disabled={projects.isLoading || projects.isError}
+                  onValueChange={(value) =>
+                    setProject(value === "none" ? "" : (value ?? ""))
+                  }
                 >
-                  <option value="">No project</option>
-                  {projects.data?.data.map((item) => (
-                    <option key={item.uuid} value={item.uuid}>
-                      {item.name}
-                    </option>
-                  ))}
-                </select>
-                <select
-                  className={selectClass}
-                  value={area}
-                  onChange={(event) => setArea(event.target.value)}
+                  <SelectTrigger className="w-full" aria-label="Project">
+                    <SelectValue
+                      placeholder={
+                        projects.isLoading ? "Loading projects…" : "No project"
+                      }
+                    />
+                  </SelectTrigger>
+                  <SelectContent align="start">
+                    <SelectItem value="none">No project</SelectItem>
+                    {projects.data?.data.map((item) => (
+                      <SelectItem key={item.uuid} value={item.uuid}>
+                        {item.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Select
+                  value={area || "none"}
+                  disabled={areas.isLoading || areas.isError}
+                  onValueChange={(value) =>
+                    setArea(value === "none" ? "" : (value ?? ""))
+                  }
                 >
-                  <option value="">No area</option>
-                  {areas.data?.data.map((item) => (
-                    <option key={item.uuid} value={item.uuid}>
-                      {item.name}
-                    </option>
-                  ))}
-                </select>
+                  <SelectTrigger className="w-full" aria-label="Area">
+                    <SelectValue
+                      placeholder={
+                        areas.isLoading ? "Loading areas…" : "No area"
+                      }
+                    />
+                  </SelectTrigger>
+                  <SelectContent align="start">
+                    <SelectItem value="none">No area</SelectItem>
+                    {areas.data?.data.map((item) => (
+                      <SelectItem key={item.uuid} value={item.uuid}>
+                        {item.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <div className="flex gap-2">
                 <Input
