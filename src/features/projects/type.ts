@@ -1,3 +1,5 @@
+import type { Resource } from "@/features/resources/type";
+
 export type ProjectStatus = "not_started" | "in_progress" | "completed";
 export type ProjectArchiveFilter = "active" | "archived" | "all";
 
@@ -125,7 +127,10 @@ export type Board = BoardSummary & {
   labels: BoardLabel[];
 };
 
-export type ProjectDetail = ProjectListCard & { boards: BoardSummary[] };
+export type ProjectDetail = ProjectListCard & {
+  boards: BoardSummary[];
+  resources: Resource[];
+};
 
 export type BoardTaskInput = {
   title: string;

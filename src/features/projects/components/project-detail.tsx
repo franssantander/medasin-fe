@@ -23,6 +23,8 @@ import {
 } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ResourceDetailDialog } from "@/features/resources/components/resource-detail-dialog";
+import type { Resource } from "@/features/resources/type";
 import {
   projectStatusBadgeClassNames,
   projectStatusLabels,
@@ -31,6 +33,7 @@ import { useProjectMutation, useProjectQuery } from "../queries/project-query";
 import { ProjectIcon, projectBadgeStyle } from "./project-icons";
 import { ProjectGoalsDialog } from "./project-goals-dialog";
 import { ProjectKanban } from "./project-kanban";
+import { ProjectResourceRow } from "./project-resource-row";
 
 function formatDate(value: string) {
   return new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(
@@ -51,6 +54,7 @@ export function ProjectDetail({
   const uuid = projectUuid ?? params.uuid ?? "";
   const router = useRouter();
   const [goalsOpen, setGoalsOpen] = useState(false);
+  const [selectedResource, setSelectedResource] = useState<Resource>();
   const projectQuery = useProjectQuery(uuid);
   const restore = useProjectMutation("restore", uuid);
   const project = projectQuery.data?.data;
@@ -224,6 +228,19 @@ export function ProjectDetail({
               </span>
             </div>
           )}
+          <section className="grid min-w-0 gap-3 border-t pt-4">
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="font-semibold">Resources</h2>
+              <span className="text-xs text-muted-foreground">
+                {project.resources.length}{" "}
+                {project.resources.length === 1 ? "resource" : "resources"}
+              </span>
+            </div>
+            <ProjectResourceRow
+              resources={project.resources}
+              onOpen={setSelectedResource}
+            />
+          </section>
         </CardContent>
       </Card>
       <ProjectKanban
@@ -239,6 +256,12 @@ export function ProjectDetail({
           areaName={project.area.name}
           projectName={project.name}
           archived={archived}
+        />
+      )}
+      {selectedResource && (
+        <ResourceDetailDialog
+          resource={selectedResource}
+          onClose={() => setSelectedResource(undefined)}
         />
       )}
     </div>
