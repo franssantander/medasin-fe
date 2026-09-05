@@ -1,19 +1,35 @@
 import type { ReactNode } from "react";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { SettingsNavigation } from "@/features/settings/components/settings-navigation";
 
 export default function SettingsLayout({ children }: { children: ReactNode }) {
   return (
-    <div className="mx-auto grid w-full max-w-6xl gap-6">
-      <header>
-        <p className="mb-1 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-          Workspace settings
-        </p>
-        <h1 className="text-2xl font-bold tracking-tight">Settings</h1>
-      </header>
-      <div className="grid gap-5 md:grid-cols-[12rem_minmax(0,1fr)] md:gap-8">
-        <SettingsNavigation />
-        <main className="min-w-0">{children}</main>
-      </div>
+    <div className="grid w-full items-start gap-6 md:grid-cols-[15rem_minmax(0,1fr)] lg:grid-cols-[16rem_minmax(0,1fr)]">
+      <aside
+        className="min-w-0 md:sticky"
+        aria-label="Settings sidebar"
+      >
+        <Card className="gap-0 py-0">
+          <CardHeader className="border-b p-5 sm:p-6">
+            <CardDescription className="text-xs font-semibold uppercase tracking-widest">
+              Workspace settings
+            </CardDescription>
+            <CardTitle className="text-xl font-bold tracking-tight">
+              Settings
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-2 sm:p-3">
+            <SettingsNavigation />
+          </CardContent>
+        </Card>
+      </aside>
+      <main className="grid min-w-0 content-start">{children}</main>
     </div>
   );
 }

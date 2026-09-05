@@ -18,32 +18,30 @@ export function SettingsNavigation() {
   const pathname = usePathname();
 
   return (
-    <aside aria-label="Settings navigation">
-      <p className="mb-2 hidden px-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground md:block">
-        Settings
-      </p>
-      <nav className="grid grid-cols-2 gap-1 rounded-xl border bg-card p-1 md:grid-cols-1 md:border-0 md:bg-transparent md:p-0">
-        {settingsItems.map((item) => {
-          const active = pathname === item.href;
-          const Icon = item.icon;
+    <nav
+      className="grid w-full grid-cols-2 gap-1 md:grid-cols-1"
+      aria-label="Settings navigation"
+    >
+      {settingsItems.map((item) => {
+        const active = pathname === item.href;
+        const Icon = item.icon;
 
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              aria-current={active ? "page" : undefined}
-              className={cn(
-                "flex h-10 items-center justify-center gap-2.5 rounded-lg px-3 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground md:justify-start",
-                active &&
-                  "border bg-background font-semibold text-foreground shadow-xs hover:bg-background",
-              )}
-            >
-              <Icon className="size-4" />
-              {item.label}
-            </Link>
-          );
-        })}
-      </nav>
-    </aside>
+        return (
+          <Link
+            key={item.href}
+            href={item.href}
+            aria-current={active ? "page" : undefined}
+            className={cn(
+              "flex h-10 items-center justify-center gap-2.5 rounded-lg px-3 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 md:justify-start",
+              active &&
+                "bg-muted font-semibold text-foreground hover:bg-muted",
+            )}
+          >
+            <Icon className="size-4" />
+            {item.label}
+          </Link>
+        );
+      })}
+    </nav>
   );
 }
