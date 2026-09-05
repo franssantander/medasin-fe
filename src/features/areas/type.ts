@@ -1,3 +1,5 @@
+import type { ProjectStatus } from "@/features/projects/type";
+
 export type ApiResponse<T> = {
   data: T;
   status: number;
@@ -137,7 +139,7 @@ export type Project = {
   uuid: string;
   name: string;
   description: string | null;
-  status: string;
+  status: ProjectStatus;
   area_id: number | null;
   area?: Pick<Area, "id" | "uuid" | "name"> | null;
 };

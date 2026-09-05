@@ -1,7 +1,16 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ExternalLink, FolderKanban, Link2, Unlink } from "lucide-react";
+import {
+  Check,
+  ExternalLink,
+  FolderKanban,
+  Link2,
+  LoaderCircle,
+  Search,
+  TriangleAlert,
+  Unlink,
+} from "lucide-react";
 import Link from "next/link";
 import { useState, type ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
@@ -15,6 +24,15 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -23,8 +41,14 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "@/components/ui/toast";
-import { areaService } from "../services/area-service";
+import {
+  projectStatusBadgeClassNames,
+  projectStatusLabels,
+} from "@/features/projects/project-status";
+import { projectKeys } from "@/features/projects/queries/project-query";
 import { useResourcesQuery } from "@/features/resources/queries/resource-query";
+import { areaKeys } from "../queries/area-query";
+import { areaService } from "../services/area-service";
 import type {
   ApiResponse,
   Goal,
@@ -188,6 +212,7 @@ function RecordCard({
   projectDetailBasePath: string;
   onChanged: (message: string) => Promise<void>;
 }) {
+  const [detachConfirmationOpen, setDetachConfirmationOpen] = useState(false);
   const queryClient = useQueryClient();
   const detach = useMutation({
     mutationFn: () =>
@@ -195,15 +220,20 @@ function RecordCard({
         ? areaService.detachProject(areaUuid, record.uuid)
         : areaService.detachResource(areaUuid, record.uuid),
     onSuccess: async (response) => {
-      await queryClient.invalidateQueries({
-        queryKey: ["areas", "detail", areaUuid],
-      });
+      setDetachConfirmationOpen(false);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: areaKeys.all }),
+        queryClient.invalidateQueries({ queryKey: projectKeys.all }),
+      ]);
       await onChanged(response.message);
     },
     onError: (error) =>
       toast.add({ type: "error", description: error.message }),
   });
-  const { title, description, badge } = getRecordDisplay(tab, record);
+  const { title, description, badge, badgeClassName } = getRecordDisplay(
+    tab,
+    record,
+  );
   const isProject = tab === "projects";
 
   return (
@@ -234,7 +264,10 @@ function RecordCard({
         <CardDescription>{description}</CardDescription>
         {badge && (
           <CardAction>
-            <Badge variant="secondary" className="capitalize">
+            <Badge
+              variant="secondary"
+              className={badgeClassName ?? "capitalize"}
+            >
               {badge}
             </Badge>
           </CardAction>
@@ -247,7 +280,9 @@ function RecordCard({
             size="sm"
             className="pointer-events-auto"
             disabled={detach.isPending}
-            onClick={() => detach.mutate()}
+            onClick={() =>
+              isProject ? setDetachConfirmationOpen(true) : detach.mutate()
+            }
           >
             <Unlink />
             Detach
@@ -272,6 +307,47 @@ function RecordCard({
           )}
         </CardContent>
       )}
+      {isProject && (
+        <Dialog
+          open={detachConfirmationOpen}
+          onOpenChange={(open) => {
+            if (!detach.isPending) setDetachConfirmationOpen(open);
+          }}
+        >
+          <DialogContent className="w-full max-w-md overflow-x-hidden">
+            <DialogHeader>
+              <DialogTitle>Detach project?</DialogTitle>
+              <DialogDescription>
+                “{title}” will be removed from this area and moved to Inbox. The
+                project and its contents will not be deleted.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={detach.isPending}
+                onClick={() => setDetachConfirmationOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                variant="destructive"
+                disabled={detach.isPending}
+                onClick={() => detach.mutate()}
+              >
+                {detach.isPending ? (
+                  <LoaderCircle className="animate-spin" />
+                ) : (
+                  <Unlink />
+                )}
+                {detach.isPending ? "Detaching…" : "Detach project"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
     </Card>
   );
 }
@@ -287,44 +363,291 @@ function LinkPicker({
   linked: AreaRecord[];
   onChanged: (message: string) => Promise<void>;
 }) {
-  const [selected, setSelected] = useState("");
+  if (kind === "projects") {
+    return (
+      <ProjectLinkDialog
+        areaUuid={areaUuid}
+        linked={linked as Project[]}
+        onChanged={onChanged}
+      />
+    );
+  }
+
+  return (
+    <ResourceLinkPicker
+      areaUuid={areaUuid}
+      linked={linked}
+      onChanged={onChanged}
+    />
+  );
+}
+
+function ProjectLinkDialog({
+  areaUuid,
+  linked,
+  onChanged,
+}: {
+  areaUuid: string;
+  linked: Project[];
+  onChanged: (message: string) => Promise<void>;
+}) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const [selectedUuids, setSelectedUuids] = useState<string[]>([]);
+  const queryClient = useQueryClient();
   const projectsQuery = useQuery({
     queryKey: ["projects", "available"],
     queryFn: () => areaService.allProjects(),
-    enabled: kind === "projects",
+    enabled: open,
   });
-  const resourcesQuery = useResourcesQuery({}, kind === "resources");
-  const query = kind === "projects" ? projectsQuery : resourcesQuery;
-  const available: (Project | Resource)[] =
-    kind === "projects"
-      ? (projectsQuery.data?.data ?? [])
-      : [
-          ...new Map(
-            resourcesQuery.data?.pages
-              .flatMap((page) => page.data.data)
-              .map((resource) => [resource.uuid, resource]),
-          ).values(),
-        ];
+  const linkedIds = new Set(linked.map((project) => project.uuid));
+  const options = (projectsQuery.data?.data ?? []).filter(
+    (project) =>
+      !linkedIds.has(project.uuid) && project.area?.uuid !== areaUuid,
+  );
+  const normalizedSearch = search.trim().toLocaleLowerCase();
+  const filteredOptions = options.filter((project) =>
+    [project.name, project.description, project.area?.name]
+      .filter(Boolean)
+      .some((value) => value!.toLocaleLowerCase().includes(normalizedSearch)),
+  );
+  const selectedProjects = options.filter((project) =>
+    selectedUuids.includes(project.uuid),
+  );
+  const movingProjects = selectedProjects.filter((project) => project.area);
+  const linkProjects = useMutation({
+    mutationFn: async (projectUuids: string[]) => {
+      const results = await Promise.allSettled(
+        projectUuids.map((projectUuid) =>
+          areaService.linkProject(areaUuid, projectUuid),
+        ),
+      );
+      return {
+        succeeded: projectUuids.filter(
+          (_, index) => results[index].status === "fulfilled",
+        ),
+        failed: projectUuids.filter(
+          (_, index) => results[index].status === "rejected",
+        ),
+      };
+    },
+    onSuccess: async ({ succeeded, failed }) => {
+      if (succeeded.length > 0) {
+        await Promise.all([
+          queryClient.invalidateQueries({ queryKey: areaKeys.all }),
+          queryClient.invalidateQueries({ queryKey: projectKeys.all }),
+        ]);
+        await onChanged(
+          `${succeeded.length} ${succeeded.length === 1 ? "project" : "projects"} linked successfully.`,
+        );
+      }
+      if (failed.length > 0) {
+        setSelectedUuids(failed);
+        toast.add({
+          type: "error",
+          description: `${failed.length} ${failed.length === 1 ? "project could" : "projects could"} not be linked. Review your selection and try again.`,
+        });
+        return;
+      }
+      setSelectedUuids([]);
+      setSearch("");
+      setOpen(false);
+    },
+  });
+
+  const toggleProject = (projectUuid: string) => {
+    setSelectedUuids((current) =>
+      current.includes(projectUuid)
+        ? current.filter((uuid) => uuid !== projectUuid)
+        : [...current, projectUuid],
+    );
+  };
+  const closeDialog = () => {
+    setOpen(false);
+    setSearch("");
+    setSelectedUuids([]);
+  };
+
+  return (
+    <>
+      <Button type="button" size="sm" onClick={() => setOpen(true)}>
+        <Link2 />
+        Link projects
+      </Button>
+      <Dialog
+        open={open}
+        onOpenChange={(nextOpen) => {
+          if (linkProjects.isPending) return;
+          setOpen(nextOpen);
+          if (!nextOpen) {
+            setSearch("");
+            setSelectedUuids([]);
+          }
+        }}
+      >
+        <DialogContent className="w-full max-w-2xl overflow-x-hidden">
+          <DialogHeader>
+            <DialogTitle>Link projects</DialogTitle>
+            <DialogDescription>
+              Select one or multiple projects to connect to this area.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={search}
+              className="pl-9"
+              placeholder="Search projects…"
+              aria-label="Search available projects"
+              disabled={linkProjects.isPending}
+              onChange={(event) => setSearch(event.target.value)}
+            />
+          </div>
+
+          <div className="grid max-h-[50vh] min-h-48 gap-2 overflow-y-auto overflow-x-hidden pr-1">
+            {projectsQuery.isLoading ? (
+              <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
+                <LoaderCircle className="size-4 animate-spin" />
+                Loading projects…
+              </div>
+            ) : projectsQuery.isError ? (
+              <div className="grid content-center justify-items-center gap-3 text-center">
+                <p className="text-sm text-muted-foreground">
+                  Projects could not be loaded.
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => projectsQuery.refetch()}
+                >
+                  Try again
+                </Button>
+              </div>
+            ) : filteredOptions.length === 0 ? (
+              <p className="self-center text-center text-sm text-muted-foreground">
+                {options.length === 0
+                  ? "No projects are available to link."
+                  : "No projects match your search."}
+              </p>
+            ) : (
+              filteredOptions.map((project) => {
+                const selected = selectedUuids.includes(project.uuid);
+                return (
+                  <button
+                    key={project.uuid}
+                    type="button"
+                    aria-pressed={selected}
+                    disabled={linkProjects.isPending}
+                    className="flex min-w-0 items-center gap-3 rounded-xl border p-3 text-left transition-colors hover:bg-muted/50 aria-pressed:border-primary aria-pressed:bg-primary/5 disabled:pointer-events-none disabled:opacity-60"
+                    onClick={() => toggleProject(project.uuid)}
+                  >
+                    <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-muted text-muted-foreground">
+                      <FolderKanban className="size-5" />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-medium">
+                        {project.name}
+                      </span>
+                      <span className="block truncate text-xs text-muted-foreground">
+                        {project.area
+                          ? `Currently in ${project.area.name} · linking will move it`
+                          : project.description || "Currently in Inbox"}
+                      </span>
+                    </span>
+                    <Badge
+                      variant="outline"
+                      className={`hidden sm:inline-flex ${projectStatusBadgeClassNames[project.status]}`}
+                    >
+                      {projectStatusLabels[project.status]}
+                    </Badge>
+                    <span className="flex size-5 shrink-0 items-center justify-center rounded border border-input bg-background">
+                      {selected && <Check className="size-3.5" />}
+                    </span>
+                  </button>
+                );
+              })
+            )}
+          </div>
+
+          {movingProjects.length > 0 && (
+            <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-800 dark:text-amber-300">
+              <TriangleAlert className="mt-0.5 size-4 shrink-0" />
+              <span>
+                {movingProjects.length} selected{" "}
+                {movingProjects.length === 1 ? "project is" : "projects are"}{" "}
+                already linked to another area and will be moved here.
+              </span>
+            </div>
+          )}
+
+          <DialogFooter className="sm:items-center sm:justify-between">
+            <span className="text-sm text-muted-foreground">
+              {selectedUuids.length} selected
+            </span>
+            <div className="flex flex-col-reverse gap-2 sm:flex-row">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={linkProjects.isPending}
+                onClick={closeDialog}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                disabled={selectedUuids.length === 0 || linkProjects.isPending}
+                onClick={() => linkProjects.mutate(selectedUuids)}
+              >
+                {linkProjects.isPending ? (
+                  <LoaderCircle className="animate-spin" />
+                ) : (
+                  <Link2 />
+                )}
+                {linkProjects.isPending
+                  ? "Linking…"
+                  : `Link ${selectedUuids.length || "selected"}`}
+              </Button>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
+function ResourceLinkPicker({
+  areaUuid,
+  linked,
+  onChanged,
+}: {
+  areaUuid: string;
+  linked: AreaRecord[];
+  onChanged: (message: string) => Promise<void>;
+}) {
+  const [selected, setSelected] = useState("");
+  const resourcesQuery = useResourcesQuery();
+  const query = resourcesQuery;
+  const available: Resource[] = [
+    ...new Map(
+      resourcesQuery.data?.pages
+        .flatMap((page) => page.data.data)
+        .map((resource) => [resource.uuid, resource]),
+    ).values(),
+  ];
   const linkedIds = new Set(linked.map((item) => item.uuid));
   const options = available.filter((item) => !linkedIds.has(item.uuid));
   const selectedItem = options.find((item) => item.uuid === selected);
-  const selectedLabel = selectedItem
-    ? "name" in selectedItem
-      ? selectedItem.name
-      : selectedItem.title
-    : undefined;
+  const selectedLabel = selectedItem?.title;
   const selectPlaceholder = query.isLoading
-    ? `Loading ${kind}…`
+    ? "Loading resources…"
     : query.isError
-      ? `${kind === "projects" ? "Projects" : "Resources"} unavailable`
+      ? "Resources unavailable"
       : options.length === 0
-        ? `No ${kind} available`
-        : `Choose ${kind === "projects" ? "a project" : "a resource"}`;
-  const mutation = useMutation<ApiResponse<Project | Resource>>({
-    mutationFn: () =>
-      kind === "projects"
-        ? areaService.linkProject(areaUuid, selected)
-        : areaService.linkResource(areaUuid, selected),
+        ? "No resources available"
+        : "Choose a resource";
+  const mutation = useMutation<ApiResponse<Resource>>({
+    mutationFn: () => areaService.linkResource(areaUuid, selected),
     onSuccess: async (response) => {
       setSelected("");
       await onChanged(response.message);
@@ -342,32 +665,25 @@ function LinkPicker({
         <SelectTrigger
           size="sm"
           className="min-w-0 flex-1 bg-background"
-          aria-label={`Select ${kind === "projects" ? "a project" : "a resource"} to link`}
+          aria-label="Select a resource to link"
         >
-          {kind === "projects" && <FolderKanban />}
           <SelectValue placeholder={selectPlaceholder}>
             {selectedLabel}
           </SelectValue>
         </SelectTrigger>
         <SelectContent align="start">
           {options.map((item) => {
-            const label = "name" in item ? item.name : item.title;
             return (
               <SelectItem key={item.uuid} value={item.uuid}>
                 <span className="min-w-0">
-                  <span className="block truncate">{label}</span>
-                  {kind === "projects" && "area" in item && item.area && (
-                    <span className="block truncate text-xs text-muted-foreground">
-                      Move from {item.area.name}
-                    </span>
-                  )}
+                  <span className="block truncate">{item.title}</span>
                 </span>
               </SelectItem>
             );
           })}
         </SelectContent>
       </Select>
-      {kind === "resources" && resourcesQuery.hasNextPage && (
+      {resourcesQuery.hasNextPage && (
         <Button
           size="sm"
           variant="outline"
@@ -401,13 +717,19 @@ function LinkPicker({
 function getRecordDisplay(
   tab: AreaTab,
   record: AreaRecord,
-): { title: string; description: ReactNode; badge?: string } {
+): {
+  title: string;
+  description: ReactNode;
+  badge?: string;
+  badgeClassName?: string;
+} {
   if (tab === "projects") {
     const item = record as Project;
     return {
       title: item.name,
       description: item.description || "No description.",
-      badge: item.status,
+      badge: projectStatusLabels[item.status],
+      badgeClassName: projectStatusBadgeClassNames[item.status],
     };
   }
   if (tab === "resources") {
