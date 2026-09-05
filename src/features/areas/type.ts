@@ -148,6 +148,8 @@ export type Resource = {
   id: number;
   uuid: string;
   title: string;
+  icon: string | null;
+  background: string | null;
   type: string | null;
   description: string | null;
   url: string | null;

@@ -8,6 +8,8 @@ import {
   Link2,
   LoaderCircle,
   Search,
+  Target,
+  Trash2,
   TriangleAlert,
   Unlink,
 } from "lucide-react";
@@ -32,13 +34,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "@/components/ui/toast";
 import {
@@ -46,11 +41,19 @@ import {
   projectStatusLabels,
 } from "@/features/projects/project-status";
 import { projectKeys } from "@/features/projects/queries/project-query";
-import { useResourcesQuery } from "@/features/resources/queries/resource-query";
+import { ResourceDetailDialog } from "@/features/resources/components/resource-detail-dialog";
+import {
+  ResourceIcon,
+  resourceBadgeStyle,
+} from "@/features/resources/components/resource-icons";
+import {
+  useResourceQuery,
+  useResourcesQuery,
+} from "@/features/resources/queries/resource-query";
+import type { Resource as ResourceDetail } from "@/features/resources/type";
 import { areaKeys } from "../queries/area-query";
 import { areaService } from "../services/area-service";
 import type {
-  ApiResponse,
   Goal,
   GoalFilter,
   Habit,
@@ -102,9 +105,14 @@ export function AreaSectionContent({
   onGoalFilterChange: (filter: GoalFilter) => void;
   onAdd: (kind: EditableAreaRecordKind) => void;
   onEdit: (kind: EditableAreaRecordKind, value: EditableAreaRecord) => void;
-  onDelete: (kind: EditableAreaRecordKind, uuid: string) => void;
+  onDelete: (kind: EditableAreaRecordKind, uuid: string) => Promise<void>;
   onChanged: (message: string) => Promise<void>;
 }) {
+  const [selectedResourceUuid, setSelectedResourceUuid] = useState<string>();
+  const [habitToDelete, setHabitToDelete] = useState<Habit>();
+  const [habitDeletePending, setHabitDeletePending] = useState(false);
+  const selectedResourceQuery = useResourceQuery(selectedResourceUuid);
+
   if (loading) return <Skeleton className="h-64 rounded-xl" />;
   if (error)
     return (
@@ -138,17 +146,71 @@ export function AreaSectionContent({
 
   if (tab === "habits") {
     return (
-      <HabitTracker
-        habits={records as Habit[]}
-        pagination={data as Paginated<Habit> | undefined}
-        archived={archived}
-        areaUuid={areaUuid}
-        page={page}
-        setPage={setPage}
-        onAdd={() => onAdd("habit")}
-        onEdit={(habit) => onEdit("habit", habit)}
-        onDelete={(uuid) => onDelete("habit", uuid)}
-      />
+      <>
+        <HabitTracker
+          habits={records as Habit[]}
+          pagination={data as Paginated<Habit> | undefined}
+          archived={archived}
+          areaUuid={areaUuid}
+          page={page}
+          setPage={setPage}
+          onAdd={() => onAdd("habit")}
+          onEdit={(habit) => onEdit("habit", habit)}
+          onDelete={(uuid) =>
+            setHabitToDelete(
+              (records as Habit[]).find((habit) => habit.uuid === uuid),
+            )
+          }
+        />
+        <Dialog
+          open={Boolean(habitToDelete)}
+          onOpenChange={(open) => {
+            if (!open && !habitDeletePending) setHabitToDelete(undefined);
+          }}
+        >
+          <DialogContent className="w-full max-w-md overflow-x-hidden">
+            <DialogHeader>
+              <DialogTitle>Delete habit?</DialogTitle>
+              <DialogDescription>
+                “{habitToDelete?.name}” and its check-in history will be
+                permanently deleted. This action cannot be undone.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={habitDeletePending}
+                onClick={() => setHabitToDelete(undefined)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                variant="destructive"
+                disabled={habitDeletePending}
+                onClick={async () => {
+                  if (!habitToDelete) return;
+                  setHabitDeletePending(true);
+                  try {
+                    await onDelete("habit", habitToDelete.uuid);
+                    setHabitToDelete(undefined);
+                  } finally {
+                    setHabitDeletePending(false);
+                  }
+                }}
+              >
+                {habitDeletePending ? (
+                  <LoaderCircle className="animate-spin" />
+                ) : (
+                  <Trash2 />
+                )}
+                {habitDeletePending ? "Deleting…" : "Delete habit"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </>
     );
   }
 
@@ -185,6 +247,7 @@ export function AreaSectionContent({
               archived={archived}
               areaUuid={areaUuid}
               projectDetailBasePath={projectDetailBasePath}
+              onOpenResource={setSelectedResourceUuid}
               onChanged={onChanged}
             />
           ))}
@@ -192,6 +255,53 @@ export function AreaSectionContent({
       )}
       {data && data.last_page > 1 && (
         <Pagination page={page} lastPage={data.last_page} setPage={setPage} />
+      )}
+      {selectedResourceQuery.data?.data && (
+        <ResourceDetailDialog
+          resource={selectedResourceQuery.data.data}
+          onClose={() => setSelectedResourceUuid(undefined)}
+        />
+      )}
+      {selectedResourceUuid && !selectedResourceQuery.data?.data && (
+        <Dialog
+          open
+          onOpenChange={(open) => {
+            if (!open) setSelectedResourceUuid(undefined);
+          }}
+        >
+          <DialogContent className="w-full max-w-md overflow-x-hidden">
+            {selectedResourceQuery.isError ? (
+              <>
+                <DialogHeader>
+                  <DialogTitle>Resource could not be loaded</DialogTitle>
+                  <DialogDescription>
+                    Check your connection and try opening the resource again.
+                  </DialogDescription>
+                </DialogHeader>
+                <DialogFooter>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setSelectedResourceUuid(undefined)}
+                  >
+                    Close
+                  </Button>
+                  <Button
+                    type="button"
+                    onClick={() => selectedResourceQuery.refetch()}
+                  >
+                    Try again
+                  </Button>
+                </DialogFooter>
+              </>
+            ) : (
+              <div className="flex min-h-40 items-center justify-center gap-2 text-sm text-muted-foreground">
+                <LoaderCircle className="size-4 animate-spin" />
+                Loading resource…
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
       )}
     </div>
   );
@@ -203,6 +313,7 @@ function RecordCard({
   archived,
   areaUuid,
   projectDetailBasePath,
+  onOpenResource,
   onChanged,
 }: {
   tab: AreaTab;
@@ -210,6 +321,7 @@ function RecordCard({
   archived: boolean;
   areaUuid: string;
   projectDetailBasePath: string;
+  onOpenResource: (resourceUuid: string) => void;
   onChanged: (message: string) => Promise<void>;
 }) {
   const [detachConfirmationOpen, setDetachConfirmationOpen] = useState(false);
@@ -235,12 +347,15 @@ function RecordCard({
     record,
   );
   const isProject = tab === "projects";
+  const isResource = tab === "resources";
+  const interactive = isProject || isResource;
+  const resource = isResource ? (record as Resource) : undefined;
 
   return (
     <Card
       size="sm"
       className={
-        isProject
+        interactive
           ? "relative gap-0 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md"
           : undefined
       }
@@ -252,11 +367,28 @@ function RecordCard({
           aria-label={`Open ${String(title)}`}
         />
       )}
-      <CardHeader className={isProject ? "pointer-events-none" : undefined}>
+      {isResource && (
+        <button
+          type="button"
+          className="absolute inset-0 z-0 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+          aria-label={`Open ${String(title)}`}
+          aria-haspopup="dialog"
+          onClick={() => onOpenResource(record.uuid)}
+        />
+      )}
+      <CardHeader className={interactive ? "pointer-events-none" : undefined}>
         <CardTitle className="flex min-w-0 items-center gap-2">
           {isProject && (
             <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
               <FolderKanban className="size-4" />
+            </span>
+          )}
+          {resource && (
+            <span
+              className="flex size-8 shrink-0 items-center justify-center rounded-lg shadow-sm"
+              style={resourceBadgeStyle(resource.background)}
+            >
+              <ResourceIcon name={resource.icon} className="size-4" />
             </span>
           )}
           <span className="truncate">{title}</span>
@@ -543,7 +675,7 @@ function ProjectLinkDialog({
                     onClick={() => toggleProject(project.uuid)}
                   >
                     <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-muted text-muted-foreground">
-                      <FolderKanban className="size-5" />
+                      <Target className="size-5" />
                     </span>
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-sm font-medium">
@@ -625,10 +757,12 @@ function ResourceLinkPicker({
   linked: AreaRecord[];
   onChanged: (message: string) => Promise<void>;
 }) {
-  const [selected, setSelected] = useState("");
-  const resourcesQuery = useResourcesQuery();
-  const query = resourcesQuery;
-  const available: Resource[] = [
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const [selectedUuids, setSelectedUuids] = useState<string[]>([]);
+  const queryClient = useQueryClient();
+  const resourcesQuery = useResourcesQuery({}, open);
+  const available: ResourceDetail[] = [
     ...new Map(
       resourcesQuery.data?.pages
         .flatMap((page) => page.data.data)
@@ -637,80 +771,246 @@ function ResourceLinkPicker({
   ];
   const linkedIds = new Set(linked.map((item) => item.uuid));
   const options = available.filter((item) => !linkedIds.has(item.uuid));
-  const selectedItem = options.find((item) => item.uuid === selected);
-  const selectedLabel = selectedItem?.title;
-  const selectPlaceholder = query.isLoading
-    ? "Loading resources…"
-    : query.isError
-      ? "Resources unavailable"
-      : options.length === 0
-        ? "No resources available"
-        : "Choose a resource";
-  const mutation = useMutation<ApiResponse<Resource>>({
-    mutationFn: () => areaService.linkResource(areaUuid, selected),
-    onSuccess: async (response) => {
-      setSelected("");
-      await onChanged(response.message);
+  const normalizedSearch = search.trim().toLocaleLowerCase();
+  const filteredOptions = options.filter((resource) =>
+    [
+      resource.title,
+      resource.description,
+      resource.author,
+      resource.source,
+      ...resource.types,
+      ...resource.tags.map((tag) => tag.name),
+    ]
+      .filter(Boolean)
+      .some((value) => value!.toLocaleLowerCase().includes(normalizedSearch)),
+  );
+  const linkResources = useMutation({
+    mutationFn: async (resourceUuids: string[]) => {
+      const results = await Promise.allSettled(
+        resourceUuids.map((resourceUuid) =>
+          areaService.linkResource(areaUuid, resourceUuid),
+        ),
+      );
+      return {
+        succeeded: resourceUuids.filter(
+          (_, index) => results[index].status === "fulfilled",
+        ),
+        failed: resourceUuids.filter(
+          (_, index) => results[index].status === "rejected",
+        ),
+      };
     },
-    onError: (error) =>
-      toast.add({ type: "error", description: error.message }),
+    onSuccess: async ({ succeeded, failed }) => {
+      if (succeeded.length > 0) {
+        await Promise.all([
+          queryClient.invalidateQueries({ queryKey: areaKeys.all }),
+          queryClient.invalidateQueries({ queryKey: ["resources"] }),
+          queryClient.invalidateQueries({ queryKey: projectKeys.all }),
+        ]);
+        await onChanged(
+          `${succeeded.length} ${succeeded.length === 1 ? "resource" : "resources"} linked successfully.`,
+        );
+      }
+      if (failed.length > 0) {
+        setSelectedUuids(failed);
+        toast.add({
+          type: "error",
+          description: `${failed.length} ${failed.length === 1 ? "resource could" : "resources could"} not be linked. Review your selection and try again.`,
+        });
+        return;
+      }
+      setSelectedUuids([]);
+      setSearch("");
+      setOpen(false);
+    },
   });
+
+  const toggleResource = (resourceUuid: string) => {
+    setSelectedUuids((current) =>
+      current.includes(resourceUuid)
+        ? current.filter((uuid) => uuid !== resourceUuid)
+        : [...current, resourceUuid],
+    );
+  };
+  const closeDialog = () => {
+    setOpen(false);
+    setSearch("");
+    setSelectedUuids([]);
+  };
+
   return (
-    <div className="flex w-full gap-2 sm:max-w-md sm:flex-1 sm:justify-end">
-      <Select
-        value={selected}
-        onValueChange={(value) => setSelected(value ?? "")}
-        disabled={query.isLoading || options.length === 0}
-      >
-        <SelectTrigger
-          size="sm"
-          className="min-w-0 flex-1 bg-background"
-          aria-label="Select a resource to link"
-        >
-          <SelectValue placeholder={selectPlaceholder}>
-            {selectedLabel}
-          </SelectValue>
-        </SelectTrigger>
-        <SelectContent align="start">
-          {options.map((item) => {
-            return (
-              <SelectItem key={item.uuid} value={item.uuid}>
-                <span className="min-w-0">
-                  <span className="block truncate">{item.title}</span>
-                </span>
-              </SelectItem>
-            );
-          })}
-        </SelectContent>
-      </Select>
-      {resourcesQuery.hasNextPage && (
-        <Button
-          size="sm"
-          variant="outline"
-          disabled={resourcesQuery.isFetchingNextPage}
-          onClick={() => resourcesQuery.fetchNextPage()}
-        >
-          {resourcesQuery.isFetchingNextPage
-            ? "Loading…"
-            : resourcesQuery.isFetchNextPageError
-              ? "Retry more"
-              : "Load more"}
-        </Button>
-      )}
-      {query.isError && (
-        <Button size="sm" variant="outline" onClick={() => query.refetch()}>
-          Retry
-        </Button>
-      )}
-      <Button
-        size="sm"
-        disabled={!selected || mutation.isPending}
-        onClick={() => mutation.mutate()}
-      >
+    <>
+      <Button type="button" size="sm" onClick={() => setOpen(true)}>
         <Link2 />
-        {mutation.isPending ? "Linking…" : "Link"}
+        Link resources
       </Button>
-    </div>
+      <Dialog
+        open={open}
+        onOpenChange={(nextOpen) => {
+          if (linkResources.isPending) return;
+          setOpen(nextOpen);
+          if (!nextOpen) {
+            setSearch("");
+            setSelectedUuids([]);
+          }
+        }}
+      >
+        <DialogContent className="w-full max-w-2xl overflow-x-hidden">
+          <DialogHeader>
+            <DialogTitle>Link resources</DialogTitle>
+            <DialogDescription>
+              Select one or multiple resources to connect to this area.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={search}
+              className="pl-9"
+              placeholder="Search resources…"
+              aria-label="Search available resources"
+              disabled={linkResources.isPending}
+              onChange={(event) => setSearch(event.target.value)}
+            />
+          </div>
+
+          <div className="grid max-h-[50vh] min-h-48 gap-2 overflow-y-auto overflow-x-hidden pr-1">
+            {resourcesQuery.isLoading ? (
+              <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
+                <LoaderCircle className="size-4 animate-spin" />
+                Loading resources…
+              </div>
+            ) : resourcesQuery.isError ? (
+              <div className="grid content-center justify-items-center gap-3 text-center">
+                <p className="text-sm text-muted-foreground">
+                  Resources could not be loaded.
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => resourcesQuery.refetch()}
+                >
+                  Try again
+                </Button>
+              </div>
+            ) : filteredOptions.length === 0 ? (
+              <p className="self-center text-center text-sm text-muted-foreground">
+                {options.length === 0
+                  ? "No resources are available to link."
+                  : "No resources match your search."}
+              </p>
+            ) : (
+              filteredOptions.map((resource) => {
+                const selected = selectedUuids.includes(resource.uuid);
+                return (
+                  <button
+                    key={resource.uuid}
+                    type="button"
+                    aria-pressed={selected}
+                    disabled={linkResources.isPending}
+                    className="flex min-w-0 items-start gap-3 rounded-xl border p-3 text-left transition-colors hover:bg-muted/50 aria-pressed:border-primary aria-pressed:bg-primary/5 disabled:pointer-events-none disabled:opacity-60"
+                    onClick={() => toggleResource(resource.uuid)}
+                  >
+                    <span
+                      className="flex size-10 shrink-0 items-center justify-center rounded-xl shadow-sm"
+                      style={resourceBadgeStyle(resource.background)}
+                    >
+                      <ResourceIcon name={resource.icon} className="size-5" />
+                    </span>
+                    <span className="grid min-w-0 flex-1 gap-2">
+                      <span className="block truncate text-sm font-medium">
+                        {resource.title}
+                      </span>
+                      <span className="block truncate text-xs text-muted-foreground">
+                        {resource.author ||
+                          resource.source ||
+                          resource.description ||
+                          "No details."}
+                      </span>
+                      <span className="flex flex-wrap items-center gap-1.5">
+                        {resource.types.map((type) => (
+                          <Badge
+                            key={type}
+                            variant="secondary"
+                            className="capitalize"
+                          >
+                            {type}
+                          </Badge>
+                        ))}
+                        {resource.tags.map((tag) => (
+                          <Badge
+                            key={tag.uuid}
+                            variant="outline"
+                            className="border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-800 dark:bg-violet-950 dark:text-violet-300"
+                          >
+                            {tag.name}
+                          </Badge>
+                        ))}
+                        {resource.types.length === 0 &&
+                          resource.tags.length === 0 && (
+                            <span className="text-xs text-muted-foreground">
+                              No types or tags
+                            </span>
+                          )}
+                      </span>
+                    </span>
+                    <span className="mt-2 flex size-5 shrink-0 items-center justify-center rounded border border-input bg-background">
+                      {selected && <Check className="size-3.5" />}
+                    </span>
+                  </button>
+                );
+              })
+            )}
+          </div>
+
+          {resourcesQuery.hasNextPage && (
+            <Button
+              type="button"
+              variant="outline"
+              disabled={resourcesQuery.isFetchingNextPage}
+              onClick={() => resourcesQuery.fetchNextPage()}
+            >
+              {resourcesQuery.isFetchingNextPage
+                ? "Loading…"
+                : resourcesQuery.isFetchNextPageError
+                  ? "Retry loading more"
+                  : "Load more resources"}
+            </Button>
+          )}
+
+          <DialogFooter className="sm:items-center sm:justify-between">
+            <span className="text-sm text-muted-foreground">
+              {selectedUuids.length} selected
+            </span>
+            <div className="flex flex-col-reverse gap-2 sm:flex-row">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={linkResources.isPending}
+                onClick={closeDialog}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                disabled={selectedUuids.length === 0 || linkResources.isPending}
+                onClick={() => linkResources.mutate(selectedUuids)}
+              >
+                {linkResources.isPending ? (
+                  <LoaderCircle className="animate-spin" />
+                ) : (
+                  <Link2 />
+                )}
+                {linkResources.isPending
+                  ? "Linking…"
+                  : `Link ${selectedUuids.length || "selected"}`}
+              </Button>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 

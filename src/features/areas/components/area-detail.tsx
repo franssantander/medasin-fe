@@ -287,8 +287,10 @@ export function AreaDetail({
                 else setRecordForm({ kind, value: value as Habit });
               }}
               onDelete={(kind, recordUuid) => {
-                if (kind === "habit" && window.confirm("Delete this record?"))
-                  deleteRecord.mutate({ recordUuid });
+                if (kind !== "habit") return Promise.resolve();
+                return deleteRecord
+                  .mutateAsync({ recordUuid })
+                  .then(() => undefined);
               }}
               onChanged={invalidate}
             />
