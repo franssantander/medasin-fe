@@ -20,13 +20,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
   Accordion,
   AccordionContent,
   AccordionHeader,
@@ -61,6 +54,7 @@ import type {
   ResourceUpdateInput,
 } from "../type";
 import { ResourceEditor } from "./resource-editor";
+import { ResourceAssignmentSelect } from "./resource-assignment-select";
 import {
   RESOURCE_BADGE_COLORS,
   RESOURCE_ICONS,
@@ -242,8 +236,12 @@ export function ResourceDetailDialog({
     resource.tags.map((item) => item.uuid),
   );
   const [newTags, setNewTags] = useState<string[]>([]);
-  const [project, setProject] = useState(resource.projects[0]?.uuid || "");
-  const [area, setArea] = useState(resource.areas[0]?.uuid || "");
+  const [projectUuids, setProjectUuids] = useState(
+    resource.projects.map((item) => item.uuid),
+  );
+  const [areaUuids, setAreaUuids] = useState(
+    resource.areas.map((item) => item.uuid),
+  );
   const [link, setLink] = useState("");
   const [tag, setTag] = useState("");
   const [iconSearch, setIconSearch] = useState("");
@@ -268,14 +266,6 @@ export function ResourceDetailDialog({
     queryFn: () => areaService.list("active"),
     enabled: editable,
   });
-  const selectedProjectName = project
-    ? (projects.data?.data.find((item) => item.uuid === project)?.name ??
-      current.projects.find((item) => item.uuid === project)?.name)
-    : "No project";
-  const selectedAreaName = area
-    ? (areas.data?.data.find((item) => item.uuid === area)?.name ??
-      current.areas.find((item) => item.uuid === area)?.name)
-    : "No area";
   const icons = useMemo(() => {
     const search = iconSearch.trim().toLowerCase();
     return search
@@ -293,16 +283,16 @@ export function ResourceDetailDialog({
       content: toResourceDocument(content),
       tag_uuids: tagIds,
       tag_names: newTags,
-      project_uuid: project || null,
-      area_uuid: area || null,
+      project_uuids: projectUuids,
+      area_uuids: areaUuids,
     }),
     [
-      area,
+      areaUuids,
       background,
       content,
       icon,
       newTags,
-      project,
+      projectUuids,
       resource.uuid,
       tagIds,
       title,
@@ -339,6 +329,8 @@ export function ResourceDetailDialog({
         lastSaved.current = signature;
         setCurrent(response.data);
         setTagIds(response.data.tags.map((item) => item.uuid));
+        setProjectUuids(response.data.projects.map((item) => item.uuid));
+        setAreaUuids(response.data.areas.map((item) => item.uuid));
         setNewTags([]);
         setSaveState("saved");
       } catch (cause) {
@@ -447,9 +439,12 @@ export function ResourceDetailDialog({
       onOpenChange={(nextOpen) => !nextOpen && close()}
       onOpenChangeComplete={(nextOpen) => !nextOpen && onClose()}
     >
-      <DialogContent className="max-h-[92vh] `w-full max-w-4xl overflow-x-hidden` overflow-y-auto p-0">
+      <DialogContent
+        showCloseButton={false}
+        className="max-h-[92vh] w-[calc(100%-1rem)] max-w-6xl overflow-x-hidden overflow-y-auto p-0 sm:w-[calc(100%-2rem)]"
+      >
         <DialogHeader className="sticky top-0 z-20 border-b bg-background/95 px-6 py-5 backdrop-blur">
-          <div className="flex items-start gap-3 pr-8">
+          <div className="flex min-w-0 items-start gap-3">
             <div
               className="flex size-11 shrink-0 items-center justify-center rounded-xl shadow-sm"
               style={resourceBadgeStyle(background)}
@@ -497,6 +492,16 @@ export function ResourceDetailDialog({
                       : ""}
               </div>
             )}
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              className="shrink-0"
+              aria-label="Close resource details"
+              onClick={close}
+            >
+              <X />
+            </Button>
           </div>
         </DialogHeader>
 
@@ -630,56 +635,22 @@ export function ResourceDetailDialog({
                 </p>
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
-                <Select
-                  value={project || "none"}
+                <ResourceAssignmentSelect
+                  label="Project"
+                  items={projects.data?.data ?? current.projects}
+                  value={projectUuids}
+                  loading={projects.isLoading}
                   disabled={projects.isLoading || projects.isError}
-                  onValueChange={(value) =>
-                    setProject(value === "none" ? "" : (value ?? ""))
-                  }
-                >
-                  <SelectTrigger className="w-full" aria-label="Project">
-                    <SelectValue
-                      placeholder={
-                        projects.isLoading ? "Loading projects…" : "No project"
-                      }
-                    >
-                      {selectedProjectName}
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent align="start">
-                    <SelectItem value="none">No project</SelectItem>
-                    {projects.data?.data.map((item) => (
-                      <SelectItem key={item.uuid} value={item.uuid}>
-                        {item.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Select
-                  value={area || "none"}
+                  onValueChange={setProjectUuids}
+                />
+                <ResourceAssignmentSelect
+                  label="Area"
+                  items={areas.data?.data ?? current.areas}
+                  value={areaUuids}
+                  loading={areas.isLoading}
                   disabled={areas.isLoading || areas.isError}
-                  onValueChange={(value) =>
-                    setArea(value === "none" ? "" : (value ?? ""))
-                  }
-                >
-                  <SelectTrigger className="w-full" aria-label="Area">
-                    <SelectValue
-                      placeholder={
-                        areas.isLoading ? "Loading areas…" : "No area"
-                      }
-                    >
-                      {selectedAreaName}
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent align="start">
-                    <SelectItem value="none">No area</SelectItem>
-                    {areas.data?.data.map((item) => (
-                      <SelectItem key={item.uuid} value={item.uuid}>
-                        {item.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  onValueChange={setAreaUuids}
+                />
               </div>
               <div className="flex gap-2">
                 <Input

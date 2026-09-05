@@ -22,13 +22,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -47,6 +40,7 @@ import {
 import { resourceSchema } from "../schemas/resource-schema";
 import { safeResourceUrl, toResourceDocument } from "../resource-document";
 import { ResourceEditor } from "./resource-editor";
+import { ResourceAssignmentSelect } from "./resource-assignment-select";
 import {
   RESOURCE_BADGE_COLORS,
   RESOURCE_ICONS,
@@ -144,8 +138,8 @@ export function ResourceFormDialog({ onClose }: { onClose: () => void }) {
   const [tagNames, setTagNames] = useState<string[]>([]);
   const [tagIds, setTagIds] = useState<string[]>([]);
   const [tag, setTag] = useState("");
-  const [project, setProject] = useState("");
-  const [area, setArea] = useState("");
+  const [projectUuids, setProjectUuids] = useState<string[]>([]);
+  const [areaUuids, setAreaUuids] = useState<string[]>([]);
   const [errors, setErrors] = useState<string[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const previewUrl = useObjectUrl(previewImage);
@@ -158,12 +152,6 @@ export function ResourceFormDialog({ onClose }: { onClose: () => void }) {
     queryKey: ["areas", "list", "active"],
     queryFn: () => areaService.list("active"),
   });
-  const selectedProjectName = project
-    ? projects.data?.data.find((item) => item.uuid === project)?.name
-    : "No project";
-  const selectedAreaName = area
-    ? areas.data?.data.find((item) => item.uuid === area)?.name
-    : "No area";
   const create = useCreateResource();
   const filteredIcons = useMemo(() => {
     const query = iconSearch.trim().toLowerCase();
@@ -248,8 +236,8 @@ export function ResourceFormDialog({ onClose }: { onClose: () => void }) {
       files,
       tag_names: tagNames,
       tag_uuids: tagIds,
-      project_uuid: project || undefined,
-      area_uuid: area || undefined,
+      project_uuids: projectUuids,
+      area_uuids: areaUuids,
     });
     if (!parsed.success) {
       if (
@@ -696,33 +684,15 @@ export function ResourceFormDialog({ onClose }: { onClose: () => void }) {
                   >
                     Project (optional)
                   </label>
-                  <Select
-                    value={project || "none"}
+                  <ResourceAssignmentSelect
+                    id="resource-project"
+                    label="Project"
+                    items={projects.data?.data ?? []}
+                    value={projectUuids}
+                    loading={projects.isLoading}
                     disabled={projects.isLoading || projects.isError}
-                    onValueChange={(value) =>
-                      setProject(value === "none" ? "" : (value ?? ""))
-                    }
-                  >
-                    <SelectTrigger id="resource-project" className="w-full">
-                      <SelectValue
-                        placeholder={
-                          projects.isLoading
-                            ? "Loading projects…"
-                            : "No project"
-                        }
-                      >
-                        {selectedProjectName}
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent align="start">
-                      <SelectItem value="none">No project</SelectItem>
-                      {projects.data?.data.map((item) => (
-                        <SelectItem key={item.uuid} value={item.uuid}>
-                          {item.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    onValueChange={setProjectUuids}
+                  />
                   {projects.isError && (
                     <Button
                       type="button"
@@ -740,31 +710,15 @@ export function ResourceFormDialog({ onClose }: { onClose: () => void }) {
                   >
                     Area (optional)
                   </label>
-                  <Select
-                    value={area || "none"}
+                  <ResourceAssignmentSelect
+                    id="resource-area"
+                    label="Area"
+                    items={areas.data?.data ?? []}
+                    value={areaUuids}
+                    loading={areas.isLoading}
                     disabled={areas.isLoading || areas.isError}
-                    onValueChange={(value) =>
-                      setArea(value === "none" ? "" : (value ?? ""))
-                    }
-                  >
-                    <SelectTrigger id="resource-area" className="w-full">
-                      <SelectValue
-                        placeholder={
-                          areas.isLoading ? "Loading areas…" : "No area"
-                        }
-                      >
-                        {selectedAreaName}
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent align="start">
-                      <SelectItem value="none">No area</SelectItem>
-                      {areas.data?.data.map((item) => (
-                        <SelectItem key={item.uuid} value={item.uuid}>
-                          {item.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    onValueChange={setAreaUuids}
+                  />
                   {areas.isError && (
                     <Button
                       type="button"

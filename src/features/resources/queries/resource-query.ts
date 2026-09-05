@@ -22,6 +22,13 @@ export function useResourcesQuery(
     enabled,
   });
 }
+export function useResourceQuery(resourceUuid?: string) {
+  return useQuery({
+    queryKey: ["resources", "detail", resourceUuid],
+    queryFn: ({ signal }) => resourceService.show(resourceUuid!, signal),
+    enabled: Boolean(resourceUuid),
+  });
+}
 export function useResourceTagsQuery() {
   return useQuery({
     queryKey: ["resources", "tags"],

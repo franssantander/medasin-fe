@@ -22,6 +22,16 @@ export const resourceService = {
       })
     ).data;
   },
+  async show(
+    resourceUuid: string,
+    signal?: AbortSignal,
+  ): Promise<ApiResponse<Resource>> {
+    return (
+      await axiosClient.get<ApiResponse<Resource>>(`/resource/${resourceUuid}`, {
+        signal,
+      })
+    ).data;
+  },
   async tags(): Promise<ApiResponse<ResourceTag[]>> {
     return (await axiosClient.get<ApiResponse<ResourceTag[]>>("/resource/tags"))
       .data;
@@ -36,10 +46,13 @@ export const resourceService = {
       if (values.background) body.append("background", values.background);
       if (values.content)
         body.append("content", JSON.stringify(values.content));
-      for (const field of ["project_uuid", "area_uuid"] as const) {
-        if (values[field]) body.append(field, values[field]);
-      }
-      for (const field of ["links", "tag_names", "tag_uuids"] as const) {
+      for (const field of [
+        "links",
+        "tag_names",
+        "tag_uuids",
+        "project_uuids",
+        "area_uuids",
+      ] as const) {
         values[field].forEach((value) =>
           (body as FormData).append(`${field}[]`, value),
         );

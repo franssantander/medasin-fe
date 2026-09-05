@@ -50,8 +50,8 @@ export type ResourceInput = {
   files: File[];
   tag_names: string[];
   tag_uuids: string[];
-  project_uuid?: string;
-  area_uuid?: string;
+  project_uuids: string[];
+  area_uuids: string[];
 };
 export type ResourceUpdateInput = {
   resourceUuid: string;
@@ -61,6 +61,6 @@ export type ResourceUpdateInput = {
   content?: ResourceDocument | null;
   tag_names: string[];
   tag_uuids: string[];
-  project_uuid?: string | null;
-  area_uuid?: string | null;
+  project_uuids: string[];
+  area_uuids: string[];
 };

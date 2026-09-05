@@ -1,13 +1,17 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { useResourcesQuery } from "@/features/resources/queries/resource-query";
+import {
+  useResourceQuery,
+  useResourcesQuery,
+} from "@/features/resources/queries/resource-query";
 import {
   CalendarDays,
   Check,
   Clock3,
   FileText,
   Link2,
+  LoaderCircle,
   Plus,
   Trash2,
   XIcon,
@@ -51,6 +55,7 @@ import {
 } from "@/components/ui/drawer";
 import { areaKeys } from "@/features/areas/queries/area-query";
 import { areaService } from "@/features/areas/services/area-service";
+import { ResourceDetailDialog } from "@/features/resources/components/resource-detail-dialog";
 import type {
   BoardLabel,
   BoardStage,
@@ -125,6 +130,7 @@ export function TaskDetailsSheet({
   const [draft, setDraft] = useState(initialDraft);
   const [saveState, setSaveState] = useState<TaskSaveState>("idle");
   const [linkPicker, setLinkPicker] = useState<"resources" | "notes">();
+  const [selectedResourceUuid, setSelectedResourceUuid] = useState<string>();
   const draftRef = useRef(initialDraft);
   const savedDraftRef = useRef(normalizeTaskDraft(initialDraft));
   const saveTimerRef = useRef<number | undefined>(undefined);
@@ -139,6 +145,7 @@ export function TaskDetailsSheet({
     enabled: Boolean(task),
   });
   const resourcesQuery = useResourcesQuery({}, Boolean(task) && !archived);
+  const selectedResourceQuery = useResourceQuery(selectedResourceUuid);
   const availableResources = [
     ...new Map(
       resourcesQuery.data?.pages
@@ -260,6 +267,17 @@ export function TaskDetailsSheet({
         resourceUuid,
       ),
     });
+  };
+
+  const handleOpenResource = (resourceUuid: string) => {
+    if (
+      resourceUuid === selectedResourceUuid &&
+      selectedResourceQuery.isError
+    ) {
+      void selectedResourceQuery.refetch();
+      return;
+    }
+    setSelectedResourceUuid(resourceUuid);
   };
 
   const cancelPendingAutosave = () => {
@@ -557,7 +575,13 @@ export function TaskDetailsSheet({
                 }
               >
                 {task.resources.length > 0 ? (
-                  <TaskResourceList items={task.resources} />
+                  <TaskResourceList
+                    items={task.resources}
+                    selectedUuid={selectedResourceUuid}
+                    isLoading={selectedResourceQuery.isLoading}
+                    isError={selectedResourceQuery.isError}
+                    onSelect={handleOpenResource}
+                  />
                 ) : (
                   <EmptyTaskDetail>No resources linked.</EmptyTaskDetail>
                 )}
@@ -745,6 +769,13 @@ export function TaskDetailsSheet({
                 </DialogContent>
               </Dialog>
             )}
+
+            {selectedResourceQuery.data?.data && (
+              <ResourceDetailDialog
+                resource={selectedResourceQuery.data.data}
+                onClose={() => setSelectedResourceUuid(undefined)}
+              />
+            )}
           </>
         )}
       </DrawerContent>
@@ -781,7 +812,19 @@ function EmptyTaskDetail({ children }: { children: React.ReactNode }) {
   return <p className="text-sm text-muted-foreground">{children}</p>;
 }
 
-function TaskResourceList({ items }: { items: BoardTaskResourceLink[] }) {
+function TaskResourceList({
+  items,
+  selectedUuid,
+  isLoading,
+  isError,
+  onSelect,
+}: {
+  items: BoardTaskResourceLink[];
+  selectedUuid?: string;
+  isLoading: boolean;
+  isError: boolean;
+  onSelect: (uuid: string) => void;
+}) {
   return (
     <div className="grid gap-2">
       {items.map((item) => (
@@ -791,6 +834,9 @@ function TaskResourceList({ items }: { items: BoardTaskResourceLink[] }) {
           title={item.title}
           areas={item.areas.map((area) => area.name)}
           date={item.updated_at ?? item.created_at}
+          loading={selectedUuid === item.uuid && isLoading}
+          error={selectedUuid === item.uuid && isError}
+          onClick={() => onSelect(item.uuid)}
         />
       ))}
     </div>
@@ -820,12 +866,18 @@ function LinkedItemCard({
   title,
   areas,
   date,
+  loading,
+  error,
+  onClick,
 }: {
   href?: string;
   icon: React.ReactNode;
   title: string;
   areas: string[];
   date: string | null;
+  loading?: boolean;
+  error?: boolean;
+  onClick?: () => void;
 }) {
   const content = (
     <div className="flex items-start gap-3 rounded-lg border bg-card p-3 text-sm transition-colors hover:bg-muted/40">
@@ -842,12 +894,32 @@ function LinkedItemCard({
               {formatTaskDate(date)}
             </span>
           )}
+          {loading && (
+            <span className="flex items-center gap-1">
+              <LoaderCircle className="size-3 animate-spin" />
+              Loading…
+            </span>
+          )}
+          {error && <span className="text-destructive">Retry</span>}
         </span>
       </span>
     </div>
   );
 
-  return href ? <Link href={href}>{content}</Link> : content;
+  if (href) return <Link href={href}>{content}</Link>;
+  if (onClick) {
+    return (
+      <button
+        type="button"
+        className="w-full text-left"
+        aria-busy={loading}
+        onClick={onClick}
+      >
+        {content}
+      </button>
+    );
+  }
+  return content;
 }
 
 function LinkPickerItem({

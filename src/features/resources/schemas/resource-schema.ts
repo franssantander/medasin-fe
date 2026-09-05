@@ -33,6 +33,6 @@ export const resourceSchema = z.object({
     .max(10, "Choose at most 10 uploads."),
   tag_names: z.array(z.string().trim().min(1).max(100)).max(100),
   tag_uuids: z.array(z.string().uuid()).max(100),
-  project_uuid: z.string().uuid().optional(),
-  area_uuid: z.string().uuid().optional(),
+  project_uuids: z.array(z.string().uuid()).max(100),
+  area_uuids: z.array(z.string().uuid()).max(100),
 });
