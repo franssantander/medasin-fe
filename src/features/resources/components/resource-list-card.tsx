@@ -48,7 +48,7 @@ export function ResourceListCard({
   const relativeTimestamp = formatRelativeTimestamp(timestamp);
 
   return (
-    <Card className="relative w-full min-w-0 cursor-pointer gap-3 transition-colors hover:ring-primary/40 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring">
+    <Card className="group relative h-full w-full min-w-0 cursor-pointer gap-3 transition-[box-shadow,transform] hover:-translate-y-0.5 hover:shadow-md hover:ring-primary/30 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring">
       <button
         type="button"
         aria-label={`Open ${resource.title}`}
@@ -67,7 +67,7 @@ export function ResourceListCard({
       >
         <Archive />
       </Button>
-      <CardHeader className="pointer-events-none relative z-10 grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
+      <CardHeader className="pointer-events-none relative z-10 grid gap-3">
         <div className="grid min-w-0 gap-2">
           <div className="flex min-w-0 items-center gap-3">
             <div
@@ -76,17 +76,20 @@ export function ResourceListCard({
             >
               <ResourceIcon name={resource.icon} className="size-5" />
             </div>
-            <CardTitle>
-              <span className="break-words">
-                {resource.title}
-              </span>
+            <CardTitle className="line-clamp-2 break-words pr-10 leading-snug">
+              {resource.title}
             </CardTitle>
           </div>
           <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
             {resource.types.map((value) => {
-              const Icon = resourceTypeOptions.find((item) => item.value === value)?.icon;
+              const Icon = resourceTypeOptions.find(
+                (item) => item.value === value,
+              )?.icon;
               return (
-                <span key={value} className="inline-flex items-center gap-1 capitalize">
+                <span
+                  key={value}
+                  className="inline-flex items-center gap-1 capitalize"
+                >
                   {Icon && <Icon className="size-3.5" />}
                   {value}
                 </span>
@@ -94,25 +97,29 @@ export function ResourceListCard({
             })}
           </div>
         </div>
-        <div className="pr-10 sm:pr-9">
+        <div>
           {relativeTimestamp && timestamp && (
             <time
               dateTime={timestamp}
               title={new Date(timestamp).toLocaleString()}
-              className="text-xs whitespace-nowrap text-muted-foreground sm:pt-1"
+              className="text-xs whitespace-nowrap text-muted-foreground"
             >
               {relativeTimestamp}
             </time>
           )}
         </div>
       </CardHeader>
-      <CardContent className="pointer-events-none relative z-10 grid gap-3">
-        <p className="line-clamp-3 break-words text-sm text-muted-foreground">
-          {resourcePreview(resource.content) || resource.description || resource.url || "Open to view this resource."}
+      <CardContent className="pointer-events-none relative z-10 flex flex-1 flex-col gap-3">
+        <p className="line-clamp-3 min-h-[3.75rem] break-words text-sm leading-5 text-muted-foreground">
+          {resourcePreview(resource.content) ||
+            resource.description ||
+            resource.url ||
+            "Open to view this resource."}
         </p>
         {resource.attachments.length > 0 && (
           <p className="text-xs text-muted-foreground">
-            {resource.attachments.length} attachment{resource.attachments.length === 1 ? "" : "s"}
+            {resource.attachments.length} attachment
+            {resource.attachments.length === 1 ? "" : "s"}
           </p>
         )}
         <div className="flex flex-wrap gap-1">
@@ -132,7 +139,13 @@ export function ResourceListCard({
               <Badge
                 key={project.uuid}
                 variant="outline"
-                render={<Link href={`/projects/${project.uuid}`} aria-label={`Open project ${project.name}`} className="pointer-events-auto border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 dark:hover:bg-emerald-900" />}
+                render={
+                  <Link
+                    href={`/projects/${project.uuid}`}
+                    aria-label={`Open project ${project.name}`}
+                    className="pointer-events-auto border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 dark:hover:bg-emerald-900"
+                  />
+                }
               >
                 <Target />Project: {project.name}
               </Badge>
@@ -141,7 +154,13 @@ export function ResourceListCard({
               <Badge
                 key={area.uuid}
                 variant="outline"
-                render={<Link href={`/areas/${area.uuid}`} aria-label={`Open area ${area.name}`} className="pointer-events-auto border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300 dark:hover:bg-amber-900" />}
+                render={
+                  <Link
+                    href={`/areas/${area.uuid}`}
+                    aria-label={`Open area ${area.name}`}
+                    className="pointer-events-auto border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300 dark:hover:bg-amber-900"
+                  />
+                }
               >
                 <CirclePile />Area: {area.name}
               </Badge>

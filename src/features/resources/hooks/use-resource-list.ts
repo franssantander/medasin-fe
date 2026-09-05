@@ -72,6 +72,8 @@ export function useResourceList() {
     [resourcesQuery.data],
   );
   const isFiltered = Boolean(search || type || tag);
+  const activeFilterCount = Number(Boolean(type)) + Number(Boolean(tag));
+  const selectedTag = tagsQuery.data?.data.find((item) => item.uuid === tag);
 
   const clearFilters = () => {
     setSearch("");
@@ -89,6 +91,7 @@ export function useResourceList() {
 
   return {
     archiveResource,
+    activeFilterCount,
     archiving,
     clearFilters,
     confirmArchive,
@@ -98,6 +101,7 @@ export function useResourceList() {
     resources,
     resourcesQuery,
     search,
+    selectedTag,
     selected,
     setArchiving,
     setCreating,

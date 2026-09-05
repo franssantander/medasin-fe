@@ -1,5 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { cn } from "@/lib/utils";
 import type { ResourceTag, ResourceType } from "../type";
 import { resourceTypeOptions } from "./resource-list-options";
 
@@ -9,6 +10,7 @@ type ResourceListFiltersProps = {
   tags?: ResourceTag[];
   tagsError: boolean;
   tagsLoading: boolean;
+  className?: string;
   onRetryTags: () => void;
   onTagChange: (tag?: string) => void;
   onTypeChange: (type?: ResourceType) => void;
@@ -20,13 +22,17 @@ export function ResourceListFilters({
   tags,
   tagsError,
   tagsLoading,
+  className,
   onRetryTags,
   onTagChange,
   onTypeChange,
 }: ResourceListFiltersProps) {
   return (
     <aside
-      className="grid h-fit self-start content-start gap-6 rounded-xl border bg-card p-4 lg:sticky lg:top-6 lg:h-[calc(100dvh-6.5rem)] lg:overflow-y-auto lg:overscroll-contain"
+      className={cn(
+        "grid h-fit self-start content-start gap-6 rounded-xl border bg-card p-4",
+        className,
+      )}
       aria-label="Resource filters"
     >
       <div className="grid gap-2">
@@ -73,11 +79,11 @@ export function ResourceListFilters({
             <Button
               key={item.uuid}
               variant={selectedTag === item.uuid ? "secondary" : "ghost"}
-              className="justify-start truncate"
+              className="w-full justify-start overflow-hidden"
               aria-pressed={selectedTag === item.uuid}
               onClick={() => onTagChange(item.uuid)}
             >
-              {item.name}
+              <span className="truncate">{item.name}</span>
             </Button>
           ))}
         </div>

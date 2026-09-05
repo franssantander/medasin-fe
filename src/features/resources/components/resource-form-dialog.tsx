@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   Check,
   Eye,
-  FilePlus2,
+  ExternalLink,
   FileText,
   Link2,
   Search,
@@ -41,6 +41,7 @@ import { resourceSchema } from "../schemas/resource-schema";
 import { safeResourceUrl, toResourceDocument } from "../resource-document";
 import { ResourceEditor } from "./resource-editor";
 import { ResourceAssignmentSelect } from "./resource-assignment-select";
+import { ResourceFileDropzone } from "./resource-file-dropzone";
 import {
   RESOURCE_BADGE_COLORS,
   RESOURCE_ICONS,
@@ -148,7 +149,6 @@ export function ResourceFormDialog({
     useState<string[]>(initialProjectUuids);
   const [areaUuids, setAreaUuids] = useState<string[]>([]);
   const [errors, setErrors] = useState<string[]>([]);
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const previewUrl = useObjectUrl(previewImage);
   const tags = useResourceTagsQuery();
   const projects = useQuery({
@@ -390,7 +390,7 @@ export function ResourceFormDialog({
                             Icon contrast adjusts automatically.
                           </p>
                         </div>
-                        <div className="grid grid-cols-8 gap-2 sm:grid-cols-12">
+                        <div className="grid grid-cols-[repeat(auto-fill,2rem)] gap-2">
                           {RESOURCE_BADGE_COLORS.map((color) => {
                             const isSelected =
                               background.toLowerCase() ===
@@ -403,7 +403,7 @@ export function ResourceFormDialog({
                                 title={color.name}
                                 aria-label={`Use ${color.name} (${color.value})`}
                                 aria-pressed={isSelected}
-                                className="flex aspect-square items-center justify-center rounded-full border border-black/10 shadow-sm outline-none transition-transform hover:scale-110 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                                className="flex size-8 items-center justify-center rounded-full border border-black/10 shadow-sm outline-none transition-transform hover:scale-110 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                                 style={{ backgroundColor: color.value }}
                                 onClick={() => setBackground(color.value)}
                               >
@@ -499,16 +499,28 @@ export function ResourceFormDialog({
                   readOnly={create.isPending}
                 />
               </div>
-              <div className="grid gap-2">
-                <label htmlFor="resource-link" className="text-sm font-medium">
-                  Links
-                </label>
-                <div className="flex gap-2">
+              <div className="grid gap-3">
+                <div>
+                  <label
+                    htmlFor="resource-link"
+                    className="text-sm font-medium"
+                  >
+                    Links
+                  </label>
+                  <p className="text-xs text-muted-foreground">
+                    Add useful websites, documents, or references.
+                  </p>
+                </div>
+                <div className="flex items-center overflow-hidden rounded-lg border bg-background shadow-xs transition-[border-color,box-shadow] focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/30">
+                  <Link2 className="ml-3 size-4 shrink-0 text-muted-foreground" />
                   <Input
                     id="resource-link"
+                    type="url"
                     value={link}
                     onChange={(event) => setLink(event.target.value)}
-                    placeholder="https://example.com"
+                    placeholder="Paste a URL"
+                    aria-describedby="resource-link-help"
+                    className="border-0 shadow-none focus-visible:ring-0"
                     onKeyDown={(event) => {
                       if (event.key === "Enter") {
                         event.preventDefault();
@@ -516,16 +528,25 @@ export function ResourceFormDialog({
                       }
                     }}
                   />
-                  <Button type="button" variant="outline" onClick={addLink}>
-                    <Link2 />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="shrink-0 rounded-none border-l px-4"
+                    onClick={addLink}
+                  >
                     Add link
                   </Button>
                 </div>
+                <p id="resource-link-help" className="sr-only">
+                  Enter a complete HTTP or HTTPS address, then press Enter or
+                  Add link.
+                </p>
                 {links.map((value, index) => (
                   <div
                     key={value}
-                    className="flex items-center gap-2 rounded-lg border px-3 py-1 text-sm"
+                    className="flex items-center gap-3 rounded-lg border bg-muted/10 p-2 pl-3 text-sm"
                   >
+                    <ExternalLink className="size-4 shrink-0 text-muted-foreground" />
                     <span className="min-w-0 flex-1 truncate">{value}</span>
                     <Button
                       type="button"
@@ -545,30 +566,14 @@ export function ResourceFormDialog({
                 <label htmlFor="resource-files" className="text-sm font-medium">
                   Images and files
                 </label>
-                <Input
-                  ref={fileInputRef}
+                <ResourceFileDropzone
                   id="resource-files"
-                  type="file"
-                  multiple
-                  className="sr-only"
-                  onChange={(event) => {
-                    addFiles(Array.from(event.target.files ?? []));
-                    event.target.value = "";
-                  }}
+                  disabled={create.isPending}
+                  onFiles={addFiles}
                 />
-                <div className="flex flex-wrap items-center gap-3">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => fileInputRef.current?.click()}
-                  >
-                    <FilePlus2 />
-                    Add images & files
-                  </Button>
-                  <p className="text-xs text-muted-foreground">
-                    {files.length}/10 uploads · 20 MB each
-                  </p>
-                </div>
+                <p className="text-xs text-muted-foreground">
+                  {files.length}/10 files selected
+                </p>
                 {imageFiles.length > 0 && (
                   <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
                     {imageFiles.map((file, index) => (
@@ -611,17 +616,27 @@ export function ResourceFormDialog({
                   </div>
                 )}
               </div>
-              <div className="grid gap-2">
-                <label htmlFor="resource-tag" className="text-sm font-medium">
-                  Tags
-                </label>
-                <div className="flex gap-2">
+              <div className="grid gap-3">
+                <div>
+                  <label
+                    htmlFor="resource-tag"
+                    className="text-sm font-medium"
+                  >
+                    Tags
+                  </label>
+                  <p className="text-xs text-muted-foreground">
+                    Choose existing tags below or create a new one.
+                  </p>
+                </div>
+                <div className="flex items-center overflow-hidden rounded-lg border bg-background shadow-xs transition-[border-color,box-shadow] focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/30">
+                  <Tag className="ml-3 size-4 shrink-0 text-muted-foreground" />
                   <Input
                     id="resource-tag"
                     value={tag}
                     maxLength={100}
                     onChange={(event) => setTag(event.target.value)}
-                    placeholder="Create a tag"
+                    placeholder="Enter a tag name"
+                    className="border-0 shadow-none focus-visible:ring-0"
                     onKeyDown={(event) => {
                       if (event.key === "Enter") {
                         event.preventDefault();
@@ -629,8 +644,12 @@ export function ResourceFormDialog({
                       }
                     }}
                   />
-                  <Button type="button" variant="outline" onClick={addTag}>
-                    <Tag />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="shrink-0 rounded-none border-l px-4"
+                    onClick={addTag}
+                  >
                     Add tag
                   </Button>
                 </div>

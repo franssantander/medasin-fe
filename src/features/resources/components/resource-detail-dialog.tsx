@@ -7,7 +7,6 @@ import {
   Check,
   Download,
   ExternalLink,
-  FilePlus2,
   FileText,
   Link2,
   LoaderCircle,
@@ -56,6 +55,7 @@ import type {
 } from "../type";
 import { ResourceEditor } from "./resource-editor";
 import { ResourceAssignmentSelect } from "./resource-assignment-select";
+import { ResourceFileDropzone } from "./resource-file-dropzone";
 import {
   RESOURCE_BADGE_COLORS,
   RESOURCE_ICONS,
@@ -252,7 +252,6 @@ export function ResourceDetailDialog({
   const [deletingId, setDeletingId] = useState("");
   const [attachmentToDelete, setAttachmentToDelete] =
     useState<ResourceAttachment>();
-  const fileInput = useRef<HTMLInputElement>(null);
   const lastSaved = useRef("");
   const saveSequence = useRef(0);
   const { mutateAsync: saveResource } = useUpdateResource();
@@ -407,6 +406,8 @@ export function ResourceDetailDialog({
         attachmentUuid: item.uuid,
       });
       setCurrent(response.data);
+      setAttachmentToDelete(undefined);
+      setError("");
     } catch (cause) {
       setError(message(cause));
     } finally {
@@ -657,11 +658,18 @@ export function ResourceDetailDialog({
                   onValueChange={setAreaUuids}
                 />
               </div>
-              <div className="flex gap-2">
+              <div className="grid gap-2">
+                <label htmlFor="detail-resource-tag" className="text-sm font-medium">
+                  Tags
+                </label>
+                <div className="flex items-center overflow-hidden rounded-lg border bg-background shadow-xs transition-[border-color,box-shadow] focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/30">
+                  <Tag className="ml-3 size-4 shrink-0 text-muted-foreground" />
                 <Input
+                  id="detail-resource-tag"
                   value={tag}
                   maxLength={100}
-                  placeholder="Add a tag"
+                  placeholder="Enter a tag name"
+                  className="border-0 shadow-none focus-visible:ring-0"
                   onChange={(event) => setTag(event.target.value)}
                   onKeyDown={(event) => {
                     if (event.key === "Enter") {
@@ -670,10 +678,18 @@ export function ResourceDetailDialog({
                     }
                   }}
                 />
-                <Button type="button" variant="outline" onClick={addTag}>
-                  <Tag />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="shrink-0 rounded-none border-l px-4"
+                  onClick={addTag}
+                >
                   Add tag
                 </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Choose an existing tag below or create a new one.
+                </p>
               </div>
               <div className="flex flex-wrap gap-2">
                 {tags.data?.data.map((item) => (
@@ -713,37 +729,21 @@ export function ResourceDetailDialog({
           )}
 
           <section className="grid gap-3">
-            <div className="flex items-center justify-between gap-3">
+            <div>
               <div>
                 <h3 className="text-sm font-semibold">Images and files</h3>
                 <p className="text-xs text-muted-foreground">
                   {images.length + files.length} attachments
                 </p>
               </div>
-              {editable && (
-                <>
-                  <Input
-                    ref={fileInput}
-                    type="file"
-                    multiple
-                    className="sr-only"
-                    onChange={(event) => {
-                      void addFiles(Array.from(event.target.files || []));
-                      event.target.value = "";
-                    }}
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    disabled={addAttachment.isPending}
-                    onClick={() => fileInput.current?.click()}
-                  >
-                    <FilePlus2 />
-                    Add files
-                  </Button>
-                </>
-              )}
             </div>
+            {editable && (
+              <ResourceFileDropzone
+                id={`resource-files-${resource.uuid}`}
+                disabled={addAttachment.isPending}
+                onFiles={(selectedFiles) => void addFiles(selectedFiles)}
+              />
+            )}
             {images.length > 0 && (
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
                 {images.map((item) => (
@@ -778,12 +778,20 @@ export function ResourceDetailDialog({
           </section>
 
           <section className="grid gap-3">
-            <h3 className="text-sm font-semibold">Links</h3>
+            <div>
+              <h3 className="text-sm font-semibold">Links</h3>
+              <p className="text-xs text-muted-foreground">
+                Add useful websites, documents, or references.
+              </p>
+            </div>
             {editable && (
-              <div className="flex gap-2">
+              <div className="flex items-center overflow-hidden rounded-lg border bg-background shadow-xs transition-[border-color,box-shadow] focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/30">
+                <Link2 className="ml-3 size-4 shrink-0 text-muted-foreground" />
                 <Input
+                  type="url"
                   value={link}
-                  placeholder="https://example.com"
+                  placeholder="Paste a URL"
+                  className="border-0 shadow-none focus-visible:ring-0"
                   onChange={(event) => setLink(event.target.value)}
                   onKeyDown={(event) => {
                     if (event.key === "Enter") {
@@ -794,11 +802,11 @@ export function ResourceDetailDialog({
                 />
                 <Button
                   type="button"
-                  variant="outline"
+                  variant="ghost"
+                  className="shrink-0 rounded-none border-l px-4"
                   disabled={addAttachment.isPending}
                   onClick={() => void addLink()}
                 >
-                  <Link2 />
                   Add link
                 </Button>
               </div>

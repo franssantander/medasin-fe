@@ -18,6 +18,7 @@ type ResourceListResultsProps = {
   resources: Resource[];
   total?: number;
   onArchive: (resource: Resource) => void;
+  onClearFilters: () => void;
   onCreate: () => void;
   onLoadMore: () => void;
   onOpen: (resource: Resource) => void;
@@ -37,6 +38,7 @@ export function ResourceListResults(props: ResourceListResultsProps) {
     resources,
     total,
     onArchive,
+    onClearFilters,
     onCreate,
     onLoadMore,
     onOpen,
@@ -48,7 +50,7 @@ export function ResourceListResults(props: ResourceListResultsProps) {
       {isLoading && (
         <div className="grid gap-4">
           {[1, 2, 3, 4].map((item) => (
-            <Skeleton key={item} className="h-48 rounded-xl" />
+            <Skeleton key={item} className="h-64 rounded-xl" />
           ))}
         </div>
       )}
@@ -71,7 +73,11 @@ export function ResourceListResults(props: ResourceListResultsProps) {
               ? "Try another search or clear your filters."
               : "Keep useful notes, links, images, and files in one place."}
           </p>
-          {!isFiltered && (
+          {isFiltered ? (
+            <Button variant="outline" onClick={onClearFilters}>
+              Clear filters
+            </Button>
+          ) : (
             <Button onClick={onCreate}>
               <Plus />
               New resource
@@ -80,9 +86,18 @@ export function ResourceListResults(props: ResourceListResultsProps) {
         </Card>
       )}
       {resources.length > 0 && (
-        <p className="text-xs text-muted-foreground" aria-live="polite">
-          {resources.length} of {total} resources
-        </p>
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-sm font-medium" aria-live="polite">
+            {total === undefined
+              ? `${resources.length} resources`
+              : `${total} resource${total === 1 ? "" : "s"}`}
+          </p>
+          {total !== undefined && resources.length < total && (
+            <p className="text-xs text-muted-foreground">
+              Showing {resources.length}
+            </p>
+          )}
+        </div>
       )}
       <div className="grid gap-4">
         {resources.map((resource) => (
