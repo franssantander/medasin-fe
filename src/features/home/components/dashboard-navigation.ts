@@ -2,10 +2,13 @@ import {
   Archive,
   BookHeart,
   BookOpen,
+  BookText,
+  CalendarCheck,
   CirclePile,
   Home,
   KanbanSquare,
   NotebookPen,
+  StarCheck,
   Target,
   Timer,
   type LucideIcon,
@@ -28,7 +31,7 @@ export const dashboardNavigationGroups: {
   items: DashboardNavigationItem[];
 }[] = [
   {
-    label: "Core",
+    label: "Organize",
     items: [
       { label: "Projects", href: "/projects", icon: Target },
       { label: "Areas", href: "/areas", icon: CirclePile },
@@ -37,12 +40,15 @@ export const dashboardNavigationGroups: {
     ],
   },
   {
-    label: "Utilities",
+    label: "Tools",
     items: [
       { label: "Board", href: "/board", icon: KanbanSquare },
       { label: "Pomodoro Timer", href: "/pomodoro", icon: Timer },
+      { label: "Habits", href: "/habits", icon: StarCheck },
       { label: "Notes", href: "/notes", icon: NotebookPen },
       { label: "Journal", href: "/journal", icon: BookHeart },
+      { label: "Letters", href: "/letters", icon: BookText },
+      { label: "Plans", href: "/plans", icon: CalendarCheck },
     ],
   },
 ];

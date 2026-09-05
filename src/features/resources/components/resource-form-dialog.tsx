@@ -306,7 +306,7 @@ export function ResourceFormDialog({ onClose }: { onClose: () => void }) {
         }}
         onOpenChangeComplete={(nextOpen) => !nextOpen && onClose()}
       >
-        <DialogContent className="max-w-3xl">
+        <DialogContent className="w-full max-w-4xl overflow-x-hidden">
           <DialogHeader>
             <DialogTitle>New resource</DialogTitle>
             <DialogDescription>

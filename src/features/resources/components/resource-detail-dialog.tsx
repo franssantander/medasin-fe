@@ -447,7 +447,7 @@ export function ResourceDetailDialog({
       onOpenChange={(nextOpen) => !nextOpen && close()}
       onOpenChangeComplete={(nextOpen) => !nextOpen && onClose()}
     >
-      <DialogContent className="max-h-[92vh] max-w-4xl overflow-y-auto p-0">
+      <DialogContent className="max-h-[92vh] `w-full max-w-4xl overflow-x-hidden` overflow-y-auto p-0">
         <DialogHeader className="sticky top-0 z-20 border-b bg-background/95 px-6 py-5 backdrop-blur">
           <div className="flex items-start gap-3 pr-8">
             <div

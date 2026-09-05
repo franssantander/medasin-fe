@@ -22,7 +22,7 @@ export function ResourceActionDialog({
 }) {
   return (
     <Dialog open={Boolean(resource)} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className="w-full overflow-x-hidden">
         <DialogHeader>
           <DialogTitle>Archive resource?</DialogTitle>
           <DialogDescription>
