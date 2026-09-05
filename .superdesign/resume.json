@@ -51,6 +51,65 @@
         }
       },
       "updatedAt": "2026-08-31T05:35:53.115Z"
+    },
+    "settings-trash": {
+      "targetKind": "new-ui",
+      "projectId": "5c7ae836-737f-430c-8239-0ad5197a42af",
+      "activeDraftId": "94e2e7a2-69a7-42f4-9198-fa2cc7434eac",
+      "designSystemPath": ".superdesign/design-system.md",
+      "referenceIds": [
+        "public-images-medasin-logo.svg"
+      ],
+      "brandAssets": {
+        "logo": {
+          "assetKey": "public-images-medasin-logo.svg",
+          "url": "https://vgbujcuwptvheqijyjbe.supabase.co/storage/v1/object/public/hmac-uploads/projects/5c7ae836-737f-430c-8239-0ad5197a42af/brand-assets/public-images-medasin-logo.svg/medasin-logo.svg",
+          "sourcePath": "public/images/medasin-logo.svg"
+        }
+      },
+      "contextFiles": [
+        ".superdesign/design-system.md",
+        "src/app/globals.css",
+        "src/app/(app)/layout.tsx",
+        "src/features/home/components/dashboard-header.tsx",
+        "src/features/home/components/dashboard-sidebar.tsx",
+        "src/features/areas/components/area-archives.tsx",
+        "src/components/shared/page-header.tsx",
+        "src/components/ui/card.tsx",
+        "src/components/ui/dialog.tsx"
+      ],
+      "fingerprints": {
+        ".superdesign/design-system.md": "0426bf7d2f1680e54761d4f2040d1a849b96ac7c4edb23851a5d9a50ed69391e",
+        "src/app/globals.css": "fe1e860577957115ec9ff2511ba591bf2fa101c4efd0fc05dd973bd5586792d8",
+        "src/app/(app)/layout.tsx": "30bf46f62ca91b49dce413a940415a35570f7ba94c62b332b40d38654640af61",
+        "src/features/home/components/dashboard-header.tsx": "7d74a0088007ef6caa708f2ce257a1233d0857b2cbf372c5110b63378c627ffa",
+        "src/features/home/components/dashboard-sidebar.tsx": "3f59036222f5b1dff9cc94b3618db6769aa19c281de9f0721b578d1a3e53b1",
+        "src/features/areas/components/area-archives.tsx": "81678bdca1e99c04c60276dc4459be378691c1f052b0c3716251857cdfb35dd8",
+        "src/components/shared/page-header.tsx": "99874fd8797b82f05449480fd36d132d22a053684f4dc0dd6474d7d6f617fac6",
+        "src/components/ui/card.tsx": "85541131ee7b7cf545bc50e74ff0b9f22bfbea60dcb70067c86d691846271cd6",
+        "src/components/ui/dialog.tsx": "4e2c7cc7c66bf7f8d7b0d7444428bc93385afe96be091a59cb51693ae89a6209"
+      },
+      "components": [
+        {
+          "name": "DashboardSidebar",
+          "id": "acd7e3f7-fc90-4552-b399-6a54334f2eef",
+          "sourcePath": "src/features/home/components/dashboard-sidebar.tsx",
+          "logoAssetKey": "public-images-medasin-logo.svg"
+        },
+        {
+          "name": "DashboardHeader",
+          "id": "d2b608c7-7c98-4f0d-8a81-263fb0a3128a",
+          "sourcePath": "src/features/home/components/dashboard-header.tsx"
+        }
+      ],
+      "drafts": {
+        "94e2e7a2-69a7-42f4-9198-fa2cc7434eac": {
+          "title": "Medasin Settings Trash",
+          "visualDirection": "Existing Medasin dashboard shell with compact settings navigation and recoverable trash rows",
+          "currentVersion": 1
+        }
+      },
+      "updatedAt": "2026-09-05T23:06:02+08:00"
     }
   }
 }

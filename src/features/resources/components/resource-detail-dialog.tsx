@@ -30,6 +30,7 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -249,6 +250,8 @@ export function ResourceDetailDialog({
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [error, setError] = useState("");
   const [deletingId, setDeletingId] = useState("");
+  const [attachmentToDelete, setAttachmentToDelete] =
+    useState<ResourceAttachment>();
   const fileInput = useRef<HTMLInputElement>(null);
   const lastSaved = useRef("");
   const saveSequence = useRef(0);
@@ -367,6 +370,7 @@ export function ResourceDetailDialog({
         links: [value],
       });
       setCurrent(response.data);
+      setAttachmentToDelete(undefined);
       setLink("");
       setError("");
     } catch (cause) {
@@ -434,6 +438,7 @@ export function ResourceDetailDialog({
   const files = current.attachments.filter((item) => item.kind === "file");
   const links = current.attachments.filter((item) => item.kind === "link");
   return (
+    <>
     <Dialog
       open={open}
       onOpenChange={(nextOpen) => !nextOpen && close()}
@@ -748,7 +753,7 @@ export function ResourceDetailDialog({
                     attachment={item}
                     editable={editable}
                     deleting={deletingId === item.uuid}
-                    onDelete={() => void remove(item)}
+                    onDelete={() => setAttachmentToDelete(item)}
                   />
                 ))}
               </div>
@@ -761,7 +766,7 @@ export function ResourceDetailDialog({
                   attachment={item}
                   editable={editable}
                   deleting={deletingId === item.uuid}
-                  onDelete={() => void remove(item)}
+                  onDelete={() => setAttachmentToDelete(item)}
                 />
               ))}
             </div>
@@ -818,7 +823,7 @@ export function ResourceDetailDialog({
                     size="icon-sm"
                     disabled={deletingId === item.uuid}
                     aria-label="Remove link"
-                    onClick={() => void remove(item)}
+                    onClick={() => setAttachmentToDelete(item)}
                   >
                     <Trash2 />
                   </Button>
@@ -829,5 +834,38 @@ export function ResourceDetailDialog({
         </div>
       </DialogContent>
     </Dialog>
+    <Dialog
+      open={Boolean(attachmentToDelete)}
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen && !deletingId) setAttachmentToDelete(undefined);
+      }}
+    >
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Delete attachment?</DialogTitle>
+          <DialogDescription>
+            “{attachmentToDelete?.name || attachmentToDelete?.url || "This attachment"}”
+            will move to Trash for 30 days and can be restored from Settings.
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button
+            variant="outline"
+            disabled={Boolean(deletingId)}
+            onClick={() => setAttachmentToDelete(undefined)}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="destructive"
+            disabled={Boolean(deletingId) || !attachmentToDelete}
+            onClick={() => attachmentToDelete && void remove(attachmentToDelete)}
+          >
+            {deletingId ? "Deleting…" : "Delete attachment"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+    </>
   );
 }

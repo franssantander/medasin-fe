@@ -172,8 +172,8 @@ export function AreaSectionContent({
             <DialogHeader>
               <DialogTitle>Delete habit?</DialogTitle>
               <DialogDescription>
-                “{habitToDelete?.name}” and its check-in history will be
-                permanently deleted. This action cannot be undone.
+                “{habitToDelete?.name}” and its check-in history will move to
+                Trash for 30 days and can be restored from Settings.
               </DialogDescription>
             </DialogHeader>
             <DialogFooter>

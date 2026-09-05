@@ -15,6 +15,14 @@ import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardTitle } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useProjectKanbanMutations } from "../hooks/use-project-kanban-mutations";
 import { useProjectBoardQuery } from "../queries/project-query";
@@ -48,6 +56,7 @@ export function ProjectKanban({
   const [taskDraft, setTaskDraft] = useState<TaskDraftValue>();
   const [labelsOpen, setLabelsOpen] = useState(false);
   const [boardDialog, setBoardDialog] = useState<BoardDialogValue>();
+  const [deleteBoardOpen, setDeleteBoardOpen] = useState(false);
   const [activeTask, setActiveTask] = useState<BoardTask>();
   const [selectedTaskUuid, setSelectedTaskUuid] = useState<string>();
   const boardQuery = useProjectBoardQuery(projectUuid, selectedBoardUuid);
@@ -148,11 +157,7 @@ export function ProjectKanban({
         onSelectBoard={handleSelectBoard}
         onOpenLabels={() => setLabelsOpen(true)}
         onOpenBoardDialog={setBoardDialog}
-        onDeleteBoard={() => {
-          if (window.confirm("Delete this board and all of its tasks?")) {
-            mutations.deleteBoard.mutate();
-          }
-        }}
+        onDeleteBoard={() => setDeleteBoardOpen(true)}
       />
 
       {boardQuery.isLoading ? (
@@ -262,6 +267,43 @@ export function ProjectKanban({
           })
         }
       />
+
+      <Dialog
+        open={deleteBoardOpen}
+        onOpenChange={(open) => {
+          if (!mutations.deleteBoard.isPending) setDeleteBoardOpen(open);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete board?</DialogTitle>
+            <DialogDescription>
+              “{board?.name}” and all of its tasks will move to Trash for 30
+              days and can be restored together.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              disabled={mutations.deleteBoard.isPending}
+              onClick={() => setDeleteBoardOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={mutations.deleteBoard.isPending}
+              onClick={() =>
+                mutations.deleteBoard.mutate(undefined, {
+                  onSuccess: () => setDeleteBoardOpen(false),
+                })
+              }
+            >
+              {mutations.deleteBoard.isPending ? "Deleting…" : "Delete board"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

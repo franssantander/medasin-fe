@@ -33,7 +33,7 @@ export function ProjectActionDialog({
           </DialogTitle>
           <DialogDescription>
             {isDeleting
-              ? `“${project.name}” will be permanently deleted. This action cannot be undone.`
+              ? `“${project.name}” will move to Trash for 30 days. You can restore it from Settings before it is permanently deleted.`
               : `“${project.name}” will be moved to your archived projects. You can restore it later.`}
           </DialogDescription>
         </DialogHeader>

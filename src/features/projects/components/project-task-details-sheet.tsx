@@ -778,8 +778,8 @@ export function TaskDetailsSheet({
                   <DialogHeader>
                     <DialogTitle>Delete task?</DialogTitle>
                     <DialogDescription>
-                      “{task.title}” will be permanently deleted. This action
-                      cannot be undone.
+                      “{task.title}” will move to Trash for 30 days. You can
+                      restore it from Settings before it is permanently deleted.
                     </DialogDescription>
                   </DialogHeader>
                   <DialogFooter>

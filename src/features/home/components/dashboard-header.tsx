@@ -86,7 +86,7 @@ function ProfileMenu({ user }: { user?: CurrentUser }) {
           <UserRound />
           Profile
         </DropdownMenuItem>
-        <DropdownMenuItem>
+        <DropdownMenuItem onClick={() => router.push("/settings/preferences")}>
           <Settings />
           Settings
         </DropdownMenuItem>

@@ -298,8 +298,8 @@ export function AreaNotesWorkspace({
             <DialogTitle>Delete note?</DialogTitle>
             <DialogDescription>
               {noteToDelete?.children.length
-                ? `“${noteToDelete.title || "Untitled"}” and all of its child pages will be permanently deleted. This action cannot be undone.`
-                : `“${noteToDelete?.title || "Untitled"}” will be permanently deleted. This action cannot be undone.`}
+                ? `“${noteToDelete.title || "Untitled"}” and all of its child pages will move to Trash for 30 days and can be restored together.`
+                : `“${noteToDelete?.title || "Untitled"}” will move to Trash for 30 days and can be restored from Settings.`}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

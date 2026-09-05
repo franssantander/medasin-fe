@@ -15,5 +15,6 @@ export const config = {
     "/areas/:path*",
     "/resources/:path*",
     "/archives/:path*",
+    "/settings/:path*",
   ],
 };

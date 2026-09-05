@@ -293,8 +293,8 @@ export function GoalTracker({
           <DialogHeader>
             <DialogTitle>Delete goal?</DialogTitle>
             <DialogDescription>
-              “{goalToDelete?.title}” will be permanently deleted. This action
-              cannot be undone.
+              “{goalToDelete?.title}” will move to Trash for 30 days. You can
+              restore it from Settings before it is permanently deleted.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
