@@ -124,9 +124,6 @@ export const areaService = {
   resources(areaUuid: string, page = 1) {
     return unwrap(axiosClient.get<ApiResponse<Paginated<Resource>>>(`/area/${areaUuid}/resources`, { params: { page } }));
   },
-  allResources() {
-    return unwrap(axiosClient.get<ApiResponse<Resource[]>>("/resource"));
-  },
   linkResource(areaUuid: string, resourceUuid: string) {
     return unwrap(axiosClient.post<ApiResponse<Resource>>(`/area/${areaUuid}/resources`, { resource_uuid: resourceUuid }));
   },

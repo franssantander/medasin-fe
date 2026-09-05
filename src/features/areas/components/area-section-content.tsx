@@ -24,6 +24,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "@/components/ui/toast";
 import { areaService } from "../services/area-service";
+import { useResourcesQuery } from "@/features/resources/queries/resource-query";
 import type {
   ApiResponse,
   Goal,
@@ -287,17 +288,25 @@ function LinkPicker({
   onChanged: (message: string) => Promise<void>;
 }) {
   const [selected, setSelected] = useState("");
-  const query = useQuery<ApiResponse<(Project | Resource)[]>>({
-    queryKey: [kind, "available"],
-    queryFn: () =>
-      kind === "projects"
-        ? areaService.allProjects()
-        : areaService.allResources(),
+  const projectsQuery = useQuery({
+    queryKey: ["projects", "available"],
+    queryFn: () => areaService.allProjects(),
+    enabled: kind === "projects",
   });
+  const resourcesQuery = useResourcesQuery({}, kind === "resources");
+  const query = kind === "projects" ? projectsQuery : resourcesQuery;
+  const available: (Project | Resource)[] =
+    kind === "projects"
+      ? (projectsQuery.data?.data ?? [])
+      : [
+          ...new Map(
+            resourcesQuery.data?.pages
+              .flatMap((page) => page.data.data)
+              .map((resource) => [resource.uuid, resource]),
+          ).values(),
+        ];
   const linkedIds = new Set(linked.map((item) => item.uuid));
-  const options = (query.data?.data ?? []).filter(
-    (item) => !linkedIds.has(item.uuid),
-  );
+  const options = available.filter((item) => !linkedIds.has(item.uuid));
   const selectedItem = options.find((item) => item.uuid === selected);
   const selectedLabel = selectedItem
     ? "name" in selectedItem
@@ -328,7 +337,7 @@ function LinkPicker({
       <Select
         value={selected}
         onValueChange={(value) => setSelected(value ?? "")}
-        disabled={query.isLoading || query.isError || options.length === 0}
+        disabled={query.isLoading || options.length === 0}
       >
         <SelectTrigger
           size="sm"
@@ -358,6 +367,25 @@ function LinkPicker({
           })}
         </SelectContent>
       </Select>
+      {kind === "resources" && resourcesQuery.hasNextPage && (
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={resourcesQuery.isFetchingNextPage}
+          onClick={() => resourcesQuery.fetchNextPage()}
+        >
+          {resourcesQuery.isFetchingNextPage
+            ? "Loading…"
+            : resourcesQuery.isFetchNextPageError
+              ? "Retry more"
+              : "Load more"}
+        </Button>
+      )}
+      {query.isError && (
+        <Button size="sm" variant="outline" onClick={() => query.refetch()}>
+          Retry
+        </Button>
+      )}
       <Button
         size="sm"
         disabled={!selected || mutation.isPending}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
+import { useResourcesQuery } from "@/features/resources/queries/resource-query";
 import {
   CalendarDays,
   Check,
@@ -137,11 +138,14 @@ export function TaskDetailsSheet({
     queryFn: () => areaService.list("active"),
     enabled: Boolean(task),
   });
-  const resourcesQuery = useQuery({
-    queryKey: ["resources", "all"],
-    queryFn: () => areaService.allResources(),
-    enabled: Boolean(task) && !archived,
-  });
+  const resourcesQuery = useResourcesQuery({}, Boolean(task) && !archived);
+  const availableResources = [
+    ...new Map(
+      resourcesQuery.data?.pages
+        .flatMap((page) => page.data.data)
+        .map((resource) => [resource.uuid, resource]),
+    ).values(),
+  ];
   const notesQuery = useQuery({
     queryKey: [
       "areas",
@@ -247,6 +251,15 @@ export function TaskDetailsSheet({
       () => void flushDraftRef.current(),
       750,
     );
+  };
+
+  const handleToggleResource = (resourceUuid: string) => {
+    updateDraft({
+      resource_uuids: toggleSelection(
+        draftRef.current.resource_uuids,
+        resourceUuid,
+      ),
+    });
   };
 
   const cancelPendingAutosave = () => {
@@ -642,31 +655,39 @@ export function TaskDetailsSheet({
                       Select one or more items to link to this task.
                     </DialogDescription>
                   </DialogHeader>
+                  {linkPicker === "resources" && resourcesQuery.isError && (
+                    <Button
+                      variant="outline"
+                      onClick={() =>
+                        resourcesQuery.isFetchNextPageError
+                          ? resourcesQuery.fetchNextPage()
+                          : resourcesQuery.refetch()
+                      }
+                    >
+                      Retry loading resources
+                    </Button>
+                  )}
+                  {linkPicker === "resources" && resourcesQuery.hasNextPage && (
+                    <Button
+                      variant="outline"
+                      disabled={resourcesQuery.isFetchingNextPage}
+                      onClick={() => resourcesQuery.fetchNextPage()}
+                    >
+                      {resourcesQuery.isFetchingNextPage
+                        ? "Loading…"
+                        : "Load more resources"}
+                    </Button>
+                  )}
                   <div className="grid max-h-[55vh] gap-3 overflow-y-auto pr-1">
                     {linkPicker === "resources" ? (
                       resourcesQuery.isLoading ? (
                         <EmptyTaskDetail>Loading resources…</EmptyTaskDetail>
-                      ) : resourcesQuery.data?.data.length ? (
-                        resourcesQuery.data.data.map((resource) => {
-                          const selected = draft.resource_uuids.includes(
-                            resource.uuid,
-                          );
-                          return (
-                            <LinkPickerItem
-                              key={resource.uuid}
-                              title={resource.title}
-                              icon={<Link2 />}
-                              selected={selected}
-                              onClick={() => {
-                                const next = toggleSelection(
-                                  draftRef.current.resource_uuids,
-                                  resource.uuid,
-                                );
-                                updateDraft({ resource_uuids: next });
-                              }}
-                            />
-                          );
-                        })
+                      ) : availableResources.length ? (
+                        <ResourcePickerItems
+                          resources={availableResources}
+                          selectedUuids={draft.resource_uuids}
+                          onToggle={handleToggleResource}
+                        />
                       ) : (
                         <EmptyTaskDetail>
                           No resources available.
@@ -856,4 +877,24 @@ function LinkPickerItem({
       <Check className={selected ? "opacity-100" : "opacity-0"} />
     </Button>
   );
+}
+
+function ResourcePickerItems({
+  resources,
+  selectedUuids,
+  onToggle,
+}: {
+  resources: { uuid: string; title: string }[];
+  selectedUuids: string[];
+  onToggle: (uuid: string) => void;
+}) {
+  return resources.map((resource) => (
+    <LinkPickerItem
+      key={resource.uuid}
+      title={resource.title}
+      icon={<Link2 />}
+      selected={selectedUuids.includes(resource.uuid)}
+      onClick={() => onToggle(resource.uuid)}
+    />
+  ));
 }

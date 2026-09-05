@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import Image from "next/image";
+
 import {
   Card,
   CardContent,
@@ -9,6 +10,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import LoginForm from "@/features/auth/components/login-form";
+import { Button } from "@/components/ui/button";
 
 export const metadata: Metadata = {
   title: "Log in",
@@ -36,6 +38,15 @@ export default function LoginPage() {
       </CardHeader>
       <CardContent>
         {/* <GoogleSignInButton /> */}
+        <Button variant="outline">
+          <Image
+            src="/images/google-logo.svg"
+            alt="Google Logo"
+            width={20}
+            height={20}
+          />
+          Continue with Google
+        </Button>
 
         <div className="flex items-center gap-3">
           <div className="h-px flex-1 bg-border" />

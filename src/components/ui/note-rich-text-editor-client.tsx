@@ -355,7 +355,7 @@ type ImageCropSession = CropImageRequest & {
 };
 
 export type NoteRichTextEditorClientProps = {
-  mode?: "note" | "task";
+  mode?: "note" | "task" | "resource";
   documentId: string;
   content: string;
   editable: boolean;
@@ -737,11 +737,13 @@ export function NoteRichTextEditorClient({
     ...getDefaultReactSlashMenuItems(editor).filter(
       (item) =>
         allowedDefaults.has(item.title) &&
-        (mode !== "task" || !taskExcludedDefaults.has(item.title)),
+        (mode === "note" || !taskExcludedDefaults.has(item.title)),
     ),
-    ...(mode === "task"
-      ? [customItems[0], customItems[2], customItems[3], customItems[4]]
-      : customItems),
+    ...(mode === "resource"
+      ? [customItems[2]]
+      : mode === "task"
+        ? [customItems[0], customItems[2], customItems[3], customItems[4]]
+        : customItems),
   ];
 
   const submitDialog = () => {

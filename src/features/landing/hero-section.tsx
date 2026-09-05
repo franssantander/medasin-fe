@@ -45,15 +45,14 @@ export function HeroSection() {
 
         <Card>
           <CardHeader className="flex-row items-center gap-2 border-b">
-            <span className="flex gap-1.5">
-              <span className="size-2.5 rounded-full bg-destructive/60" />
-              <span className="size-2.5 rounded-full bg-chart-4/60" />
-              <span className="size-2.5 rounded-full bg-chart-2/60" />
-            </span>
-            <CardTitle>Portfolio overview</CardTitle>
+            <CardTitle>Medasin</CardTitle>
           </CardHeader>
           <CardContent className="pt-4">
-            <div className="mt-6 space-y-3">
+            <div className="space-y-3">
+              <div className="h-3 w-full rounded-full bg-muted" />
+              <div className="h-3 w-4/5 rounded-full bg-primary/20" />
+              <div className="h-3 w-2/3 rounded-full bg-muted" />
+              <div className="h-3 w-3/4 rounded-full bg-primary/20" />
               <div className="h-3 w-full rounded-full bg-muted" />
               <div className="h-3 w-4/5 rounded-full bg-primary/20" />
               <div className="h-3 w-2/3 rounded-full bg-muted" />
