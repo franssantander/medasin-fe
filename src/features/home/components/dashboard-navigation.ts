@@ -43,7 +43,7 @@ export const dashboardNavigationGroups: {
     label: "Tools",
     items: [
       { label: "Board", href: "/board", icon: KanbanSquare },
-      { label: "Pomodoro Timer", href: "/pomodoro", icon: Timer },
+      { label: "Focus", href: "/focus", icon: Timer },
       { label: "Habits", href: "/habits", icon: StarCheck },
       { label: "Notes", href: "/notes", icon: NotebookPen },
       { label: "Journal", href: "/journal", icon: BookHeart },
