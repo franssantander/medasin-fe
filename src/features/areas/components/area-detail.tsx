@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import type { Resource } from "@/features/resources/type";
 import { useAreaSectionQueries } from "../hooks/use-area-section-queries";
 import { useAreaMutation, useAreaQuery } from "../queries/area-query";
 import { areaService } from "../services/area-service";
@@ -30,7 +31,6 @@ import type {
   HabitInput,
   Paginated,
   Project,
-  Resource,
 } from "../type";
 import {
   AreaActionDialog,

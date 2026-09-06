@@ -1,4 +1,5 @@
 import { axiosClient } from "@/lib/axios";
+import type { Resource as ResourceDetail } from "@/features/resources/type";
 import type {
   ApiResponse,
   Area,
@@ -17,7 +18,6 @@ import type {
   NoteTreeNode,
   Paginated,
   Project,
-  Resource,
 } from "../type";
 
 const unwrap = <T>(request: Promise<{ data: ApiResponse<T> }>) =>
@@ -122,10 +122,10 @@ export const areaService = {
     return unwrap(axiosClient.delete<ApiResponse<null>>(`/area/${areaUuid}/projects/${projectUuid}`));
   },
   resources(areaUuid: string, page = 1) {
-    return unwrap(axiosClient.get<ApiResponse<Paginated<Resource>>>(`/area/${areaUuid}/resources`, { params: { page } }));
+    return unwrap(axiosClient.get<ApiResponse<Paginated<ResourceDetail>>>(`/area/${areaUuid}/resources`, { params: { page } }));
   },
   linkResource(areaUuid: string, resourceUuid: string) {
-    return unwrap(axiosClient.post<ApiResponse<Resource>>(`/area/${areaUuid}/resources`, { resource_uuid: resourceUuid }));
+    return unwrap(axiosClient.post<ApiResponse<ResourceDetail>>(`/area/${areaUuid}/resources`, { resource_uuid: resourceUuid }));
   },
   detachResource(areaUuid: string, resourceUuid: string) {
     return unwrap(axiosClient.delete<ApiResponse<null>>(`/area/${areaUuid}/resources/${resourceUuid}`));

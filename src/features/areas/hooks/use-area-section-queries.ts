@@ -1,5 +1,6 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "@/components/ui/toast";
+import type { Resource } from "@/features/resources/type";
 import { areaKeys } from "../queries/area-query";
 import { areaService } from "../services/area-service";
 import type {
@@ -10,7 +11,6 @@ import type {
   Note,
   Paginated,
   Project,
-  Resource,
 } from "../type";
 import type { AreaTab } from "../components/area-detail-types";
 
