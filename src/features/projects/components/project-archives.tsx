@@ -24,31 +24,25 @@ import {
 import { useProjectMutation, useProjectsQuery } from "../queries/project-query";
 import type { ProjectListCard } from "../type";
 import { ProjectIcon, projectBadgeStyle } from "./project-icons";
+import PageHeader from "@/components/shared/page-header";
 
 export function ProjectArchives() {
   const query = useProjectsQuery("archived");
 
   return (
     <section className="grid gap-5" aria-labelledby="archived-projects-title">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="flex items-start gap-3">
-          <div>
-            <h2 id="archived-projects-title" className="font-bold text-lg">
-              Archived projects
-            </h2>
-            <p className="max-w-2xl text-sm text-muted-foreground">
-              Restore a project when you are ready to continue its work and
-              Kanban board.
-            </p>
-          </div>
-        </div>
-        {query.data && (
-          <Badge variant="secondary" className="tabular-nums">
-            {query.data.data.length} archived
-          </Badge>
-        )}
-      </div>
-
+      <PageHeader
+        title="Archived projects"
+        description="Restore a project when you are ready to continue its work and
+              Kanban board."
+        action={
+          query.data && (
+            <Badge variant="secondary" className="tabular-nums">
+              {query.data.data.length} archived
+            </Badge>
+          )
+        }
+      />
       {query.isLoading && (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {[1, 2, 3].map((item) => (

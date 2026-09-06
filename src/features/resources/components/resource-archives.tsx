@@ -31,6 +31,7 @@ import { resourcePreview } from "../resource-document";
 import type { Resource, ResourceType } from "../type";
 import { ResourceDetailDialog } from "./resource-detail-dialog";
 import { ResourceIcon, resourceBadgeStyle } from "./resource-icons";
+import PageHeader from "@/components/shared/page-header";
 
 const typeIcons: Record<ResourceType, typeof BookOpen> = {
   note: BookOpen,
@@ -53,22 +54,18 @@ export function ResourceArchives() {
 
   return (
     <section className="grid gap-5" aria-labelledby="archived-resources-title">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2 id="archived-resources-title" className="font-bold text-lg">
-            Archived resources
-          </h2>
-          <p className="max-w-2xl text-sm text-muted-foreground">
-            Restore a resource when you want it available in your active
-            resource library again.
-          </p>
-        </div>
-        {total !== undefined && (
-          <Badge variant="secondary" className="tabular-nums">
-            {total} archived
-          </Badge>
-        )}
-      </div>
+      <PageHeader
+        title="Archived resources"
+        description="Restore a resource when you want it available in your active
+            resource library again."
+        action={
+          total !== undefined && (
+            <Badge variant="secondary" className="tabular-nums">
+              {total} archived
+            </Badge>
+          )
+        }
+      />
 
       {query.isLoading && (
         <div className="grid gap-4">
@@ -173,7 +170,10 @@ function ArchivedResourceCard({
             {resource.types.map((type) => {
               const Icon = typeIcons[type];
               return (
-                <span key={type} className="inline-flex items-center gap-1 capitalize">
+                <span
+                  key={type}
+                  className="inline-flex items-center gap-1 capitalize"
+                >
                   <Icon className="size-3.5" />
                   {type}
                 </span>

@@ -25,6 +25,7 @@ export function ProjectList() {
     <div className="grid gap-6">
       <PageHeader
         title="Projects"
+        description="Organize your work into projects, and track progress with tasks, goals, and habits."
         action={
           <>
             <Button

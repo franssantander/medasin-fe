@@ -36,3 +36,13 @@ Use 150–300ms transitions for opacity, scale, transform, hover elevation, and 
 - Clicking any project entry navigates to its project detail route.
 - Highlight today, show a status legend, allow overlapping projects to create additional lanes, and keep the calendar horizontally scrollable on narrow screens.
 - Match the existing Projects page visual language exactly; introduce no new fonts, colors, or control styles.
+
+## Focus timer requirements
+
+- Build the Focus page inside the existing dashboard shell with the saved Medasin sidebar and header; the Focus navigation item is active.
+- Use a calm two-column desktop workspace: a compact task panel on the left and a spacious timer workspace on the right. On mobile, place the timer before the task list.
+- The task panel supports adding standalone tasks or linking Project Board tasks, selecting the current task, session-dot history, active/completed filtering, and restrained row actions.
+- The timer workspace includes a small "Working on" label and task title, Focus/Short Break/Long Break phase controls, a large SVG-style circular progress ring with tabular time, start/pause/resume/reset controls, completed-today dots, and a compact footer for duration summaries and ambient sound.
+- Provide a settings dialog for Focus, Short Break, and Long Break durations, sessions before a long break, ask-before-next-session, ask-for-reflection, and ambient sound.
+- Provide a soft session-complete dialog that restates the task and duration, optionally shows an accessible four-emoji mood picker and note field, gives equal visual weight to Skip and the suggested break action, and ends with today's session/time totals.
+- Use only existing neutral tokens, Manrope typography, Lucide icons, rounded-xl cards, thin rings, and restrained shadows. Preserve light/dark themes, keyboard access, visible focus states, and reduced-motion behavior.

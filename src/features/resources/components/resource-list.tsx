@@ -45,6 +45,7 @@ export function ResourceList() {
     <div className="grid gap-6">
       <PageHeader
         title="Resources"
+        description=" Keep notes, links, images, and files organized in one searchable place."
         action={
           <Button onClick={() => list.setCreating(true)}>
             <Plus />
@@ -52,9 +53,8 @@ export function ResourceList() {
           </Button>
         }
       />
-      <p className="-mt-4 max-w-2xl text-sm leading-6 text-muted-foreground">
-        Keep notes, links, images, and files organized in one searchable place.
-      </p>
+
+      <p className="-mt-4 max-w-2xl text-sm leading-6 text-muted-foreground"></p>
       <div className="grid items-start gap-6 lg:grid-cols-[13rem_minmax(0,1fr)]">
         <div className="hidden lg:block">
           <ResourceListFilters

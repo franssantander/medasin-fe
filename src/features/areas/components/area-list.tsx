@@ -18,6 +18,7 @@ export function AreaList() {
     <div className="grid gap-6">
       <PageHeader
         title="Areas"
+        description="Group the goals, habits, projects, notes, and resources that support an ongoing part of your life."
         action={
           <Button onClick={areaForm.openCreate}>
             <Plus />

@@ -7,6 +7,7 @@ import { ProjectKanbanToolbar } from "@/features/projects/components/project-kan
 import { useStandaloneKanban } from "../hooks/use-standalone-kanban";
 import { StandaloneKanbanBoard } from "./standalone-kanban-board";
 import { StandaloneKanbanDialogs } from "./standalone-kanban-dialogs";
+import PageHeader from "@/components/shared/page-header";
 
 export function StandaloneKanban() {
   const kanban = useStandaloneKanban();
@@ -39,6 +40,10 @@ export function StandaloneKanban() {
 
   return (
     <div className="@container flex h-full min-h-0 min-w-0 flex-col gap-4">
+      <PageHeader
+        title="Board"
+        description="Give your ideas somewhere to move, not just somewhere to sit."
+      />
       <ProjectKanbanToolbar
         boards={kanban.boards}
         selectedBoardUuid={kanban.selectedBoardUuid}

@@ -14,30 +14,25 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useAreaMutation, useAreasQuery } from "../queries/area-query";
 import type { Area } from "../type";
 import { AreaIcon, areaBadgeStyle } from "./area-icons";
+import PageHeader from "@/components/shared/page-header";
 
 export function AreaArchives() {
   const query = useAreasQuery("archived");
 
   return (
     <section className="grid gap-5" aria-labelledby="archived-areas-title">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="flex items-start gap-3">
-          <div>
-            <h2 id="archived-areas-title" className="font-bold text-lg">
-              Archived areas
-            </h2>
-            <p className="max-w-2xl text-sm text-muted-foreground">
-              Restore an area to continue organizing its projects, goals,
-              habits, notes, and resources.
-            </p>
-          </div>
-        </div>
-        {query.data && (
-          <Badge variant="secondary" className="tabular-nums">
-            {query.data.data.length} archived
-          </Badge>
-        )}
-      </div>
+      <PageHeader
+        title="Archived areas"
+        description="Restore an area to continue organizing its projects, goals,
+              habits, notes, and resources."
+        action={
+          query.data && (
+            <Badge variant="secondary" className="tabular-nums">
+              {query.data.data.length} archived
+            </Badge>
+          )
+        }
+      />
 
       {query.isLoading && (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
