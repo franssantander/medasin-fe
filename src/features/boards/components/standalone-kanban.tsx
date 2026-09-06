@@ -38,7 +38,7 @@ export function StandaloneKanban() {
   }
 
   return (
-    <div className="@container grid min-w-0 gap-4">
+    <div className="@container flex h-full min-h-0 min-w-0 flex-col gap-4">
       <ProjectKanbanToolbar
         boards={kanban.boards}
         selectedBoardUuid={kanban.selectedBoardUuid}
@@ -50,7 +50,9 @@ export function StandaloneKanban() {
         onOpenBoardDialog={kanban.setBoardDialog}
         onDeleteBoard={() => kanban.setDeleteBoardOpen(true)}
       />
-      <StandaloneKanbanBoard {...kanban} />
+      <div className="min-h-0 flex-1">
+        <StandaloneKanbanBoard {...kanban} />
+      </div>
       <StandaloneKanbanDialogs {...kanban} />
     </div>
   );

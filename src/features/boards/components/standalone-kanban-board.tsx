@@ -41,9 +41,9 @@ export function StandaloneKanbanBoard({
 }: BoardContentProps) {
   if (boardQuery.isLoading) {
     return (
-      <div className={kanbanGridStyles}>
+      <div className={`${kanbanGridStyles} h-full min-h-0`}>
         {[1, 2, 3, 4].map((item) => (
-          <Skeleton key={item} className="h-[32rem] rounded-xl" />
+          <Skeleton key={item} className="h-full min-h-80 rounded-xl" />
         ))}
       </div>
     );
@@ -66,7 +66,9 @@ export function StandaloneKanbanBoard({
       onDragEnd={endDrag}
       onDragCancel={cancelDrag}
     >
-      <div className={kanbanGridStyles}>
+      <div
+        className={`${kanbanGridStyles} h-full min-h-0 [&>section]:h-full [&>section]:min-h-80`}
+      >
         {board.stages.map((stage) => (
           <KanbanColumn
             key={stage.uuid}
