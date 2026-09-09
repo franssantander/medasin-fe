@@ -36,7 +36,7 @@ export function FocusPage() {
   const reflect = useSaveFocusReflectionMutation();
   const updateSettings = useUpdateFocusSettingsMutation();
   const [selectedUuid, setSelectedUuid] = useState<string>();
-  const [phase, setPhase] = useState<FocusSessionType>("focus");
+  const [phase, setPhase] = useState<FocusSessionType | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [completion, setCompletion] = useState<{
     session: FocusSession;
@@ -71,6 +71,7 @@ export function FocusPage() {
         refreshed.data?.data.suggested_next_type ?? "focus";
       const nextType = getNextType(session.type, suggestedNextType);
       const settings = refreshed.data?.data.settings ?? data?.settings;
+      setPhase(null);
       if (
         !settings ||
         settings.ask_before_next_session ||
@@ -127,11 +128,12 @@ export function FocusPage() {
   const selectedTask = data.tasks.find(
     (task) => task.uuid === effectiveSelectedUuid,
   );
+  const idlePhase = phase ?? data.suggested_next_type;
   const pending = action.isPending || start.isPending || reflect.isPending;
   const startCurrent = () =>
     start.mutate({
-      type: phase,
-      taskUuid: phase === "focus" ? effectiveSelectedUuid : undefined,
+      type: idlePhase,
+      taskUuid: idlePhase === "focus" ? effectiveSelectedUuid : undefined,
     });
   const runAction = (nextAction: "pause" | "resume" | "cancel") =>
     activeSession &&
@@ -187,7 +189,7 @@ export function FocusPage() {
         />
         <FocusTimerCard
           session={activeSession}
-          phase={phase}
+          phase={idlePhase}
           selectedTask={selectedTask}
           settings={data.settings}
           remaining={timer.remaining}
