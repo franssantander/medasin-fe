@@ -68,6 +68,14 @@ import {
   parseNoteDocument,
   serializeNoteDocument,
 } from "@/components/ui/note-editor-document";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { toast } from "@/components/ui/toast";
 import { getImageAspectRatio, imageUrlToFile } from "@/lib/image/crop-image";
 
@@ -408,6 +416,12 @@ export function NoteRichTextEditorClient({
   const [label, setLabel] = useState("");
   const [selectedNoteUuid, setSelectedNoteUuid] = useState("");
   const [imageCrop, setImageCrop] = useState<ImageCropSession>();
+  const selectedNote = noteOptions.find(
+    (note) => note.uuid === selectedNoteUuid,
+  );
+  const selectedNoteLabel = selectedNoteUuid
+    ? selectedNote?.title || "Untitled"
+    : undefined;
   useEffect(() => {
     onChangeRef.current = onChange;
     onUploadFileRef.current = onUploadFile;
@@ -887,25 +901,31 @@ export function NoteRichTextEditorClient({
             </DialogTitle>
             <DialogDescription>
               {pendingDialog?.kind === "note"
-                ? "Choose another note or nested page in this area."
+                ? "Choose another note or nested page in this collection."
                 : "Only HTTP and HTTPS links are supported."}
             </DialogDescription>
           </DialogHeader>
           {pendingDialog?.kind === "note" ? (
-            <select
-              aria-label="Note"
-              className="h-9 w-full rounded-md border bg-background px-2.5 text-sm"
+            <Select
               value={selectedNoteUuid}
-              onChange={(event) => setSelectedNoteUuid(event.target.value)}
+              onValueChange={(value) => setSelectedNoteUuid(value ?? "")}
             >
-              <option value="">Select a note</option>
-              {noteOptions.map((note) => (
-                <option key={note.uuid} value={note.uuid}>
-                  {"— ".repeat(note.depth)}
-                  {note.title || "Untitled"}
-                </option>
-              ))}
-            </select>
+              <SelectTrigger className="w-full" aria-label="Select a note">
+                <SelectValue placeholder="Select a note">
+                  {selectedNoteLabel}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent align="start">
+                <SelectGroup>
+                  {noteOptions.map((note) => (
+                    <SelectItem key={note.uuid} value={note.uuid}>
+                      {"— ".repeat(note.depth)}
+                      {note.title || "Untitled"}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
           ) : (
             <div className="grid gap-3">
               <Input

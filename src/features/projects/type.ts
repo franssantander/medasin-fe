@@ -86,7 +86,7 @@ export type BoardTaskResourceLink = {
 export type BoardTaskNoteLink = {
   uuid: string;
   title: string;
-  area: BoardTaskAreaLink;
+  area: BoardTaskAreaLink | null;
   created_at: string | null;
   updated_at: string | null;
 };

@@ -1,4 +1,4 @@
-import type { NoteTreeNode } from "@/features/areas/type";
+import type { NoteTreeNode } from "@/features/notes/type";
 import type {
   Board,
   BoardStageKey,
@@ -35,8 +35,13 @@ export const priorityDotColors: Record<BoardTask["priority"], string> = {
 export const kanbanGridStyles =
   "grid w-full min-w-0 grid-flow-col auto-cols-[minmax(18rem,1fr)] gap-4 overflow-x-auto pb-4 @[64rem]:grid-flow-row @[64rem]:grid-cols-4 @[64rem]:auto-cols-auto @[64rem]:overflow-x-visible @[64rem]:pb-0";
 
-export function flattenNotes(nodes: NoteTreeNode[]): NoteTreeNode[] {
-  return nodes.flatMap((node) => [node, ...flattenNotes(node.children)]);
+export type FlatNote = Omit<NoteTreeNode, "children"> & { depth: number };
+
+export function flattenNotes(nodes: NoteTreeNode[], depth = 0): FlatNote[] {
+  return nodes.flatMap((node) => {
+    const { children, ...summary } = node;
+    return [{ ...summary, depth }, ...flattenNotes(children, depth + 1)];
+  });
 }
 
 export function toggleSelection(items: string[], uuid: string) {

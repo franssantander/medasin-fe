@@ -1,5 +1,12 @@
 import type { ProjectStatus } from "@/features/projects/type";
 
+export type {
+  Note,
+  NoteInput,
+  NoteMedia,
+  NoteTreeNode,
+} from "@/features/notes/type";
+
 export type ApiResponse<T> = {
   data: T;
   status: number;
@@ -100,40 +107,6 @@ export type HabitHistory = {
   completion_rate: number;
 };
 
-export type Note = {
-  id: number;
-  uuid: string;
-  area_id: number;
-  parent_uuid: string | null;
-  title: string;
-  content: string;
-  is_pinned: boolean;
-  created_at: string;
-  updated_at: string;
-};
-
-export type NoteTreeNode = Pick<
-  Note,
-  | "uuid"
-  | "parent_uuid"
-  | "title"
-  | "content"
-  | "is_pinned"
-  | "created_at"
-  | "updated_at"
-> & {
-  children: NoteTreeNode[];
-};
-
-export type NoteMedia = {
-  uuid: string;
-  url: string;
-  kind: "image" | "video";
-  mime_type: string;
-  name: string;
-  size: number;
-};
-
 export type Project = {
   id: number;
   uuid: string;
@@ -182,11 +155,4 @@ export type HabitInput = {
   frequency: HabitFrequency;
   schedule: HabitSchedule | null;
   is_active: boolean;
-};
-
-export type NoteInput = {
-  title: string;
-  content: string;
-  is_pinned: boolean;
-  parent_uuid?: string | null;
 };

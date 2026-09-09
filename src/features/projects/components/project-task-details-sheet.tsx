@@ -55,6 +55,7 @@ import {
 } from "@/components/ui/drawer";
 import { areaKeys } from "@/features/areas/queries/area-query";
 import { areaService } from "@/features/areas/services/area-service";
+import { useNotesTreeQuery } from "@/features/notes/queries/note-query";
 import { ResourceDetailDialog } from "@/features/resources/components/resource-detail-dialog";
 import type {
   BoardLabel,
@@ -74,9 +75,17 @@ import {
   priorityStyles,
   stageDotColors,
   toggleSelection,
+  type FlatNote,
 } from "./project-kanban-utils";
 
 type TaskSaveState = "idle" | "dirty" | "saving" | "saved" | "error";
+
+type NotePickerGroup = {
+  key: string;
+  label: string;
+  area: { uuid: string; name: string } | null;
+  notes: FlatNote[];
+};
 
 function createTaskDraft(task?: BoardTask): BoardTaskInput {
   return {
@@ -145,6 +154,7 @@ export function TaskDetailsSheet({
     queryFn: () => areaService.list("active"),
     enabled: Boolean(task),
   });
+  const standaloneNotesQuery = useNotesTreeQuery(Boolean(task));
   const resourcesQuery = useResourcesQuery({}, Boolean(task) && !archived);
   const selectedResourceQuery = useResourceQuery(selectedResourceUuid);
   const availableResources = [
@@ -154,7 +164,7 @@ export function TaskDetailsSheet({
         .map((resource) => [resource.uuid, resource]),
     ).values(),
   ];
-  const notesQuery = useQuery({
+  const areaNotesQuery = useQuery({
     queryKey: [
       "areas",
       "all-notes",
@@ -169,6 +179,43 @@ export function TaskDetailsSheet({
       ),
     enabled: Boolean(task) && Boolean(areasQuery.data),
   });
+  const noteGroups = useMemo<NotePickerGroup[]>(() => {
+    const groups: NotePickerGroup[] = [];
+    const standaloneNotes = standaloneNotesQuery.data?.data
+      ? flattenNotes(standaloneNotesQuery.data.data)
+      : [];
+
+    if (standaloneNotes.length > 0) {
+      groups.push({
+        key: "standalone",
+        label: "Standalone notes",
+        area: null,
+        notes: standaloneNotes,
+      });
+    }
+
+    for (const group of areaNotesQuery.data ?? []) {
+      if (group.notes.length === 0) continue;
+      groups.push({
+        key: group.area.uuid,
+        label: group.area.name,
+        area: { uuid: group.area.uuid, name: group.area.name },
+        notes: group.notes,
+      });
+    }
+
+    return groups;
+  }, [areaNotesQuery.data, standaloneNotesQuery.data]);
+  const notesLoading =
+    Boolean(task) &&
+    (areasQuery.isLoading ||
+      areaNotesQuery.isLoading ||
+      standaloneNotesQuery.isLoading);
+  const notesError =
+    Boolean(task) &&
+    (areasQuery.isError ||
+      areaNotesQuery.isError ||
+      standaloneNotesQuery.isError);
 
   const flushDraft = () => {
     if (saveTimerRef.current) {
@@ -270,6 +317,12 @@ export function TaskDetailsSheet({
     });
   };
 
+  const handleToggleNote = (noteUuid: string) => {
+    updateDraft({
+      note_uuids: toggleSelection(draft.note_uuids, noteUuid),
+    });
+  };
+
   const handleOpenResource = (resourceUuid: string) => {
     if (
       resourceUuid === selectedResourceUuid &&
@@ -291,23 +344,27 @@ export function TaskDetailsSheet({
 
   const editorNoteOptions = useMemo(
     () =>
-      (notesQuery.data ?? []).flatMap(({ notes }) =>
+      noteGroups.flatMap(({ notes }) =>
         notes.map((note) => ({
           uuid: note.uuid,
           title: note.title,
-          depth: 0,
+          depth: note.depth,
         })),
       ),
-    [notesQuery.data],
+    [noteGroups],
   );
 
   const openEditorNote = (noteUuid: string) => {
-    const group = notesQuery.data?.find(({ notes }) =>
+    const group = noteGroups.find(({ notes }) =>
       notes.some((note) => note.uuid === noteUuid),
     );
-    if (group) {
-      router.push(`/areas/${group.area.uuid}?tab=notes&note=${noteUuid}`);
-    }
+    if (!group) return;
+
+    router.push(
+      group.area
+        ? `/areas/${group.area.uuid}?tab=notes&note=${noteUuid}`
+        : `/notes?note=${noteUuid}`,
+    );
   };
 
   const updateLabel = (labelUuid?: string) => {
@@ -699,6 +756,20 @@ export function TaskDetailsSheet({
                         : "Load more resources"}
                     </Button>
                   )}
+                  {linkPicker === "notes" && notesError && (
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        if (areasQuery.isError) void areasQuery.refetch();
+                        if (areaNotesQuery.isError)
+                          void areaNotesQuery.refetch();
+                        if (standaloneNotesQuery.isError)
+                          void standaloneNotesQuery.refetch();
+                      }}
+                    >
+                      Retry loading notes
+                    </Button>
+                  )}
                   <div className="grid max-h-[55vh] gap-3 overflow-y-auto pr-1">
                     {linkPicker === "resources" ? (
                       resourcesQuery.isLoading ? (
@@ -714,39 +785,21 @@ export function TaskDetailsSheet({
                           No resources available.
                         </EmptyTaskDetail>
                       )
-                    ) : notesQuery.isLoading ? (
+                    ) : notesLoading ? (
                       <EmptyTaskDetail>Loading notes…</EmptyTaskDetail>
-                    ) : notesQuery.data?.length ? (
-                      notesQuery.data.map(
-                        ({ area, notes }) =>
-                          notes.length > 0 && (
-                            <div key={area.uuid} className="grid gap-2">
-                              <p className="text-xs font-medium text-muted-foreground">
-                                {area.name}
-                              </p>
-                              {notes.map((note) => {
-                                const selected = draft.note_uuids.includes(
-                                  note.uuid,
-                                );
-                                return (
-                                  <LinkPickerItem
-                                    key={note.uuid}
-                                    title={note.title}
-                                    icon={<FileText />}
-                                    selected={selected}
-                                    onClick={() => {
-                                      const next = toggleSelection(
-                                        draftRef.current.note_uuids,
-                                        note.uuid,
-                                      );
-                                      updateDraft({ note_uuids: next });
-                                    }}
-                                  />
-                                );
-                              })}
-                            </div>
-                          ),
-                      )
+                    ) : noteGroups.length ? (
+                      noteGroups.map(({ key, label, notes }) => (
+                        <div key={key} className="grid gap-2">
+                          <p className="text-xs font-medium text-muted-foreground">
+                            {label}
+                          </p>
+                          <NotePickerItems
+                            notes={notes}
+                            selectedUuids={draft.note_uuids}
+                            onToggle={handleToggleNote}
+                          />
+                        </div>
+                      ))
                     ) : (
                       <EmptyTaskDetail>No notes available.</EmptyTaskDetail>
                     )}
@@ -887,10 +940,14 @@ function TaskNoteList({ items }: { items: BoardTaskNoteLink[] }) {
       {items.map((item) => (
         <LinkedItemCard
           key={item.uuid}
-          href={`/areas/${item.area.uuid}?tab=notes&note=${item.uuid}`}
+          href={
+            item.area
+              ? `/areas/${item.area.uuid}?tab=notes&note=${item.uuid}`
+              : `/notes?note=${item.uuid}`
+          }
           icon={<FileText />}
           title={item.title}
-          areas={[item.area.name]}
+          areas={item.area ? [item.area.name] : ["Standalone Notes"]}
           date={item.updated_at ?? item.created_at}
         />
       ))}
@@ -1005,6 +1062,26 @@ function ResourcePickerItems({
       icon={<Link2 />}
       selected={selectedUuids.includes(resource.uuid)}
       onClick={() => onToggle(resource.uuid)}
+    />
+  ));
+}
+
+function NotePickerItems({
+  notes,
+  selectedUuids,
+  onToggle,
+}: {
+  notes: FlatNote[];
+  selectedUuids: string[];
+  onToggle: (uuid: string) => void;
+}) {
+  return notes.map((note) => (
+    <LinkPickerItem
+      key={note.uuid}
+      title={note.title}
+      icon={<FileText />}
+      selected={selectedUuids.includes(note.uuid)}
+      onClick={() => onToggle(note.uuid)}
     />
   ));
 }

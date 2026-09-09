@@ -30,6 +30,7 @@ function useTrashMutation(action: "restore" | "delete") {
         client.invalidateQueries({ queryKey: ["areas"] }),
         client.invalidateQueries({ queryKey: ["projects"] }),
         client.invalidateQueries({ queryKey: ["resources"] }),
+        client.invalidateQueries({ queryKey: ["notes"] }),
       ]);
       toast.add({ type: "success", description: response.message });
     },
