@@ -19,6 +19,24 @@ export function useAreaQuery(uuid: string) {
   return useQuery({ queryKey: areaKeys.detail(uuid), queryFn: () => areaService.show(uuid), enabled: Boolean(uuid) });
 }
 
+export function useAreaHabitLinkMutation(areaUuid: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (habitUuid: string) => areaService.linkHabit(areaUuid, habitUuid),
+    onSuccess: async (response) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: areaKeys.all }),
+        queryClient.invalidateQueries({ queryKey: ["habits"] }),
+      ]);
+      toast.add({ type: "success", description: response.message });
+    },
+    onError: (error) => {
+      toast.add({ type: "error", description: error.message });
+    },
+  });
+}
+
 export function useAreaMutation(
   action: "create" | "update" | "archive" | "restore" | "remove",
   areaUuid?: string,

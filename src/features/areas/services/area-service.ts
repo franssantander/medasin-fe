@@ -71,6 +71,9 @@ export const areaService = {
   habits(areaUuid: string, page = 1) {
     return unwrap(axiosClient.get<ApiResponse<Paginated<Habit>>>(`/area/${areaUuid}/habits`, { params: { page } }));
   },
+  linkHabit(areaUuid: string, habitUuid: string) {
+    return unwrap(axiosClient.post<ApiResponse<Habit>>(`/area/${areaUuid}/habits/link`, { habit_uuid: habitUuid }));
+  },
   createHabit(areaUuid: string, input: HabitInput) {
     return unwrap(axiosClient.post<ApiResponse<Habit>>(`/area/${areaUuid}/habits`, input));
   },

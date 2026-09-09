@@ -20,13 +20,14 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { Resource } from "@/features/resources/type";
 import { useAreaSectionQueries } from "../hooks/use-area-section-queries";
-import { useAreaMutation, useAreaQuery } from "../queries/area-query";
-import {
-  useHabitUpdateMutation,
-  useHabitsQuery,
-} from "@/features/habits/queries/habit-query";
 import { HabitLinkDialog } from "@/features/habits/components/habit-link-dialog";
+import { useHabitsQuery } from "@/features/habits/queries/habit-query";
 import type { Habit as GlobalHabit } from "@/features/habits/type";
+import {
+  useAreaHabitLinkMutation,
+  useAreaMutation,
+  useAreaQuery,
+} from "../queries/area-query";
 import { areaService } from "../services/area-service";
 import type {
   AreaInput,
@@ -96,7 +97,7 @@ export function AreaDetail({
   const restoreArea = useAreaMutation("restore", uuid);
   const removeArea = useAreaMutation("remove", uuid);
   const globalHabitsQuery = useHabitsQuery(linkHabitOpen && Boolean(area));
-  const linkHabitMutation = useHabitUpdateMutation();
+  const linkHabitMutation = useAreaHabitLinkMutation(uuid);
   const areaActionPending = archiveArea.isPending || removeArea.isPending;
   const { goalsQuery, invalidate, sectionQuery } = useAreaSectionQueries({
     areaUuid: uuid,
@@ -187,10 +188,7 @@ export function AreaDetail({
     }
   };
   const linkHabit = async (habit: GlobalHabit) => {
-    await linkHabitMutation.mutateAsync({
-      habitUuid: habit.uuid,
-      input: { area_uuid: uuid },
-    });
+    await linkHabitMutation.mutateAsync(habit.uuid);
   };
 
   const backContext =
