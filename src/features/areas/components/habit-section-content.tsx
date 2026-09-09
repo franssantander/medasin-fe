@@ -24,6 +24,7 @@ export function HabitSectionContent({
   onAdd,
   onEdit,
   onDelete,
+  onLink,
 }: {
   habits: Habit[];
   pagination?: Paginated<Habit>;
@@ -34,6 +35,7 @@ export function HabitSectionContent({
   onAdd: () => void;
   onEdit: (habit: Habit) => void;
   onDelete: (uuid: string) => Promise<void>;
+  onLink: () => void;
 }) {
   const [habitToDelete, setHabitToDelete] = useState<Habit>();
   const [deletePending, setDeletePending] = useState(false);
@@ -63,6 +65,7 @@ export function HabitSectionContent({
         onDelete={(uuid) =>
           setHabitToDelete(habits.find((habit) => habit.uuid === uuid))
         }
+        onLink={onLink}
       />
       <Dialog
         open={Boolean(habitToDelete)}

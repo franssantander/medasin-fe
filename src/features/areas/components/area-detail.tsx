@@ -21,6 +21,12 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { Resource } from "@/features/resources/type";
 import { useAreaSectionQueries } from "../hooks/use-area-section-queries";
 import { useAreaMutation, useAreaQuery } from "../queries/area-query";
+import {
+  useHabitUpdateMutation,
+  useHabitsQuery,
+} from "@/features/habits/queries/habit-query";
+import { HabitLinkDialog } from "@/features/habits/components/habit-link-dialog";
+import type { Habit as GlobalHabit } from "@/features/habits/type";
 import { areaService } from "../services/area-service";
 import type {
   AreaInput,
@@ -81,6 +87,7 @@ export function AreaDetail({
     kind: "habit";
     value?: Habit;
   }>();
+  const [linkHabitOpen, setLinkHabitOpen] = useState(false);
   const areaQuery = useAreaQuery(uuid);
   const area = areaQuery.data?.data;
   const archived = Boolean(area?.archived_at);
@@ -88,6 +95,8 @@ export function AreaDetail({
   const archiveArea = useAreaMutation("archive", uuid);
   const restoreArea = useAreaMutation("restore", uuid);
   const removeArea = useAreaMutation("remove", uuid);
+  const globalHabitsQuery = useHabitsQuery(linkHabitOpen && Boolean(area));
+  const linkHabitMutation = useHabitUpdateMutation();
   const areaActionPending = archiveArea.isPending || removeArea.isPending;
   const { goalsQuery, invalidate, sectionQuery } = useAreaSectionQueries({
     areaUuid: uuid,
@@ -176,6 +185,12 @@ export function AreaDetail({
             : "/areas",
       );
     }
+  };
+  const linkHabit = async (habit: GlobalHabit) => {
+    await linkHabitMutation.mutateAsync({
+      habitUuid: habit.uuid,
+      input: { area_uuid: uuid },
+    });
   };
 
   const backContext =
@@ -292,6 +307,7 @@ export function AreaDetail({
                   .mutateAsync({ recordUuid })
                   .then(() => undefined);
               }}
+              onLinkHabit={() => setLinkHabitOpen(true)}
               onChanged={invalidate}
             />
           </div>
@@ -330,6 +346,15 @@ export function AreaDetail({
           }
         />
       )}
+      <HabitLinkDialog
+        open={linkHabitOpen}
+        areaUuid={uuid}
+        habits={globalHabitsQuery.data?.data ?? []}
+        loading={globalHabitsQuery.isLoading}
+        pending={linkHabitMutation.isPending}
+        onOpenChange={setLinkHabitOpen}
+        onLink={linkHabit}
+      />
       <AreaActionDialog
         action={confirmationAction}
         area={area}

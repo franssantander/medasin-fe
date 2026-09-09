@@ -33,6 +33,7 @@ export function AreaSectionContent({
   onAdd,
   onEdit,
   onDelete,
+  onLinkHabit,
   onChanged,
 }: {
   tab: AreaTab;
@@ -51,6 +52,7 @@ export function AreaSectionContent({
   onAdd: (kind: EditableAreaRecordKind) => void;
   onEdit: (kind: EditableAreaRecordKind, value: EditableAreaRecord) => void;
   onDelete: (kind: EditableAreaRecordKind, uuid: string) => Promise<void>;
+  onLinkHabit: () => void;
   onChanged: (message: string) => Promise<void>;
 }) {
   if (loading) return <Skeleton className="h-64 rounded-xl" />;
@@ -98,6 +100,7 @@ export function AreaSectionContent({
         onAdd={() => onAdd("habit")}
         onEdit={(habit) => onEdit("habit", habit)}
         onDelete={(uuid) => onDelete("habit", uuid)}
+        onLink={onLinkHabit}
       />
     );
   }
