@@ -7,6 +7,9 @@ export const areaKeys = {
   all: ["areas"] as const,
   list: (status: AreaStatusFilter) => ["areas", "list", status] as const,
   detail: (uuid: string) => ["areas", "detail", uuid] as const,
+  noteTree: (uuid: string) => ["areas", "detail", uuid, "notes", "tree"] as const,
+  noteDetail: (uuid: string, noteUuid: string) =>
+    ["areas", "detail", uuid, "notes", noteUuid] as const,
   section: (uuid: string, section: string, page = 1, filter?: string) =>
     ["areas", "detail", uuid, section, page, filter] as const,
 };

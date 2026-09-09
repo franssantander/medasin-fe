@@ -2,11 +2,17 @@
 
 // Shared note workspace used by standalone Notes and Areas.
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  useMutation,
+  useQueries,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import {
   ChevronRight,
   Ellipsis,
   FileText,
+  Folder,
   PanelLeftClose,
   PanelLeftOpen,
   Pin,
@@ -25,6 +31,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import {
@@ -61,6 +68,7 @@ import type {
   NoteInput,
   NoteMedia,
   NoteTreeNode,
+  NoteWorkspaceCollection,
   NoteWorkspaceQueryKeys,
   NoteWorkspaceService,
 } from "../type";
@@ -68,62 +76,162 @@ import type {
 const MAX_NOTE_MEDIA_REQUEST_BYTES = 8 * 1024 * 1024;
 
 type NoteSelection =
-  | { kind: "note"; uuid: string; focusTitle?: boolean }
-  | { kind: "draft"; key: number; uuid?: string };
+  | {
+      kind: "note";
+      uuid: string;
+      collectionKey: string;
+      focusTitle?: boolean;
+    }
+  | {
+      kind: "draft";
+      key: number;
+      collectionKey: string;
+      uuid?: string;
+    };
+
+type NoteToDelete = {
+  node: NoteTreeNode;
+  collectionKey: string;
+};
+
+type NoteCollectionState = NoteWorkspaceCollection & {
+  tree: NoteTreeNode[];
+  flatNotes: FlatNote[];
+};
 
 export function NoteWorkspace({
-  service,
-  queryKeys,
-  archived,
+  collections,
   initialNoteUuid,
 }: {
-  service: NoteWorkspaceService;
-  queryKeys: NoteWorkspaceQueryKeys;
-  archived?: boolean;
+  collections: NoteWorkspaceCollection[];
   initialNoteUuid?: string;
 }) {
-  const isArchived = archived ?? false;
   const queryClient = useQueryClient();
   const [selection, setSelection] = useState<NoteSelection>();
-  const [noteToDelete, setNoteToDelete] = useState<NoteTreeNode>();
+  const [noteToDelete, setNoteToDelete] = useState<NoteToDelete>();
   const [notesListOpen, setNotesListOpen] = useState(true);
   const [draftKey, setDraftKey] = useState(0);
-  const treeQuery = useQuery({
-    queryKey: queryKeys.tree,
-    queryFn: ({ signal }) => service.tree(signal),
+  const treeQueries = useQueries({
+    queries: collections.map((collection) => ({
+      queryKey: collection.queryKeys.tree,
+      queryFn: ({ signal }: { signal: AbortSignal }) =>
+        collection.service.tree(signal),
+      refetchOnMount: "always" as const,
+      refetchOnWindowFocus: true,
+    })),
   });
-  const tree = useMemo(() => treeQuery.data?.data ?? [], [treeQuery.data]);
-  const flatNotes = useMemo(() => flattenNotes(tree), [tree]);
-  const initialNote = initialNoteUuid
-    ? flatNotes.find((note) => note.uuid === initialNoteUuid)
+  const collectionStates = useMemo<NoteCollectionState[]>(
+    () =>
+      collections.map((collection, index) => {
+        const tree = treeQueries[index]?.data?.data ?? [];
+        return {
+          ...collection,
+          tree,
+          flatNotes: flattenNotes(tree),
+        };
+      }),
+    [collections, treeQueries],
+  );
+  const collectionByKey = useMemo(
+    () => new Map(collectionStates.map((collection) => [collection.key, collection])),
+    [collectionStates],
+  );
+  const createCollection = collections.find((collection) => collection.canCreate);
+  const initialCollection = initialNoteUuid
+    ? collectionStates.find((collection) =>
+        collection.flatNotes.some((note) => note.uuid === initialNoteUuid),
+      )
     : undefined;
+  const firstNoteCollection = collectionStates.find(
+    (collection) => collection.flatNotes.length > 0,
+  );
+  const fallbackCollection = collections[0];
   const derivedSelection: NoteSelection =
     selection ??
-    (initialNote
-      ? { kind: "note", uuid: initialNote.uuid }
-      : flatNotes[0]
-      ? { kind: "note", uuid: flatNotes[0].uuid }
-      : { kind: "draft", key: draftKey });
+    (initialCollection && initialNoteUuid
+      ? {
+          kind: "note",
+          uuid: initialNoteUuid,
+          collectionKey: initialCollection.key,
+        }
+      : firstNoteCollection
+      ? {
+          kind: "note",
+          uuid: firstNoteCollection.flatNotes[0].uuid,
+          collectionKey: firstNoteCollection.key,
+        }
+      : {
+          kind: "draft",
+          key: draftKey,
+          collectionKey: createCollection?.key ?? fallbackCollection?.key ?? "",
+        });
   const selectedUuid = derivedSelection.uuid;
+  const selectedCollection = collectionByKey.get(
+    derivedSelection.collectionKey,
+  );
+  const selectedNotes = selectedCollection?.flatNotes ?? [];
+  const totalNotes = collectionStates.reduce(
+    (total, collection) => total + collection.flatNotes.length,
+    0,
+  );
+  const visibleCollections = collectionStates.filter(
+    (collection) => collection.tree.length > 0 || collection.canCreate,
+  );
+  const showCollectionLabels = collections.length > 1;
 
-  const refreshTree = useCallback(async () => {
-    await queryClient.invalidateQueries({ queryKey: queryKeys.tree });
-  }, [queryClient, queryKeys]);
+  const refreshTree = useCallback(
+    async (collectionKey: string) => {
+      const collection = collectionByKey.get(collectionKey);
+      if (!collection) return;
+
+      await queryClient.invalidateQueries({
+        queryKey: collection.queryKeys.tree,
+      });
+    },
+    [collectionByKey, queryClient],
+  );
   const pinMutation = useMutation({
-    mutationFn: ({ uuid, pinned }: { uuid: string; pinned: boolean }) =>
-      service.update(uuid, { is_pinned: pinned }),
-    onSuccess: async () => refreshTree(),
+    mutationFn: ({
+      collectionKey,
+      uuid,
+      pinned,
+    }: {
+      collectionKey: string;
+      uuid: string;
+      pinned: boolean;
+    }) => {
+      const collection = collectionByKey.get(collectionKey);
+      if (!collection) throw new Error("Note collection is unavailable.");
+
+      return collection.service.update(uuid, { is_pinned: pinned });
+    },
+    onSuccess: async (_, variables) => refreshTree(variables.collectionKey),
     onError: (error) =>
       toast.add({ type: "error", description: error.message }),
   });
   const deleteMutation = useMutation({
-    mutationFn: ({ uuid }: { uuid: string; deletedUuids: string[] }) =>
-      service.remove(uuid),
+    mutationFn: ({
+      collectionKey,
+      uuid,
+    }: {
+      collectionKey: string;
+      uuid: string;
+      deletedUuids: string[];
+    }) => {
+      const collection = collectionByKey.get(collectionKey);
+      if (!collection) throw new Error("Note collection is unavailable.");
+
+      return collection.service.remove(uuid);
+    },
     onSuccess: async (response, variables) => {
-      if (selectedUuid && variables.deletedUuids.includes(selectedUuid)) {
+      if (
+        selectedUuid &&
+        derivedSelection.collectionKey === variables.collectionKey &&
+        variables.deletedUuids.includes(selectedUuid)
+      ) {
         setSelection(undefined);
       }
-      await refreshTree();
+      await refreshTree(variables.collectionKey);
       setNoteToDelete(undefined);
       toast.add({ type: "success", description: response.message });
     },
@@ -131,16 +239,28 @@ export function NoteWorkspace({
       toast.add({ type: "error", description: error.message }),
   });
 
-  if (treeQuery.isLoading) {
+  const isTreeLoading = treeQueries.some((query) => query.isLoading);
+  const treeError = treeQueries.find((query) => query.isError);
+
+  if (isTreeLoading) {
     return <Skeleton className="min-h-[48rem] flex-1 rounded-xl" />;
   }
 
-  if (treeQuery.isError) {
+  if (treeError) {
     return (
       <Card className="items-center py-12 text-center">
         <CardTitle>Could not load notes</CardTitle>
-        <CardDescription>{treeQuery.error.message}</CardDescription>
-        <Button variant="outline" onClick={() => treeQuery.refetch()}>
+        <CardDescription>
+          {treeError.error instanceof Error
+            ? treeError.error.message
+            : "Check your connection and try again."}
+        </CardDescription>
+        <Button
+          variant="outline"
+          onClick={() => {
+            void Promise.all(treeQueries.map((query) => query.refetch()));
+          }}
+        >
           <RefreshCw />
           Try again
         </Button>
@@ -149,10 +269,25 @@ export function NoteWorkspace({
   }
 
   const startDraft = () => {
+    if (!createCollection) return;
+
     const nextKey = draftKey + 1;
     setDraftKey(nextKey);
-    setSelection({ kind: "draft", key: nextKey });
+    setSelection({
+      kind: "draft",
+      key: nextKey,
+      collectionKey: createCollection.key,
+    });
   };
+
+  if (!selectedCollection) {
+    return (
+      <Card className="items-center py-12 text-center">
+        <CardTitle>No note collection available</CardTitle>
+        <CardDescription>Try refreshing the page.</CardDescription>
+      </Card>
+    );
+  }
 
   return (
     <div
@@ -169,11 +304,11 @@ export function NoteWorkspace({
             <div>
               <h2 className="font-semibold">Notes</h2>
               <p className="text-xs text-muted-foreground">
-                {flatNotes.length} {flatNotes.length === 1 ? "page" : "pages"}
+                {totalNotes} {totalNotes === 1 ? "page" : "pages"}
               </p>
             </div>
             <div className="flex items-center gap-1">
-              {!isArchived && (
+              {createCollection && (
                 <Button
                   variant="ghost"
                   size="icon-sm"
@@ -195,28 +330,74 @@ export function NoteWorkspace({
             </div>
           </div>
           <div className="notes-list-scrollbar max-h-64 min-w-0 overflow-x-hidden overflow-y-auto p-2 md:max-h-none md:flex-1">
-            {tree.length === 0 ? (
+            {visibleCollections.length === 0 ? (
               <p className="px-2 py-6 text-center text-sm text-muted-foreground">
-                {isArchived
+                {selectedCollection.archived
                   ? "No notes in this collection."
                   : "Start writing your first note."}
               </p>
             ) : (
-              <NoteTree
-                nodes={tree}
-                selectedUuid={selectedUuid}
-                archived={isArchived}
-                pinPending={pinMutation.isPending}
-                deletePending={deleteMutation.isPending}
-                onSelect={(uuid) => setSelection({ kind: "note", uuid })}
-                onPin={(node) =>
-                  pinMutation.mutate({
-                    uuid: node.uuid,
-                    pinned: !node.is_pinned,
-                  })
-                }
-                onDelete={setNoteToDelete}
-              />
+              <div className="grid gap-5">
+                {visibleCollections.map((collection) => (
+                  <section key={collection.key} className="grid gap-2">
+                    {showCollectionLabels && (
+                      <div className="flex items-center justify-between gap-2 px-2">
+                        <div className="flex min-w-0 items-center gap-2">
+                          <Folder className="size-3.5 shrink-0 text-muted-foreground" />
+                          <h3 className="min-w-0 truncate text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                            {collection.label}
+                          </h3>
+                          {collection.archived && (
+                            <Badge variant="secondary" className="text-[0.625rem]">
+                              Archived
+                            </Badge>
+                          )}
+                        </div>
+                        <span className="shrink-0 text-[0.6875rem] text-muted-foreground">
+                          {collection.flatNotes.length}
+                        </span>
+                      </div>
+                    )}
+                    {collection.tree.length === 0 ? (
+                      <p className="px-2 py-3 text-sm text-muted-foreground">
+                        Start writing your first note.
+                      </p>
+                    ) : (
+                      <NoteTree
+                        nodes={collection.tree}
+                        selectedUuid={
+                          derivedSelection.collectionKey === collection.key
+                            ? selectedUuid
+                            : undefined
+                        }
+                        archived={collection.archived}
+                        pinPending={pinMutation.isPending}
+                        deletePending={deleteMutation.isPending}
+                        onSelect={(uuid) =>
+                          setSelection({
+                            kind: "note",
+                            uuid,
+                            collectionKey: collection.key,
+                          })
+                        }
+                        onPin={(node) =>
+                          pinMutation.mutate({
+                            collectionKey: collection.key,
+                            uuid: node.uuid,
+                            pinned: !node.is_pinned,
+                          })
+                        }
+                        onDelete={(node) =>
+                          setNoteToDelete({
+                            node,
+                            collectionKey: collection.key,
+                          })
+                        }
+                      />
+                    )}
+                  </section>
+                ))}
+              </div>
             )}
           </div>
         </aside>
@@ -242,36 +423,46 @@ export function NoteWorkspace({
         >
           {derivedSelection.kind === "note" ? (
             <PersistedNotePanel
-              key={derivedSelection.uuid}
-              service={service}
-              queryKeys={queryKeys}
+              key={`${selectedCollection.key}:${derivedSelection.uuid}`}
+              service={selectedCollection.service}
+              queryKeys={selectedCollection.queryKeys}
               noteUuid={derivedSelection.uuid}
-              archived={isArchived}
+              archived={selectedCollection.archived}
               focusTitle={derivedSelection.focusTitle}
-              noteOptions={flatNotes}
+              noteOptions={selectedNotes}
               onOpenNote={(uuid, options) =>
-                setSelection({ kind: "note", uuid, ...options })
+                setSelection({
+                  kind: "note",
+                  uuid,
+                  collectionKey: selectedCollection.key,
+                  ...options,
+                })
               }
-              onTreeChanged={refreshTree}
+              onTreeChanged={() => refreshTree(selectedCollection.key)}
             />
           ) : (
             <NoteEditorPanel
-              key={`draft-${derivedSelection.key}`}
-              service={service}
-              queryKeys={queryKeys}
-              archived={isArchived}
-              documentId={`draft-${derivedSelection.key}`}
+              key={`draft-${derivedSelection.collectionKey}-${derivedSelection.key}`}
+              service={selectedCollection.service}
+              queryKeys={selectedCollection.queryKeys}
+              archived={selectedCollection.archived}
+              documentId={`draft-${derivedSelection.collectionKey}-${derivedSelection.key}`}
               initialTitle=""
               initialContent={EMPTY_NOTE_DOCUMENT}
               initialPinned={false}
               persistedUuid={derivedSelection.uuid}
-              noteOptions={flatNotes}
+              noteOptions={selectedNotes}
               onCreated={(note) => {
                 setSelection((current) => {
-                  if (!current) {
+                  if (
+                    !current ||
+                    current.kind !== "draft" ||
+                    current.collectionKey !== selectedCollection.key
+                  ) {
                     return {
                       kind: "draft",
                       key: derivedSelection.key,
+                      collectionKey: selectedCollection.key,
                       uuid: note.uuid,
                     };
                   }
@@ -281,9 +472,14 @@ export function NoteWorkspace({
                 });
               }}
               onOpenNote={(uuid, options) =>
-                setSelection({ kind: "note", uuid, ...options })
+                setSelection({
+                  kind: "note",
+                  uuid,
+                  collectionKey: selectedCollection.key,
+                  ...options,
+                })
               }
-              onTreeChanged={refreshTree}
+              onTreeChanged={() => refreshTree(selectedCollection.key)}
             />
           )}
         </div>
@@ -298,9 +494,9 @@ export function NoteWorkspace({
           <DialogHeader>
             <DialogTitle>Delete note?</DialogTitle>
             <DialogDescription>
-              {noteToDelete?.children.length
-                ? `“${noteToDelete.title || "Untitled"}” and all of its child pages will move to Trash for 30 days and can be restored together.`
-                : `“${noteToDelete?.title || "Untitled"}” will move to Trash for 30 days and can be restored from Settings.`}
+              {noteToDelete?.node.children.length
+                ? `“${noteToDelete.node.title || "Untitled"}” and all of its child pages will move to Trash for 30 days and can be restored together.`
+                : `“${noteToDelete?.node.title || "Untitled"}” will move to Trash for 30 days and can be restored from Settings.`}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -318,8 +514,9 @@ export function NoteWorkspace({
                 if (!noteToDelete) return;
 
                 deleteMutation.mutate({
-                  uuid: noteToDelete.uuid,
-                  deletedUuids: flattenNotes([noteToDelete]).map(
+                  collectionKey: noteToDelete.collectionKey,
+                  uuid: noteToDelete.node.uuid,
+                  deletedUuids: flattenNotes([noteToDelete.node]).map(
                     (note) => note.uuid,
                   ),
                 });

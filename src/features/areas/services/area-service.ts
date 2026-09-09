@@ -92,11 +92,11 @@ export const areaService = {
   notes(areaUuid: string, page = 1) {
     return unwrap(axiosClient.get<ApiResponse<Paginated<Note>>>(`/area/${areaUuid}/notes`, { params: { page } }));
   },
-  noteTree(areaUuid: string) {
-    return unwrap(axiosClient.get<ApiResponse<NoteTreeNode[]>>(`/area/${areaUuid}/notes/tree`));
+  noteTree(areaUuid: string, signal?: AbortSignal) {
+    return unwrap(axiosClient.get<ApiResponse<NoteTreeNode[]>>(`/area/${areaUuid}/notes/tree`, { signal }));
   },
-  note(areaUuid: string, noteUuid: string) {
-    return unwrap(axiosClient.get<ApiResponse<Note>>(`/area/${areaUuid}/notes/${noteUuid}`));
+  note(areaUuid: string, noteUuid: string, signal?: AbortSignal) {
+    return unwrap(axiosClient.get<ApiResponse<Note>>(`/area/${areaUuid}/notes/${noteUuid}`, { signal }));
   },
   createNote(areaUuid: string, input: NoteInput) {
     return unwrap(axiosClient.post<ApiResponse<Note>>(`/area/${areaUuid}/notes`, input));

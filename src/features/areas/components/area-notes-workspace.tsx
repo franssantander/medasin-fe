@@ -2,12 +2,8 @@
 
 import { useMemo } from "react";
 import { NoteWorkspace } from "@/features/notes/components/note-workspace";
-import type {
-  NoteWorkspaceQueryKeys,
-  NoteWorkspaceService,
-} from "@/features/notes/type";
-import { areaService } from "../services/area-service";
-import type { NoteInput } from "../type";
+import type { NoteWorkspaceCollection } from "@/features/notes/type";
+import { createAreaNoteWorkspaceCollection } from "../services/area-note-workspace-service";
 
 export function AreaNotesWorkspace({
   areaUuid,
@@ -18,34 +14,22 @@ export function AreaNotesWorkspace({
   archived: boolean;
   initialNoteUuid?: string;
 }) {
-  const service = useMemo(() => createAreaNoteService(areaUuid), [areaUuid]);
-  const queryKeys = useMemo<NoteWorkspaceQueryKeys>(
-    () => ({
-      tree: ["areas", "detail", areaUuid, "notes", "tree"],
-      detail: (noteUuid) => ["areas", "detail", areaUuid, "notes", noteUuid],
-    }),
-    [areaUuid],
+  const collection = useMemo<NoteWorkspaceCollection>(
+    () =>
+      createAreaNoteWorkspaceCollection({
+        areaUuid,
+        areaName: "Area notes",
+        archived,
+        canCreate: !archived,
+      }),
+    [areaUuid, archived],
   );
+  const collections = useMemo(() => [collection], [collection]);
 
   return (
     <NoteWorkspace
-      service={service}
-      queryKeys={queryKeys}
-      archived={archived}
+      collections={collections}
       initialNoteUuid={initialNoteUuid}
     />
   );
-}
-
-function createAreaNoteService(areaUuid: string): NoteWorkspaceService {
-  return {
-    tree: () => areaService.noteTree(areaUuid),
-    show: (noteUuid) => areaService.note(areaUuid, noteUuid),
-    create: (input: NoteInput) => areaService.createNote(areaUuid, input),
-    update: (noteUuid, input) =>
-      areaService.updateNote(areaUuid, noteUuid, input),
-    remove: (noteUuid) => areaService.removeNote(areaUuid, noteUuid),
-    uploadMedia: (noteUuid, file) =>
-      areaService.uploadNoteMedia(areaUuid, noteUuid, file),
-  };
 }

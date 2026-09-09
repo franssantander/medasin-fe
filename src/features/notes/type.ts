@@ -77,3 +77,12 @@ export type NoteWorkspaceQueryKeys = {
   tree: readonly unknown[];
   detail: (noteUuid: string) => readonly unknown[];
 };
+
+export type NoteWorkspaceCollection = {
+  key: string;
+  label: string;
+  archived: boolean;
+  canCreate: boolean;
+  service: NoteWorkspaceService;
+  queryKeys: NoteWorkspaceQueryKeys;
+};
