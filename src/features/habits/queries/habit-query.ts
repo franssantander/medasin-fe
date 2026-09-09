@@ -5,6 +5,7 @@ import {
 } from "@tanstack/react-query";
 import { toast } from "@/components/ui/toast";
 import { areaKeys } from "@/features/areas/queries/area-query";
+import { areaService } from "@/features/areas/services/area-service";
 import { habitService } from "../services/habit-service";
 import type { HabitCalendarRange, HabitInput } from "../type";
 
@@ -65,8 +66,20 @@ export function useHabitCreateMutation() {
 export function useHabitUpdateMutation() {
   const invalidate = useHabitInvalidation();
   return useMutation({
-    mutationFn: ({ habitUuid, input }: { habitUuid: string; input: Partial<HabitInput> }) =>
-      habitService.update(habitUuid, input),
+    mutationFn: async ({
+      habitUuid,
+      input,
+    }: {
+      habitUuid: string;
+      input: Partial<HabitInput>;
+    }) => {
+      const { area_uuid: areaUuid, ...habitInput } = input;
+      const response = await habitService.update(habitUuid, habitInput);
+
+      return areaUuid
+        ? areaService.linkHabit(areaUuid, habitUuid)
+        : response;
+    },
     onSuccess: async (response) => {
       await invalidate();
       toast.add({ type: "success", description: response.message });

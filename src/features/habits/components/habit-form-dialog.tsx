@@ -63,6 +63,7 @@ export function HabitFormDialog({
 }) {
   const [iconSearch, setIconSearch] = useState("");
   const areasQuery = useAreasQuery("active");
+  const areas = areasQuery.data?.data ?? [];
   const {
     control,
     register,
@@ -88,6 +89,16 @@ export function HabitFormDialog({
   const selectedIcon = useWatch({ control, name: "icon" });
   const selectedDays = useWatch({ control, name: "schedule_days" }) ?? [];
   const selectedDates = useWatch({ control, name: "schedule_dates" }) ?? [];
+  const selectedAreaUuid = useWatch({ control, name: "area_uuid" });
+  const selectedAreaName =
+    areas.find((area) => area.uuid === selectedAreaUuid)?.name ??
+    (habit?.area?.uuid === selectedAreaUuid
+      ? habit.area.name
+      : selectedAreaUuid
+        ? areasQuery.isLoading
+          ? "Loading areas…"
+          : "Selected area"
+        : undefined);
   const filteredIcons = useMemo(() => {
     const query = iconSearch.trim().toLowerCase();
     return query
@@ -219,11 +230,13 @@ export function HabitFormDialog({
                   onValueChange={(value) => field.onChange(value === "none" ? null : value)}
                 >
                   <SelectTrigger className="w-full">
-                    <SelectValue placeholder="No Area" />
+                    <SelectValue placeholder={areasQuery.isLoading ? "Loading areas…" : "No Area"}>
+                      {selectedAreaName}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent align="start">
                     <SelectItem value="none">No Area</SelectItem>
-                    {(areasQuery.data?.data ?? []).map((area) => (
+                    {areas.map((area) => (
                       <SelectItem key={area.uuid} value={area.uuid}>
                         {area.name}
                       </SelectItem>
