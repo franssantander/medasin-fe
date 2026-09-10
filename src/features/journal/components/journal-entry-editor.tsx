@@ -124,6 +124,7 @@ export function JournalEntryEditor({
         <div className="flex min-w-0 items-start gap-2">
           <Input
             aria-label="Journal entry title"
+            autoFocus={!entry}
             className="h-auto min-w-0 flex-1 border-0 px-0 py-0 text-2xl font-bold shadow-none focus-visible:ring-0 md:text-3xl"
             placeholder="Untitled entry"
             maxLength={120}
