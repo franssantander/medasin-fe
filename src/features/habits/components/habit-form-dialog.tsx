@@ -62,6 +62,7 @@ export function HabitFormDialog({
   initialAreaUuid?: string | null;
 }) {
   const [iconSearch, setIconSearch] = useState("");
+  const [dialogOpen, setDialogOpen] = useState(false);
   const areasQuery = useAreasQuery("active");
   const areas = areasQuery.data?.data ?? [];
   const {
@@ -120,6 +121,16 @@ export function HabitFormDialog({
     });
   }, [habit, initialAreaUuid, open, reset]);
 
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => setDialogOpen(open));
+    return () => cancelAnimationFrame(frame);
+  }, [open]);
+
+  const closeDialog = () => {
+    setDialogOpen(false);
+    onOpenChange(false);
+  };
+
   const submit = handleSubmit(async (values) => {
     try {
       const schedule =
@@ -137,7 +148,7 @@ export function HabitFormDialog({
         is_active: values.is_active,
         area_uuid: values.area_uuid,
       });
-      onOpenChange(false);
+      closeDialog();
     } catch (error) {
       if (error instanceof ApiError && error.validationErrors) {
         Object.entries(error.validationErrors).forEach(([field, messages]) =>
@@ -167,8 +178,12 @@ export function HabitFormDialog({
 
   return (
     <Dialog
-      open={open}
-      onOpenChange={(next) => !isPending && onOpenChange(next)}
+      open={open && dialogOpen}
+      onOpenChange={(next) => {
+        if (isPending) return;
+        setDialogOpen(next);
+        onOpenChange(next);
+      }}
     >
       <DialogContent className="max-w-2xl">
         <DialogHeader>
@@ -298,7 +313,7 @@ export function HabitFormDialog({
           {errors.root?.message && <p className="text-sm text-destructive">{errors.root.message}</p>}
         </form>
         <DialogFooter>
-          <Button type="button" variant="outline" disabled={isPending} onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button type="button" variant="outline" disabled={isPending} onClick={closeDialog}>Cancel</Button>
           <Button form="global-habit-form" type="submit" disabled={isPending}>{isPending ? "Saving…" : habit ? "Save changes" : "Add habit"}</Button>
         </DialogFooter>
       </DialogContent>

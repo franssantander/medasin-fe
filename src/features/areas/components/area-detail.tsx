@@ -331,19 +331,17 @@ export function AreaDetail({
           goalMutation.mutateAsync(input).then(() => undefined)
         }
       />
-      {recordForm && (
-        <HabitFormDialog
-          open
-          habit={recordForm.value as Habit | undefined}
-          onOpenChange={(open) => {
-            if (!open) setRecordForm(undefined);
-          }}
-          isPending={recordMutation.isPending}
-          onSubmit={(input) =>
-            recordMutation.mutateAsync(input).then(() => undefined)
-          }
-        />
-      )}
+      <HabitFormDialog
+        open={Boolean(recordForm)}
+        habit={recordForm?.value}
+        onOpenChange={(open) => {
+          if (!open) setRecordForm(undefined);
+        }}
+        isPending={recordMutation.isPending}
+        onSubmit={(input) =>
+          recordMutation.mutateAsync(input).then(() => undefined)
+        }
+      />
       <HabitLinkDialog
         open={linkHabitOpen}
         areaUuid={uuid}
