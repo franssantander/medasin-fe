@@ -14,6 +14,7 @@ export const config = {
     "/projects/:path*",
     "/areas/:path*",
     "/resources/:path*",
+    "/journal/:path*",
     "/archives/:path*",
     "/settings/:path*",
   ],

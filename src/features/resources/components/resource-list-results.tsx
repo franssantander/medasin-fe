@@ -50,7 +50,7 @@ export function ResourceListResults(props: ResourceListResultsProps) {
       {isLoading && (
         <div className="grid gap-4">
           {[1, 2, 3, 4].map((item) => (
-            <Skeleton key={item} className="h-64 rounded-xl" />
+            <Skeleton key={item} className="h-48 rounded-xl" />
           ))}
         </div>
       )}
@@ -63,7 +63,7 @@ export function ResourceListResults(props: ResourceListResultsProps) {
         </Card>
       )}
       {!isLoading && !isError && resources.length === 0 && (
-        <Card className="items-center px-6 py-14 text-center">
+        <Card className="items-center px-6 py-10 text-center">
           <BookOpen className="size-8 text-muted-foreground" />
           <CardTitle>
             {isFiltered ? "No matching resources" : "Save your first resource"}
@@ -110,29 +110,31 @@ export function ResourceListResults(props: ResourceListResultsProps) {
           />
         ))}
       </div>
-      <div
-        ref={loadMoreRef}
-        className="flex min-h-10 flex-col items-center gap-2"
-      >
-        {isFetchNextPageError && (
-          <p role="alert" className="text-sm text-destructive">
-            More resources could not be loaded.
-          </p>
-        )}
-        {hasNextPage && (
-          <Button
-            variant="outline"
-            disabled={isFetchingNextPage}
-            onClick={onLoadMore}
-          >
-            {isFetchingNextPage
-              ? "Loading…"
-              : isFetchNextPageError
-                ? "Retry loading more"
-                : "Load more"}
-          </Button>
-        )}
-      </div>
+      {(hasNextPage || isFetchNextPageError) && (
+        <div
+          ref={loadMoreRef}
+          className="flex min-h-8 flex-col items-center gap-2"
+        >
+          {isFetchNextPageError && (
+            <p role="alert" className="text-sm text-destructive">
+              More resources could not be loaded.
+            </p>
+          )}
+          {hasNextPage && (
+            <Button
+              variant="outline"
+              disabled={isFetchingNextPage}
+              onClick={onLoadMore}
+            >
+              {isFetchingNextPage
+                ? "Loading…"
+                : isFetchNextPageError
+                  ? "Retry loading more"
+                  : "Load more"}
+            </Button>
+          )}
+        </div>
+      )}
     </>
   );
 }

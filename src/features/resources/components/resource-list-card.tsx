@@ -48,7 +48,10 @@ export function ResourceListCard({
   const relativeTimestamp = formatRelativeTimestamp(timestamp);
 
   return (
-    <Card className="group relative h-full w-full min-w-0 cursor-pointer gap-3 transition-[box-shadow,transform] hover:-translate-y-0.5 hover:shadow-md hover:ring-primary/30 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring">
+    <Card
+      size="sm"
+      className="group relative w-full min-w-0 cursor-pointer transition-[border-color,box-shadow] hover:border-primary/30 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring"
+    >
       <button
         type="button"
         aria-label={`Open ${resource.title}`}
@@ -60,18 +63,18 @@ export function ResourceListCard({
         type="button"
         variant="ghost"
         size="icon-sm"
-        className="absolute right-4 top-4 z-20"
+        className="absolute right-3 top-3 z-20"
         aria-label={`Archive ${resource.title}`}
         disabled={archiveDisabled}
         onClick={() => onArchive(resource)}
       >
         <Archive />
       </Button>
-      <CardHeader className="pointer-events-none relative z-10 grid gap-3">
+      <CardHeader className="pointer-events-none relative z-10 grid gap-2">
         <div className="grid min-w-0 gap-2">
-          <div className="flex min-w-0 items-center gap-3">
+          <div className="flex min-w-0 items-center gap-2.5">
             <div
-              className="flex size-10 shrink-0 items-center justify-center rounded-xl shadow-sm"
+              className="flex size-9 shrink-0 items-center justify-center rounded-lg"
               style={resourceBadgeStyle(resource.background)}
             >
               <ResourceIcon name={resource.icon} className="size-5" />
@@ -85,32 +88,24 @@ export function ResourceListCard({
               const Icon = resourceTypeOptions.find(
                 (item) => item.value === value,
               )?.icon;
+              const label = resourceTypeOptions.find(
+                (item) => item.value === value,
+              )?.label;
               return (
                 <span
                   key={value}
-                  className="inline-flex items-center gap-1 capitalize"
+                  className="inline-flex items-center gap-1"
                 >
                   {Icon && <Icon className="size-3.5" />}
-                  {value}
+                  {label ?? value}
                 </span>
               );
             })}
           </div>
         </div>
-        <div>
-          {relativeTimestamp && timestamp && (
-            <time
-              dateTime={timestamp}
-              title={new Date(timestamp).toLocaleString()}
-              className="text-xs whitespace-nowrap text-muted-foreground"
-            >
-              {relativeTimestamp}
-            </time>
-          )}
-        </div>
       </CardHeader>
-      <CardContent className="pointer-events-none relative z-10 flex flex-1 flex-col gap-3">
-        <p className="line-clamp-3 min-h-[3.75rem] break-words text-sm leading-5 text-muted-foreground">
+      <CardContent className="pointer-events-none relative z-10 grid gap-2">
+        <p className="line-clamp-3 break-words text-sm leading-5 text-muted-foreground">
           {resourcePreview(resource.content) ||
             resource.description ||
             resource.url ||
@@ -127,14 +122,15 @@ export function ResourceListCard({
             <Badge
               key={item.uuid}
               variant="outline"
-              className="border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-800 dark:bg-violet-950 dark:text-violet-300"
             >
               {item.name}
             </Badge>
           ))}
         </div>
-        {[...resource.projects, ...resource.areas].length > 0 && (
-          <div className="flex flex-wrap gap-2">
+        {(resource.projects.length > 0 ||
+          resource.areas.length > 0 ||
+          (relativeTimestamp && timestamp)) && (
+          <div className="flex flex-wrap items-center gap-2">
             {resource.projects.map((project) => (
               <Badge
                 key={project.uuid}
@@ -143,7 +139,7 @@ export function ResourceListCard({
                   <Link
                     href={`/projects/${project.uuid}`}
                     aria-label={`Open project ${project.name}`}
-                    className="pointer-events-auto border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 dark:hover:bg-emerald-900"
+                    className="pointer-events-auto hover:bg-muted hover:text-muted-foreground"
                   />
                 }
               >
@@ -158,13 +154,22 @@ export function ResourceListCard({
                   <Link
                     href={`/areas/${area.uuid}`}
                     aria-label={`Open area ${area.name}`}
-                    className="pointer-events-auto border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300 dark:hover:bg-amber-900"
+                    className="pointer-events-auto hover:bg-muted hover:text-muted-foreground"
                   />
                 }
               >
                 <CirclePile />Area: {area.name}
               </Badge>
             ))}
+            {relativeTimestamp && timestamp && (
+              <time
+                dateTime={timestamp}
+                title={new Date(timestamp).toLocaleString()}
+                className="ml-auto whitespace-nowrap text-xs text-muted-foreground"
+              >
+                {relativeTimestamp}
+              </time>
+            )}
           </div>
         )}
       </CardContent>

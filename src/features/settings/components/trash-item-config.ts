@@ -1,4 +1,5 @@
 import {
+  BookHeart,
   CheckSquare2,
   CirclePile,
   FileText,
@@ -42,6 +43,12 @@ export const trashTypeOptions: TrashTypeOption[] = [
   { value: "goal", label: "Goals", singularLabel: "Goal", icon: StarCheck },
   { value: "habit", label: "Habits", singularLabel: "Habit", icon: Flame },
   { value: "note", label: "Notes", singularLabel: "Note", icon: FileText },
+  {
+    value: "journal_entry",
+    label: "Journal",
+    singularLabel: "Journal entry",
+    icon: BookHeart,
+  },
   {
     value: "board_label",
     label: "Board labels",

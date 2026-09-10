@@ -8,6 +8,7 @@ export type TrashItemType =
   | "goal"
   | "habit"
   | "note"
+  | "journal_entry"
   | "board_label"
   | "resource_attachment";
 

@@ -30,7 +30,7 @@ export function ResourceListFilters({
   return (
     <aside
       className={cn(
-        "grid h-fit self-start content-start gap-6 rounded-xl border bg-card p-4",
+        "grid h-fit w-full self-start content-start gap-5 rounded-xl border bg-card p-4",
         className,
       )}
       aria-label="Resource filters"
@@ -39,7 +39,7 @@ export function ResourceListFilters({
         <h2 className="text-sm font-semibold">Types</h2>
         <Button
           variant={!selectedType ? "secondary" : "ghost"}
-          className="justify-start"
+          className="w-full justify-start"
           aria-pressed={!selectedType}
           onClick={() => onTypeChange(undefined)}
         >
@@ -49,7 +49,7 @@ export function ResourceListFilters({
           <Button
             key={value}
             variant={selectedType === value ? "secondary" : "ghost"}
-            className="justify-start"
+            className="w-full justify-start"
             aria-pressed={selectedType === value}
             onClick={() => onTypeChange(value)}
           >
@@ -62,7 +62,7 @@ export function ResourceListFilters({
         <h2 className="text-sm font-semibold">Tags</h2>
         <Button
           variant={!selectedTag ? "secondary" : "ghost"}
-          className="justify-start"
+          className="w-full justify-start"
           aria-pressed={!selectedTag}
           onClick={() => onTagChange(undefined)}
         >
@@ -70,11 +70,11 @@ export function ResourceListFilters({
         </Button>
         {tagsLoading && <Skeleton className="h-16" />}
         {tagsError && (
-          <Button variant="outline" onClick={onRetryTags}>
+          <Button variant="outline" className="w-full" onClick={onRetryTags}>
             Retry tags
           </Button>
         )}
-        <div className="grid gap-1">
+        <div className="grid gap-2">
           {tags?.map((item) => (
             <Button
               key={item.uuid}

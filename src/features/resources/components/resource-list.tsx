@@ -18,13 +18,15 @@ import { ResourceActionDialog } from "./resource-action-dialog";
 import { ResourceDetailDialog } from "./resource-detail-dialog";
 import { ResourceFormDialog } from "./resource-form-dialog";
 import { ResourceListFilters } from "./resource-list-filters";
+import { resourceTypeOptions } from "./resource-list-options";
 import { ResourceListResults } from "./resource-list-results";
 
 export function ResourceList() {
   const list = useResourceList();
   const query = list.resourcesQuery;
   const selectedTypeLabel = list.type
-    ? list.type.charAt(0).toUpperCase() + list.type.slice(1)
+    ? resourceTypeOptions.find((item) => item.value === list.type)?.label ??
+      list.type
     : undefined;
 
   const filters = (
@@ -42,10 +44,10 @@ export function ResourceList() {
   );
 
   return (
-    <div className="grid gap-6">
+    <div className="grid gap-5">
       <PageHeader
         title="Resources"
-        description=" Keep notes, links, images, and files organized in one searchable place."
+        description="Keep notes, links, images, and files organized in one searchable place."
         action={
           <Button onClick={() => list.setCreating(true)}>
             <Plus />
@@ -54,24 +56,23 @@ export function ResourceList() {
         }
       />
 
-      <p className="-mt-4 max-w-2xl text-sm leading-6 text-muted-foreground"></p>
-      <div className="grid items-start gap-6 lg:grid-cols-[13rem_minmax(0,1fr)]">
-        <div className="hidden lg:block">
+      <div className="grid items-start gap-5 lg:grid-cols-[13rem_minmax(0,1fr)]">
+        <div className="hidden min-w-0 lg:block">
           <ResourceListFilters
             selectedTag={list.tag}
             selectedType={list.type}
             tags={list.tagsQuery.data?.data}
             tagsError={list.tagsQuery.isError}
             tagsLoading={list.tagsQuery.isLoading}
-            className="sticky top-6 max-h-[calc(100dvh-3rem)] overflow-y-auto overscroll-contain"
+            className="sticky top-6 w-full max-h-[calc(100dvh-3rem)] overflow-y-auto overscroll-contain"
             onRetryTags={() => list.tagsQuery.refetch()}
             onTagChange={list.setTag}
             onTypeChange={list.setType}
           />
         </div>
         <section className="grid min-w-0 gap-4" aria-label="Resources">
-          <div className="grid gap-3 rounded-xl border bg-card p-3 shadow-xs sm:p-4">
-            <div className="flex gap-2">
+          <div className="grid gap-3 rounded-xl border bg-card p-3 sm:p-4">
+            <div className="flex min-w-0 items-center gap-2">
               <label className="relative min-w-0 flex-1">
                 <span className="sr-only">Search resources</span>
                 <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -91,7 +92,13 @@ export function ResourceList() {
               </label>
               <Sheet>
                 <SheetTrigger
-                  render={<Button variant="outline" className="lg:hidden" />}
+                  render={
+                    <Button
+                      variant="outline"
+                      className="lg:hidden"
+                      aria-label="Filter resources"
+                    />
+                  }
                 >
                   <Filter />
                   <span className="hidden sm:inline">Filters</span>
