@@ -132,19 +132,19 @@ export function JournalWorkspace({
 
   if (entriesQuery.isLoading) {
     return (
-      <div className="flex min-h-full min-w-0 flex-col gap-5">
+      <div className="flex h-full min-h-0 min-w-0 flex-col gap-5">
         <PageHeader
           title="Journal"
           description="Keep a private record of the moments, ideas, and reflections that matter."
         />
-        <Skeleton className="min-h-[36rem] flex-1 rounded-xl" />
+        <Skeleton className="min-h-0 flex-1 rounded-xl" />
       </div>
     );
   }
 
   if (entriesQuery.isError && !entriesQuery.data) {
     return (
-      <div className="flex min-h-full min-w-0 flex-col gap-5">
+      <div className="flex h-full min-h-0 min-w-0 flex-col gap-5">
         <PageHeader
           title="Journal"
           description="Keep a private record of the moments, ideas, and reflections that matter."
@@ -173,7 +173,7 @@ export function JournalWorkspace({
       : undefined;
 
   return (
-    <div className="flex min-h-full min-w-0 flex-col gap-5">
+    <div className="flex h-full min-h-0 min-w-0 flex-col gap-5">
       <PageHeader
         title="Journal"
         description="Keep a private record of the moments, ideas, and reflections that matter."
@@ -185,7 +185,7 @@ export function JournalWorkspace({
         }
       />
 
-      <div className="flex h-[calc(100dvh-10rem)] min-h-[36rem] min-w-0 flex-1">
+      <div className="flex min-h-0 min-w-0 flex-1">
         <div
           className={cn(
             "grid h-full min-h-0 min-w-0 flex-1 grid-rows-[auto_minmax(0,1fr)] overflow-hidden rounded-xl border bg-card md:grid-rows-[minmax(0,1fr)]",

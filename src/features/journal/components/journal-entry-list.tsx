@@ -87,7 +87,7 @@ export function JournalEntryList({
   };
 
   return (
-    <aside className="flex min-h-0 min-w-0 flex-col overflow-hidden border-b bg-muted/30 md:border-r md:border-b-0">
+    <aside className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden border-b bg-muted/30 md:border-r md:border-b-0">
       <div className="flex items-center justify-between gap-3 border-b px-3 py-3">
         <div className="min-w-0">
           <h2 className="font-semibold">Entries</h2>
@@ -121,7 +121,7 @@ export function JournalEntryList({
         </div>
       </div>
 
-      <div className="workspace-list-scrollbar max-h-64 min-w-0 overflow-x-hidden overflow-y-auto p-2 md:max-h-none md:flex-1">
+      <div className="workspace-list-scrollbar max-h-64 min-h-0 min-w-0 overflow-x-hidden overflow-y-auto p-2 md:max-h-none md:flex-1">
         {isLoading ? (
           <JournalEntryListSkeleton />
         ) : isError ? (

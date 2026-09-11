@@ -119,7 +119,7 @@ export function JournalEntryEditor({
   };
 
   return (
-    <div className="flex h-full min-h-0 w-full min-w-0 flex-col gap-4">
+    <div className="flex h-full min-h-0 min-w-0 w-full flex-1 flex-col gap-4">
       <div className="grid shrink-0 gap-3">
         <div className="flex min-w-0 items-start gap-2">
           <Input
@@ -194,7 +194,7 @@ export function JournalEntryEditor({
 
       {entry?.source && <FocusSource source={entry.source} />}
 
-      <div className="flex h-full min-h-0 flex-1 overflow-hidden rounded-lg border bg-white">
+      <div className="flex h-full min-h-0 min-w-0 flex-1 overflow-hidden rounded-lg border bg-white">
         <NoteRichTextEditor
           mode="resource"
           documentId={entry?.uuid ?? `journal-draft-${draftKey}`}
