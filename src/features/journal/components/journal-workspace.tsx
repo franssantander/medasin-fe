@@ -215,13 +215,16 @@ export function JournalWorkspace({
 
           <section
             aria-label="Journal entry editor"
-            className="relative flex min-h-0 min-w-0 justify-center overflow-hidden bg-white p-4 sm:p-6"
+            className={cn(
+              "relative flex min-h-0 min-w-0 justify-center overflow-hidden bg-white p-4 sm:p-6",
+              !listOpen && "pt-14 sm:pt-16",
+            )}
           >
             {!listOpen && (
               <Button
                 variant="ghost"
                 size="icon-sm"
-                className="absolute top-3 left-3 z-10"
+                className="absolute top-4 left-4 z-10 sm:top-6 sm:left-6"
                 aria-label="Open entries list"
                 title="Open entries list"
                 onClick={() => setListOpen(true)}
@@ -229,12 +232,7 @@ export function JournalWorkspace({
                 <PanelLeftOpen />
               </Button>
             )}
-            <div
-              className={cn(
-                "h-full min-h-0 min-w-0 flex-1",
-                !listOpen && "md:max-w-[calc(100%-3rem)]",
-              )}
-            >
+            <div className="h-full min-h-0 min-w-0 w-full flex-1">
               {derivedSelection.kind === "draft" ? (
                 <JournalEntryEditor
                   key={`draft-${derivedSelection.key}`}
