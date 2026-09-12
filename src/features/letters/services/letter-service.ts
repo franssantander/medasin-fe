@@ -4,6 +4,7 @@ import type {
   LetterApiResponse,
   LetterExport,
   LetterExportInput,
+  LetterExportUpdateInput,
   LetterInput,
   LetterPageResponse,
   LetterUpdateInput,
@@ -66,6 +67,19 @@ export const letterService = {
       axiosClient.get<LetterApiResponse<LetterExport>>(
         `/letters/${letterUuid}/exports/${exportUuid}`,
         { signal },
+      ),
+    );
+  },
+
+  updateExport(
+    letterUuid: string,
+    exportUuid: string,
+    input: LetterExportUpdateInput,
+  ) {
+    return unwrap(
+      axiosClient.patch<LetterApiResponse<LetterExport>>(
+        `/letters/${letterUuid}/exports/${exportUuid}`,
+        input,
       ),
     );
   },

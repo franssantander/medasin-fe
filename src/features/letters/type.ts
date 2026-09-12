@@ -6,7 +6,15 @@ export type LetterApiResponse<T> = {
 
 export type LetterStatus = "draft" | "exported";
 
-export type LetterExportFormat = "portrait" | "square";
+export type LetterExportFormat =
+  | "portrait"
+  | "square"
+  | "story"
+  | "landscape";
+
+export type LetterPageLayout = "cover" | "body" | "quote";
+
+export type LetterPageTextScaleMode = "auto" | "manual";
 
 export type LetterExportStatus =
   | "queued"
@@ -30,8 +38,12 @@ export type LetterSignature = {
 };
 
 export type LetterPage = {
+  uuid: string;
   number: number;
   kind: "cover" | "body" | "final";
+  layout: LetterPageLayout;
+  text_scale: number;
+  text_scale_mode: LetterPageTextScaleMode;
   title: string | null;
   subtitle: string | null;
   blocks: unknown[];
@@ -93,4 +105,19 @@ export type LetterUpdateInput = Partial<LetterInput>;
 
 export type LetterExportInput = {
   format?: LetterExportFormat;
+};
+
+export type LetterExportPageInput = Pick<
+  LetterPage,
+  | "uuid"
+  | "layout"
+  | "text_scale"
+  | "text_scale_mode"
+  | "title"
+  | "subtitle"
+  | "blocks"
+>;
+
+export type LetterExportUpdateInput = {
+  pages: LetterExportPageInput[];
 };

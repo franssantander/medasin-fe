@@ -5,7 +5,7 @@ import type { ReactNode } from "react";
 import {
   AlertTriangle,
   CheckCircle2,
-  Download,
+  Edit3,
   FileText,
   LoaderCircle,
   RefreshCw,
@@ -32,28 +32,16 @@ import type {
   LetterExportFormat,
   LetterPage,
 } from "../type";
+import {
+  LETTER_EXPORT_FORMATS,
+  LETTER_EXPORT_FORMAT_OPTIONS,
+} from "../letter-export-formats";
 import { LetterPagePreview, LetterPageThumbnail } from "./letter-page-preview";
-
-const FORMAT_DETAILS: Record<
-  LetterExportFormat,
-  { label: string; ratio: string; width: number; height: number }
-> = {
-  portrait: {
-    label: "Portrait",
-    ratio: "4:5",
-    width: 1080,
-    height: 1350,
-  },
-  square: {
-    label: "Square",
-    ratio: "1:1",
-    width: 1080,
-    height: 1080,
-  },
-};
+import { LetterPageWorkspace } from "./letter-page-workspace";
 
 export function LetterExportPanel({
   letterUuid,
+  letterTitle,
   latestExport,
   activeExportUuid,
   onExport,
@@ -61,6 +49,7 @@ export function LetterExportPanel({
   hasUnsavedChanges = false,
 }: {
   letterUuid?: string;
+  letterTitle: string;
   latestExport?: LetterExport | null;
   activeExportUuid?: string;
   onExport: (format: LetterExportFormat) => Promise<void>;
@@ -121,7 +110,7 @@ export function LetterExportPanel({
     }
   };
 
-  const formatDetails = FORMAT_DETAILS[format];
+  const formatDetails = LETTER_EXPORT_FORMATS[format];
 
   return (
     <section
@@ -147,8 +136,11 @@ export function LetterExportPanel({
           </SelectTrigger>
           <SelectContent>
             <SelectGroup>
-              <SelectItem value="portrait">Portrait (4:5)</SelectItem>
-              <SelectItem value="square">Square (1:1)</SelectItem>
+              {LETTER_EXPORT_FORMAT_OPTIONS.map(([value, details]) => (
+                <SelectItem key={value} value={value}>
+                  {details.shortLabel} ({details.ratio})
+                </SelectItem>
+              ))}
             </SelectGroup>
           </SelectContent>
         </Select>
@@ -199,6 +191,8 @@ export function LetterExportPanel({
             key={exportUuid}
             letterExport={currentExport}
             pages={pages}
+            letterUuid={letterUuid!}
+            letterTitle={letterTitle}
             hasUnsavedChanges={hasUnsavedChanges}
           />
         )}
@@ -227,7 +221,7 @@ export function LetterExportPanel({
         </Button>
         <p className="text-center text-xs text-muted-foreground">
           {currentExport?.status === "ready"
-            ? `${currentExport.page_count ?? pages.length} ${pages.length === 1 ? "page" : "pages"} · Prepared as ${FORMAT_DETAILS[currentExport.format].label} ${FORMAT_DETAILS[currentExport.format].ratio}`
+            ? `${currentExport.page_count ?? pages.length} ${pages.length === 1 ? "page" : "pages"} · Prepared as ${LETTER_EXPORT_FORMATS[currentExport.format].label} ${LETTER_EXPORT_FORMATS[currentExport.format].ratio}`
             : `${formatDetails.width} × ${formatDetails.height}px canvas`}
         </p>
       </div>
@@ -238,13 +232,18 @@ export function LetterExportPanel({
 function ReadyExport({
   letterExport,
   pages,
+  letterUuid,
+  letterTitle,
   hasUnsavedChanges,
 }: {
   letterExport: LetterExport;
   pages: LetterPage[];
+  letterUuid: string;
+  letterTitle: string;
   hasUnsavedChanges: boolean;
 }) {
   const [selectedPageIndex, setSelectedPageIndex] = useState(0);
+  const [workspaceOpen, setWorkspaceOpen] = useState(false);
   const selectedPage = pages[selectedPageIndex] ?? pages[0];
 
   if (!selectedPage) return null;
@@ -274,7 +273,11 @@ function ReadyExport({
         </span>
       </div>
 
-      <LetterPagePreview page={selectedPage} letterExport={letterExport} />
+      <LetterPagePreview
+        page={selectedPage}
+        exportUuid={letterExport.uuid}
+        canvas={letterExport.canvas}
+      />
 
       <div
         className="flex min-w-0 gap-2 overflow-x-auto pb-1"
@@ -294,7 +297,7 @@ function ReadyExport({
           >
             <LetterPageThumbnail
               page={page}
-              letterExport={letterExport}
+              canvas={letterExport.canvas}
               selected={index === selectedPageIndex}
             />
           </button>
@@ -303,27 +306,29 @@ function ReadyExport({
 
       <div className="grid gap-2 border-t pt-3 sm:flex sm:items-center sm:justify-between">
         <div className="min-w-0">
-          <p className="text-sm font-medium">Share-ready images</p>
+          <p className="text-sm font-medium">Customize your page set</p>
           <p className="text-xs text-muted-foreground">
-            Image downloads will be available when the renderer is connected.
+            Edit the copy, adjust text size, and download exact-size PNG images.
           </p>
         </div>
         <div className="flex shrink-0 flex-wrap gap-2">
-          <Button type="button" variant="outline" size="sm" disabled>
-            <Download data-icon="inline-start" />
-            Download images
-          </Button>
           <Button
             type="button"
-            variant="outline"
             size="sm"
-            disabled
-            title="Manual page breaks are coming later."
+            onClick={() => setWorkspaceOpen(true)}
           >
-            Edit page breaks
+            <Edit3 data-icon="inline-start" />
+            Customize pages
           </Button>
         </div>
       </div>
+      <LetterPageWorkspace
+        open={workspaceOpen}
+        onOpenChange={setWorkspaceOpen}
+        letterExport={letterExport}
+        letterUuid={letterUuid}
+        letterTitle={letterTitle}
+      />
     </div>
   );
 }

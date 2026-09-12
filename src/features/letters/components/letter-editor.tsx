@@ -194,6 +194,7 @@ export function LetterEditor({
 
       <LetterExportPanel
         letterUuid={letter?.uuid ?? autosave.activeUuid}
+        letterTitle={autosave.title.trim() || "Untitled letter"}
         latestExport={letter?.latest_export}
         activeExportUuid={activeExportUuid}
         onExport={handleExport}

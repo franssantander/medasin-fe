@@ -297,4 +297,59 @@
     overflow-wrap: anywhere;
     word-break: break-word;
   }
+
+  .letter-page-canvas {
+    container-type: inline-size;
+  }
+
+  .letter-page-document .note-rich-text,
+  .letter-page-document .note-rich-text .bn-container,
+  .letter-page-document .note-rich-text .bn-editor,
+  .letter-page-document .note-rich-text .ProseMirror {
+    height: 100%;
+    overflow: hidden;
+  }
+
+  .letter-page-document .note-rich-text .bn-editor {
+    padding: 0;
+    font-size: var(--letter-page-editor-font-size, 1.72cqw);
+    line-height: 1.55;
+  }
+
+  .letter-page-document .note-rich-text .bn-block-group,
+  .letter-page-document .note-rich-text .bn-block-outer,
+  .letter-page-document .note-rich-text .bn-block {
+    padding-inline: 0;
+  }
+
+  .letter-page-quote-document .note-rich-text,
+  .letter-page-quote-document .note-rich-text .bn-container,
+  .letter-page-quote-document .note-rich-text .bn-editor,
+  .letter-page-quote-document .note-rich-text .ProseMirror {
+    height: 100%;
+    overflow: hidden;
+  }
+
+  .letter-page-quote-document .note-rich-text .bn-editor {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 6cqw;
+    font-family: var(--font-spectral-sans);
+    font-size: var(--letter-page-editor-font-size, 4.3cqw);
+    line-height: 1.14;
+    letter-spacing: -0.025em;
+    text-align: center;
+  }
+
+  .letter-page-quote-document .note-rich-text .bn-block-group,
+  .letter-page-quote-document .note-rich-text .bn-block-outer,
+  .letter-page-quote-document .note-rich-text .bn-block {
+    padding-inline: 0;
+  }
+
+  .letter-page-editable-text[data-empty="true"][data-placeholder]::before {
+    color: oklch(55.6% 0 0 / 55%);
+    content: attr(data-placeholder);
+  }
 }

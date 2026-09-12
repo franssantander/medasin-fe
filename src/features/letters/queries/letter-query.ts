@@ -12,6 +12,7 @@ import type {
   Letter,
   LetterApiResponse,
   LetterExportFormat,
+  LetterExportUpdateInput,
   LetterPageResponse,
   LetterSummary,
 } from "../type";
@@ -167,6 +168,37 @@ export function useLetterExportQuery(
     refetchInterval: (query) => {
       const status = query.state.data?.data.status;
       return status === "queued" || status === "processing" ? 1500 : false;
+    },
+  });
+}
+
+export function useUpdateLetterExportMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      letterUuid,
+      exportUuid,
+      input,
+    }: {
+      letterUuid: string;
+      exportUuid: string;
+      input: LetterExportUpdateInput;
+    }) => letterService.updateExport(letterUuid, exportUuid, input),
+    onSuccess: (response, variables) => {
+      queryClient.setQueryData(
+        letterKeys.export(variables.letterUuid, variables.exportUuid),
+        response,
+      );
+      void Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: letterKeys.detail(variables.letterUuid),
+        }),
+        queryClient.invalidateQueries({ queryKey: letterKeys.list() }),
+      ]);
+    },
+    onError: (error) => {
+      toast.add({ type: "error", description: error.message });
     },
   });
 }

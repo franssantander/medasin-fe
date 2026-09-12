@@ -364,6 +364,7 @@ type ImageCropSession = CropImageRequest & {
 
 export type NoteRichTextEditorClientProps = {
   mode?: "note" | "task" | "resource";
+  editorChrome?: "full" | "formatting-only" | "none";
   documentId: string;
   content: string;
   editable: boolean;
@@ -390,6 +391,7 @@ export type NoteEditorHistoryState = {
 
 export function NoteRichTextEditorClient({
   mode = "note",
+  editorChrome = "full",
   documentId,
   content,
   editable,
@@ -829,19 +831,23 @@ export function NoteRichTextEditorClient({
           theme="light"
           onChange={handleEditorChange}
         >
-          {editable && (
+          {editable && editorChrome !== "none" && (
             <>
               <FormattingToolbarController
                 formattingToolbar={noteFormattingToolbar}
               />
-              <SideMenuController sideMenu={NoteBlockSideMenu} />
-              <SuggestionMenuController
-                triggerCharacter="/"
-                suggestionMenuComponent={NoteSlashMenu}
-                getItems={async (query) =>
-                  filterSuggestionItems(slashItems, query)
-                }
-              />
+              {editorChrome === "full" ? (
+                <>
+                  <SideMenuController sideMenu={NoteBlockSideMenu} />
+                  <SuggestionMenuController
+                    triggerCharacter="/"
+                    suggestionMenuComponent={NoteSlashMenu}
+                    getItems={async (query) =>
+                      filterSuggestionItems(slashItems, query)
+                    }
+                  />
+                </>
+              ) : null}
             </>
           )}
         </BlockNoteView>
