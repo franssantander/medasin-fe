@@ -1,6 +1,7 @@
 import type { LetterCanvas, LetterPageTextScaleMode } from "./type";
 
 export const LETTER_PAGE_TEXT_SCALE_DEFAULT = 1;
+export const LETTER_PAGE_AUTO_FIT_SCALE_MIN = 0.1;
 export const LETTER_PAGE_TEXT_SCALE_MIN = 0.7;
 export const LETTER_PAGE_TEXT_SCALE_MAX = 1.4;
 export const LETTER_PAGE_TEXT_SCALE_STEP = 0.05;
@@ -14,7 +15,7 @@ export function normalizeLetterPageTextScale(value: unknown): number {
 
   const clamped = Math.min(
     LETTER_PAGE_TEXT_SCALE_MAX,
-    Math.max(LETTER_PAGE_TEXT_SCALE_MIN, numeric),
+    Math.max(LETTER_PAGE_AUTO_FIT_SCALE_MIN, numeric),
   );
 
   return Number(

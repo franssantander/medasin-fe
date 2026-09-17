@@ -46,9 +46,11 @@ type LetterPageCanvasProps = {
   onTitleChange?: (title: string) => void;
   onSubtitleChange?: (subtitle: string) => void;
   onBlocksChange?: (blocks: unknown[]) => void;
+  onUploadFile?: (file: File) => Promise<string>;
   onEditorReady?: (controls: NoteRichTextEditorControls | null) => void;
   onHistoryStateChange?: (state: NoteEditorHistoryState) => void;
   onBlur?: () => void;
+  onContentApplied?: () => void;
 };
 
 export const LetterPageCanvas = forwardRef<
@@ -65,9 +67,11 @@ export const LetterPageCanvas = forwardRef<
     onTitleChange,
     onSubtitleChange,
     onBlocksChange,
+    onUploadFile = unavailable,
     onEditorReady = noop,
     onHistoryStateChange = noop,
     onBlur,
+    onContentApplied,
   },
   ref,
 ) {
@@ -88,8 +92,9 @@ export const LetterPageCanvas = forwardRef<
     if (layout === "cover") {
       onEditorReady(null);
       onHistoryStateChange({ canUndo: false, canRedo: false });
+      onContentApplied?.();
     }
-  }, [layout, onEditorReady, onHistoryStateChange]);
+  }, [layout, onEditorReady, onHistoryStateChange, onContentApplied]);
 
   return (
     <div
@@ -174,16 +179,18 @@ export const LetterPageCanvas = forwardRef<
             </span>
             <NoteRichTextEditor
               key={`${exportUuid}-${pageUuid}-${editable ? "edit" : "view"}`}
-              mode="resource"
-              editorChrome="formatting-only"
+              mode={editable ? "letter" : "resource"}
+              editorChrome={editable ? "full" : "none"}
               documentId={`letter-page-quote-${exportUuid}-${pageUuid}-${editable ? "edit" : "view"}`}
               content={serializedBlocks}
+              syncContent
+              onContentApplied={onContentApplied}
               editable={editable}
               noteOptions={[]}
               onChange={(content) =>
                 onBlocksChange?.(parseNoteDocument(content).blocks)
               }
-              onUploadFile={unavailable}
+              onUploadFile={onUploadFile}
               onCreateChild={unavailableChild}
               onOpenNote={noop}
               onEditorReady={onEditorReady}
@@ -217,16 +224,18 @@ export const LetterPageCanvas = forwardRef<
           >
             <NoteRichTextEditor
               key={`${exportUuid}-${pageUuid}-${editable ? "edit" : "view"}`}
-              mode="resource"
-              editorChrome="formatting-only"
+              mode={editable ? "letter" : "resource"}
+              editorChrome={editable ? "full" : "none"}
               documentId={`letter-page-body-${exportUuid}-${pageUuid}-${editable ? "edit" : "view"}`}
               content={serializedBlocks}
+              syncContent
+              onContentApplied={onContentApplied}
               editable={editable}
               noteOptions={[]}
               onChange={(content) =>
                 onBlocksChange?.(parseNoteDocument(content).blocks)
               }
-              onUploadFile={unavailable}
+              onUploadFile={onUploadFile}
               onCreateChild={unavailableChild}
               onOpenNote={noop}
               onEditorReady={onEditorReady}

@@ -28,6 +28,7 @@ import {
   useLetterExportQuery,
 } from "../queries/letter-query";
 import type {
+  Letter,
   LetterExport,
   LetterExportFormat,
   LetterPage,
@@ -45,6 +46,7 @@ export function LetterExportPanel({
   latestExport,
   activeExportUuid,
   onExport,
+  onPagesSaved,
   exportPending = false,
   hasUnsavedChanges = false,
 }: {
@@ -53,6 +55,7 @@ export function LetterExportPanel({
   latestExport?: LetterExport | null;
   activeExportUuid?: string;
   onExport: (format: LetterExportFormat) => Promise<void>;
+  onPagesSaved: (letter: Letter) => void;
   exportPending?: boolean;
   hasUnsavedChanges?: boolean;
 }) {
@@ -194,6 +197,7 @@ export function LetterExportPanel({
             letterUuid={letterUuid!}
             letterTitle={letterTitle}
             hasUnsavedChanges={hasUnsavedChanges}
+            onPagesSaved={onPagesSaved}
           />
         )}
       </div>
@@ -235,12 +239,14 @@ function ReadyExport({
   letterUuid,
   letterTitle,
   hasUnsavedChanges,
+  onPagesSaved,
 }: {
   letterExport: LetterExport;
   pages: LetterPage[];
   letterUuid: string;
   letterTitle: string;
   hasUnsavedChanges: boolean;
+  onPagesSaved: (letter: Letter) => void;
 }) {
   const [selectedPageIndex, setSelectedPageIndex] = useState(0);
   const [workspaceOpen, setWorkspaceOpen] = useState(false);
@@ -328,6 +334,7 @@ function ReadyExport({
         letterExport={letterExport}
         letterUuid={letterUuid}
         letterTitle={letterTitle}
+        onSaved={onPagesSaved}
       />
     </div>
   );

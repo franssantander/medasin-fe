@@ -5,7 +5,9 @@ import type {
   LetterExport,
   LetterExportInput,
   LetterExportUpdateInput,
+  LetterExportUpdateResult,
   LetterInput,
+  LetterMedia,
   LetterPageResponse,
   LetterUpdateInput,
 } from "../type";
@@ -53,6 +55,19 @@ export const letterService = {
     );
   },
 
+  uploadMedia(letterUuid: string, file: File) {
+    const data = new FormData();
+    data.append("file", file);
+
+    return unwrap(
+      axiosClient.post<LetterApiResponse<LetterMedia>>(
+        `/letters/${letterUuid}/media`,
+        data,
+        { timeout: 120000 },
+      ),
+    );
+  },
+
   createExport(letterUuid: string, input: LetterExportInput) {
     return unwrap(
       axiosClient.post<LetterApiResponse<LetterExport>>(
@@ -77,7 +92,7 @@ export const letterService = {
     input: LetterExportUpdateInput,
   ) {
     return unwrap(
-      axiosClient.patch<LetterApiResponse<LetterExport>>(
+      axiosClient.patch<LetterApiResponse<LetterExportUpdateResult>>(
         `/letters/${letterUuid}/exports/${exportUuid}`,
         input,
       ),

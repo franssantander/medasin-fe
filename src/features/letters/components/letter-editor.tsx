@@ -1,25 +1,26 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Redo2, Undo2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { NoteRichTextEditor } from "@/components/ui/note-rich-text-editor";
+import { toast } from "@/components/ui/toast";
 import type {
   NoteEditorHistoryState,
   NoteRichTextEditorControls,
 } from "@/components/ui/note-rich-text-editor-client";
 import { EMPTY_NOTE_DOCUMENT, getNoteDocumentPreview } from "@/components/ui/note-editor-document";
+import { parseApiError } from "@/lib/axios";
 import { useCreateLetterExportMutation } from "../queries/letter-query";
 import { useLetterAutosave } from "../hooks/use-letter-autosave";
 import type { Letter, LetterExportFormat } from "../type";
+import { letterService } from "../services/letter-service";
 import { LetterExportPanel } from "./letter-export-panel";
 
 const noop = () => undefined;
-const unavailable = async (): Promise<never> => {
-  throw new Error("File uploads are unavailable in letters.");
-};
+const MAX_LETTER_IMAGE_REQUEST_BYTES = 8 * 1024 * 1024;
 const unavailableChild = async (): Promise<never> => {
   throw new Error("Child pages are unavailable in letters.");
 };
@@ -62,6 +63,14 @@ export function LetterEditor({
   const wordCount = countWords(contentPreview);
   const readTimeMinutes = Math.max(1, Math.ceil(wordCount / 200));
 
+  const handlePagesSaved = useCallback(
+    (savedLetter: Letter) => {
+      autosave.replaceSavedLetter(savedLetter);
+      onSaved(savedLetter, false);
+    },
+    [autosave, onSaved],
+  );
+
   useEffect(() => {
     onRegisterDeleteFlush(autosave.flush);
 
@@ -76,12 +85,54 @@ export function LetterEditor({
       throw new Error("Save the letter before preparing its pages.");
     }
 
+    const currentLetter = savedLetter ?? letter;
+    if (!currentLetter) {
+      throw new Error("The saved letter could not be loaded for pagination.");
+    }
+
+    const { prepareLetterPages } = await import("../letter-page-flow");
+    const pages = await prepareLetterPages(currentLetter, format);
     const response = await exportMutation.mutateAsync({
       letterUuid: uuid,
       format,
+      pages,
     });
     setActiveExportUuid(response.data.uuid);
   };
+
+  const handleUploadImage = useCallback(
+    async (file: File) => {
+      try {
+        if (!file.type.startsWith("image/")) {
+          throw new Error("Letters only support image uploads.");
+        }
+        if (file.size >= MAX_LETTER_IMAGE_REQUEST_BYTES) {
+          throw new Error("Images must be smaller than 8 MB.");
+        }
+
+        const savedLetter = await autosave.flush(true);
+        const uuid = savedLetter?.uuid ?? autosave.activeUuid ?? letter?.uuid;
+        if (!uuid) {
+          throw new Error("The letter could not be saved before uploading.");
+        }
+
+        const response = await letterService.uploadMedia(uuid, file);
+        if (!response.data.url) {
+          throw new Error("The upload response did not include a media URL.");
+        }
+
+        return response.data.url;
+      } catch (error) {
+        const uploadError = parseApiError(error);
+        const description = uploadError.message.includes("POST Content-Length")
+          ? "Images must be smaller than 8 MB."
+          : uploadError.message;
+        toast.add({ type: "error", description });
+        throw uploadError;
+      }
+    },
+    [autosave, letter],
+  );
 
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-col gap-4 overflow-y-auto lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(19rem,25rem)] lg:overflow-hidden">
@@ -176,13 +227,14 @@ export function LetterEditor({
 
         <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden rounded-lg border bg-white">
           <NoteRichTextEditor
-            mode="resource"
+            mode="letter"
             documentId={letter?.uuid ?? `letter-draft-${draftKey}`}
             content={autosave.content}
+            syncContent
             editable
             noteOptions={[]}
             onChange={autosave.updateContent}
-            onUploadFile={unavailable}
+            onUploadFile={handleUploadImage}
             onCreateChild={unavailableChild}
             onOpenNote={noop}
             onEditorReady={setEditorControls}
@@ -198,6 +250,7 @@ export function LetterEditor({
         latestExport={letter?.latest_export}
         activeExportUuid={activeExportUuid}
         onExport={handleExport}
+        onPagesSaved={handlePagesSaved}
         exportPending={exportMutation.isPending}
         hasUnsavedChanges={
           autosave.saveStatus === "dirty" ||

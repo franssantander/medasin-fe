@@ -6,16 +6,30 @@ import {
   normalizeLetterPageTextScale,
   normalizeLetterPageTextScaleMode,
 } from "../letter-page-text-scale";
-import type { LetterExport, LetterExportPageInput, LetterPage } from "../type";
+import type {
+  Letter,
+  LetterExport,
+  LetterExportPageInput,
+  LetterPage,
+} from "../type";
+import type { LetterPageFlowResult } from "../letter-page-flow";
 
-export type LetterPageSaveStatus = "idle" | "dirty" | "saving" | "saved" | "error";
+export type LetterPageSaveStatus = "idle" | "dirty" | "arranging" | "saving" | "saved" | "error";
 
 export function useLetterPageAutosave({
   letterExport,
   letterUuid,
+  onSaved,
+  preparePages,
+  onLayout,
+  isComposing,
 }: {
   letterExport: LetterExport;
   letterUuid: string;
+  onSaved: (letter: Letter) => void;
+  preparePages: (pages: LetterPage[], signal: AbortSignal) => Promise<LetterPageFlowResult>;
+  onLayout?: (result: LetterPageFlowResult) => void;
+  isComposing?: () => boolean;
 }) {
   const mutation = useUpdateLetterExportMutation();
   const [pages, setPages] = useState(() => normalizePages(letterExport));
@@ -24,46 +38,71 @@ export function useLetterPageAutosave({
   const revisionRef = useRef(0);
   const savedRevisionRef = useRef(0);
   const timerRef = useRef<number | undefined>(undefined);
-  const saveChainRef = useRef<Promise<void>>(Promise.resolve());
+  const saveChainRef = useRef<Promise<void> | null>(null);
+  const controllerRef = useRef<AbortController | null>(null);
+  const mountedRef = useRef(true);
   const mutationRef = useRef(mutation.mutateAsync);
+  const onSavedRef = useRef(onSaved);
+  const preparePagesRef = useRef(preparePages);
+  const onLayoutRef = useRef(onLayout);
+  const isComposingRef = useRef(isComposing);
 
   useEffect(() => {
     mutationRef.current = mutation.mutateAsync;
-  }, [mutation.mutateAsync]);
+    onSavedRef.current = onSaved;
+    preparePagesRef.current = preparePages;
+    onLayoutRef.current = onLayout;
+    isComposingRef.current = isComposing;
+  }, [mutation.mutateAsync, onSaved, preparePages, onLayout, isComposing]);
 
   const flush = useCallback(() => {
-    if (savedRevisionRef.current === revisionRef.current) {
-      return saveChainRef.current;
-    }
-
     if (timerRef.current) window.clearTimeout(timerRef.current);
-    const revision = revisionRef.current;
-    const inputPages = pagesRef.current.map(toPageInput);
-    setSaveStatus("saving");
-
-    const job = saveChainRef.current
-      .catch(() => undefined)
-      .then(async () => {
-        const response = await mutationRef.current({
-          letterUuid,
-          exportUuid: letterExport.uuid,
-          input: { pages: inputPages },
-        });
-
-        if (revisionRef.current === revision) {
-          const normalized = normalizePages(response.data);
-          pagesRef.current = normalized;
-          setPages(normalized);
+    if (saveChainRef.current) return saveChainRef.current;
+    const job = (async () => {
+      while (mountedRef.current && savedRevisionRef.current !== revisionRef.current) {
+        const revision = revisionRef.current;
+        const controller = new AbortController();
+        controllerRef.current = controller;
+        try {
+          setSaveStatus("arranging");
+          const result = await preparePagesRef.current(pagesRef.current, controller.signal);
+          if (!mountedRef.current) return;
+          if (revision !== revisionRef.current) continue;
+          // Composition must complete before replacing the active document.
+          while (isComposingRef.current?.()) {
+            await new Promise((resolve) => window.setTimeout(resolve, 50));
+            controller.signal.throwIfAborted();
+          }
+          const prepared = renumberPages(result.pages);
+          onLayoutRef.current?.(result);
+          pagesRef.current = prepared;
+          setPages(prepared);
+          setSaveStatus("saving");
+          const response = await mutationRef.current({
+            letterUuid, exportUuid: letterExport.uuid,
+            input: { pages: prepared.map(toPageInput) },
+          });
           savedRevisionRef.current = revision;
-          setSaveStatus("saved");
+          if (revision === revisionRef.current && mountedRef.current) {
+            const normalized = normalizePages(response.data.export);
+            pagesRef.current = normalized;
+            setPages(normalized);
+            setSaveStatus("saved");
+            onSavedRef.current(response.data.letter);
+          }
+        } catch (error) {
+          if (controller.signal.aborted) {
+            if (!mountedRef.current) return;
+            // Wait for the typing pause before measuring the next revision.
+            await new Promise((resolve) => window.setTimeout(resolve, 750));
+            continue;
+          }
+          if (mountedRef.current) setSaveStatus("error");
+          throw error;
         }
-      })
-      .catch((error) => {
-        setSaveStatus("error");
-        throw error;
-      });
-
-    saveChainRef.current = job.catch(() => undefined);
+      }
+    })().finally(() => { saveChainRef.current = null; });
+    saveChainRef.current = job;
     return job;
   }, [letterExport.uuid, letterUuid]);
 
@@ -72,6 +111,7 @@ export function useLetterPageAutosave({
       const next = renumberPages(updater(pagesRef.current));
       pagesRef.current = next;
       revisionRef.current += 1;
+      controllerRef.current?.abort();
       setPages(next);
       setSaveStatus("dirty");
       if (timerRef.current) window.clearTimeout(timerRef.current);
@@ -82,12 +122,14 @@ export function useLetterPageAutosave({
     [flush],
   );
 
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      controllerRef.current?.abort();
       if (timerRef.current) window.clearTimeout(timerRef.current);
-    },
-    [],
-  );
+    };
+  }, []);
 
   const getPages = useCallback(() => pagesRef.current, []);
 

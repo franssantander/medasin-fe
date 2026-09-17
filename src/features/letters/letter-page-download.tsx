@@ -1,7 +1,7 @@
-import { createRoot } from "react-dom/client";
 import JSZip from "jszip";
 import { toBlob } from "html-to-image";
-import { LetterPageCanvas } from "./components/letter-page-preview";
+import { imageFetchSource } from "@/lib/image/crop-image";
+import { createLetterPageRenderer } from "./letter-page-renderer";
 import { LETTER_EXPORT_FORMATS } from "./letter-export-formats";
 import type { LetterExport, LetterPage } from "./type";
 
@@ -34,36 +34,10 @@ export async function downloadLetterPages(
 }
 
 async function renderPage(letterExport: LetterExport, page: LetterPage) {
-  const host = document.createElement("div");
-  host.setAttribute("aria-hidden", "true");
-  Object.assign(host.style, {
-    position: "fixed",
-    left: "-100000px",
-    top: "0",
-    width: `${letterExport.canvas.width}px`,
-    height: `${letterExport.canvas.height}px`,
-    pointerEvents: "none",
-  });
-  document.body.append(host);
-
-  const root = createRoot(host);
-  root.render(
-    <LetterPageCanvas
-      page={page}
-      canvas={letterExport.canvas}
-      exportUuid={letterExport.uuid}
-    />,
-  );
-
+  const renderer = createLetterPageRenderer(letterExport.canvas, letterExport.uuid);
   try {
-    await document.fonts.ready;
-    await waitForRender(host);
-    const canvas = host.querySelector<HTMLElement>("[data-page-canvas]");
-    if (!canvas) throw new Error("The page renderer did not become ready.");
-    if (pageOverflows(canvas)) {
-      throw new Error(`Page ${page.number} has more content than its canvas can hold.`);
-    }
-
+    const canvas = await renderer.render(page);
+    await prepareImagesForExport(canvas);
     const blob = await toBlob(canvas, {
       pixelRatio: 1,
       cacheBust: true,
@@ -72,33 +46,75 @@ async function renderPage(letterExport: LetterExport, page: LetterPage) {
     if (!blob) throw new Error("The page image could not be created.");
     return blob;
   } finally {
-    root.unmount();
-    host.remove();
+    renderer.dispose();
   }
 }
 
-function pageOverflows(canvas: HTMLElement) {
-  const content = canvas.querySelector<HTMLElement>("[data-page-content]");
-  if (!content) return false;
-  const editor = content.querySelector<HTMLElement>(".bn-editor");
-  const measured = editor ?? content;
-  return measured.scrollHeight > measured.clientHeight + 2;
-}
-
-async function waitForRender(host: HTMLElement) {
-  await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
-  const images = Array.from(host.querySelectorAll("img"));
+async function prepareImagesForExport(canvas: HTMLElement) {
   await Promise.all(
-    images.map((image) =>
-      image.complete
-        ? Promise.resolve()
-        : new Promise<void>((resolve) => {
-            image.addEventListener("load", () => resolve(), { once: true });
-            image.addEventListener("error", () => resolve(), { once: true });
-          }),
+    Array.from(canvas.querySelectorAll<HTMLImageElement>("img")).map(
+      async (image) => {
+        const source = imageFetchSource(image.currentSrc || image.src);
+        if (source !== image.getAttribute("src")) {
+          await replaceImageSource(image, source);
+        }
+
+        if (!image.complete || !image.naturalWidth || !image.naturalHeight) {
+          await waitForImage(image);
+        }
+      },
     ),
   );
-  await new Promise((resolve) => window.setTimeout(resolve, 150));
+}
+
+function replaceImageSource(image: HTMLImageElement, source: string) {
+  return new Promise<void>((resolve, reject) => {
+    const cleanup = () => {
+      image.removeEventListener("load", handleLoad);
+      image.removeEventListener("error", handleError);
+    };
+    const handleLoad = () => {
+      cleanup();
+      resolve();
+    };
+    const handleError = () => {
+      cleanup();
+      reject(new Error("An image on this page could not be loaded for export."));
+    };
+
+    image.addEventListener("load", handleLoad, { once: true });
+    image.addEventListener("error", handleError, { once: true });
+    image.removeAttribute("srcset");
+    image.src = source;
+    if (image.complete) {
+      if (image.naturalWidth && image.naturalHeight) handleLoad();
+      else handleError();
+    }
+  });
+}
+
+function waitForImage(image: HTMLImageElement) {
+  if (image.complete && image.naturalWidth && image.naturalHeight) {
+    return Promise.resolve();
+  }
+
+  return new Promise<void>((resolve, reject) => {
+    const cleanup = () => {
+      image.removeEventListener("load", handleLoad);
+      image.removeEventListener("error", handleError);
+    };
+    const handleLoad = () => {
+      cleanup();
+      resolve();
+    };
+    const handleError = () => {
+      cleanup();
+      reject(new Error("An image on this page could not be loaded for export."));
+    };
+
+    image.addEventListener("load", handleLoad, { once: true });
+    image.addEventListener("error", handleError, { once: true });
+  });
 }
 
 function pageFilename(

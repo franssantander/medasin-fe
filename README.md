@@ -20,6 +20,14 @@ You can start editing the page by modifying `app/page.tsx`. The page auto-update
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
+## Letter page regression tests
+
+Run `npx playwright install chromium` once, then `npm test`. The tests start an
+isolated development server on port 3107 and mock API responses; they do not
+modify real letters. They exercise the actual page renderer, text-size reflow,
+content preservation, and the ten-page limit. Run `npm run lint` and
+`npm run build` for static checks.
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:

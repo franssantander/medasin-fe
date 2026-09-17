@@ -169,11 +169,27 @@ export function useLetterAutosave({
     [scheduleSave],
   );
 
+  const replaceSavedLetter = useCallback((letter: Letter) => {
+    if (timerRef.current) window.clearTimeout(timerRef.current);
+    titleRef.current = letter.title;
+    subtitleRef.current = letter.subtitle ?? "";
+    contentRef.current = letter.content;
+    activeUuidRef.current = letter.uuid;
+    lastSavedRef.current = letter;
+    dirtyRef.current = false;
+    setTitle(letter.title);
+    setSubtitle(letter.subtitle ?? "");
+    setContent(letter.content);
+    setActiveUuid(letter.uuid);
+    setSaveStatus("saved");
+  }, []);
+
   return {
     activeUuid,
     content,
     flush,
     saveStatus,
+    replaceSavedLetter,
     subtitle,
     title,
     updateContent,

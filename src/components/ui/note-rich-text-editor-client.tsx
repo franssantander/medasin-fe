@@ -30,6 +30,7 @@ import {
   type SuggestionMenuProps,
 } from "@blocknote/react";
 import { BlockNoteView } from "@blocknote/shadcn";
+import { TextSelection } from "@tiptap/pm/state";
 import "@blocknote/shadcn/style.css";
 import {
   BellRing,
@@ -48,6 +49,7 @@ import {
   useRef,
   useState,
   useEffect,
+  useLayoutEffect,
   type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
 import { Button } from "@/components/ui/button";
@@ -363,10 +365,12 @@ type ImageCropSession = CropImageRequest & {
 };
 
 export type NoteRichTextEditorClientProps = {
-  mode?: "note" | "task" | "resource";
+  mode?: "note" | "task" | "resource" | "letter";
   editorChrome?: "full" | "formatting-only" | "none";
   documentId: string;
   content: string;
+  syncContent?: boolean;
+  onContentApplied?: () => void;
   editable: boolean;
   noteOptions: NoteLinkTarget[];
   onChange: (content: string) => void;
@@ -382,6 +386,15 @@ export type NoteRichTextEditorControls = {
   undo: () => boolean;
   redo: () => boolean;
   focusFirstBlock: () => void;
+  getSelection: () => NoteEditorSelection | null;
+  restoreSelection: (selection: NoteEditorSelection) => void;
+  isComposing: () => boolean;
+};
+
+export type NoteEditorSelection = {
+  anchor: { blockId: string; offset: number };
+  head: { blockId: string; offset: number };
+  focused: boolean;
 };
 
 export type NoteEditorHistoryState = {
@@ -394,6 +407,8 @@ export function NoteRichTextEditorClient({
   editorChrome = "full",
   documentId,
   content,
+  syncContent = false,
+  onContentApplied,
   editable,
   noteOptions,
   onChange,
@@ -405,6 +420,9 @@ export function NoteRichTextEditorClient({
   onBlur,
 }: NoteRichTextEditorClientProps) {
   const onChangeRef = useRef(onChange);
+  const applyingContentRef = useRef(false);
+  const appliedContentRef = useRef(content);
+  const externallyAppliedContentRef = useRef<string | null>(null);
   const onUploadFileRef = useRef(onUploadFile);
   const onCreateChildRef = useRef(onCreateChild);
   const onOpenNoteRef = useRef(onOpenNote);
@@ -454,7 +472,7 @@ export function NoteRichTextEditorClient({
   const editor = useCreateBlockNote(
     {
       schema: noteEditorSchema,
-      initialContent,
+      initialContent: initialContent.length ? initialContent : [{ type: "paragraph", content: "" }],
       uploadFile: (file) => onUploadFileRef.current(file),
     },
     [documentId],
@@ -481,7 +499,7 @@ export function NoteRichTextEditorClient({
   const noteFormattingToolbar = useCallback(
     () => (
       <NoteFormattingToolbar
-        allowImageCrop={mode === "note"}
+        allowImageCrop={mode === "note" || mode === "letter"}
         onCropImage={(request) => void prepareImageCrop(request)}
       />
     ),
@@ -541,6 +559,43 @@ export function NoteRichTextEditorClient({
   }, [editor]);
   const editorControls = useMemo<NoteRichTextEditorControls>(
     () => ({
+      isComposing: () => editor.prosemirrorView.composing,
+      getSelection: () => {
+        const { selection } = editor.prosemirrorState;
+        const point = (position: typeof selection.$anchor) => {
+          for (let depth = position.depth; depth > 0; depth -= 1) {
+            const id = position.node(depth).attrs.id;
+            if (typeof id === "string") {
+              return { blockId: id, offset: position.pos - position.start(depth) };
+            }
+          }
+          return null;
+        };
+        const anchor = point(selection.$anchor);
+        const head = point(selection.$head);
+        return anchor && head ? { anchor, head, focused: editor.prosemirrorView.hasFocus() } : null;
+      },
+      restoreSelection: (selection) => {
+        const { state } = editor.prosemirrorView;
+        const position = (point: NoteEditorSelection["anchor"]) => {
+          let found: number | undefined;
+          state.doc.descendants((node, pos) => {
+            if (node.attrs.id === point.blockId) {
+              found = pos + 1 + Math.min(point.offset, node.content.size);
+              return false;
+            }
+          });
+          return found;
+        };
+        const anchor = position(selection.anchor);
+        const head = position(selection.head);
+        if (anchor === undefined || head === undefined) return;
+        editor.prosemirrorView.dispatch(
+          state.tr.setSelection(TextSelection.between(state.doc.resolve(anchor), state.doc.resolve(head)))
+            .setMeta("addToHistory", false),
+        );
+        if (selection.focused) editor.focus();
+      },
       undo: () => {
         const changed = editor.undo();
         editor.focus();
@@ -561,6 +616,28 @@ export function NoteRichTextEditorClient({
     }),
     [editor, emitHistoryState],
   );
+
+  useLayoutEffect(() => {
+    if (!syncContent) return;
+    if (appliedContentRef.current !== content) {
+      const selection = editorControls.getSelection();
+      applyingContentRef.current = true;
+      try {
+        if (serializeNoteDocument(editor.document) !== content) {
+          editor.transact((transaction) => {
+            transaction.setMeta("addToHistory", false);
+          editor.replaceBlocks(editor.document, initialContent.length ? initialContent : [{ type: "paragraph", content: "" }]);
+          });
+          if (selection) editorControls.restoreSelection(selection);
+        }
+        appliedContentRef.current = content;
+        externallyAppliedContentRef.current = content;
+      } finally {
+        applyingContentRef.current = false;
+      }
+    }
+    onContentApplied?.();
+  }, [content, editor, editorControls, initialContent, onContentApplied, syncContent]);
 
   useEffect(() => {
     let active = true;
@@ -586,7 +663,15 @@ export function NoteRichTextEditorClient({
     [clearSelectedBlock, noteTitles, openNote, selectBlock],
   );
   const handleEditorChange = useCallback(() => {
+    if (applyingContentRef.current) return;
     const serializedDocument = serializeNoteDocument(editor.document);
+    if (externallyAppliedContentRef.current === serializedDocument) {
+      externallyAppliedContentRef.current = null;
+      appliedContentRef.current = serializedDocument;
+      return;
+    }
+    externallyAppliedContentRef.current = null;
+    appliedContentRef.current = serializedDocument;
 
     // BlockNote emits changes while ProseMirror is still reconciling node-view
     // positions. Defer parent state updates so undo/redo can finish that cycle
@@ -748,18 +833,23 @@ export function NoteRichTextEditorClient({
     "Video",
     "Divider",
   ]);
-  const taskExcludedDefaults = new Set(["Image", "Video"]);
+  const mediaDefaults = new Set(["Image", "Video"]);
   const slashItems = [
     ...getDefaultReactSlashMenuItems(editor).filter(
       (item) =>
         allowedDefaults.has(item.title) &&
-        (mode === "note" || !taskExcludedDefaults.has(item.title)),
+        (mode === "note" ||
+          (mode === "letter"
+            ? item.title !== "Video"
+            : !mediaDefaults.has(item.title))),
     ),
     ...(mode === "resource"
       ? [customItems[2]]
-      : mode === "task"
-        ? [customItems[0], customItems[2], customItems[3], customItems[4]]
-        : customItems),
+        : mode === "task"
+          ? [customItems[0], customItems[2], customItems[3], customItems[4]]
+          : mode === "letter"
+            ? []
+            : customItems),
   ];
 
   const submitDialog = () => {

@@ -87,6 +87,15 @@ export type Letter = LetterSummary & {
   content: string;
 };
 
+export type LetterMedia = {
+  uuid: string;
+  url: string;
+  kind: "image";
+  mime_type: string;
+  name: string;
+  size: number;
+};
+
 export type LetterPageResponse = {
   current_page: number;
   data: LetterSummary[];
@@ -105,6 +114,7 @@ export type LetterUpdateInput = Partial<LetterInput>;
 
 export type LetterExportInput = {
   format?: LetterExportFormat;
+  pages?: LetterExportPageInput[];
 };
 
 export type LetterExportPageInput = Pick<
@@ -120,4 +130,9 @@ export type LetterExportPageInput = Pick<
 
 export type LetterExportUpdateInput = {
   pages: LetterExportPageInput[];
+};
+
+export type LetterExportUpdateResult = {
+  export: LetterExport;
+  letter: Letter;
 };

@@ -79,7 +79,7 @@ export async function imageUrlToFile(source: string, name?: string) {
   });
 }
 
-function imageFetchSource(source: string) {
+export function imageFetchSource(source: string) {
   if (typeof window === "undefined") return source;
 
   let sourceUrl: URL;

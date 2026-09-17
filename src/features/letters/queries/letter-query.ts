@@ -12,6 +12,7 @@ import type {
   Letter,
   LetterApiResponse,
   LetterExportFormat,
+  LetterExportPageInput,
   LetterExportUpdateInput,
   LetterPageResponse,
   LetterSummary,
@@ -138,8 +139,15 @@ export function useCreateLetterExportMutation() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ letterUuid, format }: { letterUuid: string; format: LetterExportFormat }) =>
-      letterService.createExport(letterUuid, { format }),
+    mutationFn: ({
+      letterUuid,
+      format,
+      pages,
+    }: {
+      letterUuid: string;
+      format: LetterExportFormat;
+      pages?: LetterExportPageInput[];
+    }) => letterService.createExport(letterUuid, { format, pages }),
     onSuccess: (response, variables) => {
       const letterUuid = response.data.letter_uuid ?? variables.letterUuid;
       void Promise.all([
@@ -188,14 +196,9 @@ export function useUpdateLetterExportMutation() {
     onSuccess: (response, variables) => {
       queryClient.setQueryData(
         letterKeys.export(variables.letterUuid, variables.exportUuid),
-        response,
+        { ...response, data: response.data.export },
       );
-      void Promise.all([
-        queryClient.invalidateQueries({
-          queryKey: letterKeys.detail(variables.letterUuid),
-        }),
-        queryClient.invalidateQueries({ queryKey: letterKeys.list() }),
-      ]);
+      upsertLetterCache(queryClient, response.data.letter);
     },
     onError: (error) => {
       toast.add({ type: "error", description: error.message });

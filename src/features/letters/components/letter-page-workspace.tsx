@@ -18,12 +18,10 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import {
-  AlertTriangle,
   Copy,
   Download,
   GripVertical,
   LoaderCircle,
-  Plus,
   Redo2,
   RotateCcw,
   Trash2,
@@ -48,13 +46,10 @@ import {
 } from "@/components/ui/dialog";
 import type {
   NoteEditorHistoryState,
+  NoteEditorSelection,
   NoteRichTextEditorControls,
 } from "@/components/ui/note-rich-text-editor-client";
-import {
-  EMPTY_NOTE_DOCUMENT,
-  parseNoteDocument,
-  serializeNoteDocument,
-} from "@/components/ui/note-editor-document";
+import { serializeNoteDocument } from "@/components/ui/note-editor-document";
 import {
   Select,
   SelectContent,
@@ -64,11 +59,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "@/components/ui/toast";
+import { parseApiError } from "@/lib/axios";
 import { cn } from "@/lib/utils";
 import { useLetterPageAutosave } from "../hooks/use-letter-page-autosave";
 import { LETTER_EXPORT_FORMATS } from "../letter-export-formats";
+import { mapFlowSelection, type LetterPageFlowResult } from "../letter-page-flow";
+import { measureLetterPage } from "../letter-page-renderer";
+import { letterService } from "../services/letter-service";
 import {
-  LETTER_PAGE_TEXT_SCALE_DEFAULT,
   LETTER_PAGE_TEXT_SCALE_MAX,
   LETTER_PAGE_TEXT_SCALE_MIN,
   LETTER_PAGE_TEXT_SCALE_STEP,
@@ -78,12 +76,19 @@ import {
   normalizeLetterPageTextScale,
   normalizeLetterPageTextScaleMode,
 } from "../letter-page-text-scale";
-import type { LetterExport, LetterPage, LetterPageLayout } from "../type";
+import type {
+  Letter,
+  LetterExport,
+  LetterPage,
+  LetterPageLayout,
+} from "../type";
 import {
   LetterPageCanvas,
   LetterPageThumbnail,
   LetterPageViewport,
 } from "./letter-page-preview";
+
+const MAX_LETTER_IMAGE_REQUEST_BYTES = 8 * 1024 * 1024;
 
 export function LetterPageWorkspace({
   open,
@@ -91,30 +96,76 @@ export function LetterPageWorkspace({
   letterExport,
   letterUuid,
   letterTitle,
+  onSaved,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   letterExport: LetterExport;
   letterUuid: string;
   letterTitle: string;
+  onSaved: (letter: Letter) => void;
 }) {
+  const [selectedUuid, setSelectedUuid] = useState(letterExport.pages?.[0]?.uuid);
+  const selectedUuidRef = useRef(selectedUuid);
+  const selectedPageNumberRef = useRef(1);
+  const reflowedExportRef = useRef<string | undefined>(undefined);
+  const controlsRef = useRef<NoteRichTextEditorControls | null>(null);
+  const pendingSelectionRef = useRef<NoteEditorSelection | null>(null);
+  const onLayout = useCallback((result: LetterPageFlowResult) => {
+    const selection = controlsRef.current?.getSelection();
+    const mapped = selection?.focused ? mapFlowSelection(selection, result) : null;
+    const next = mapped
+      ? result.pages.find((page) => page.uuid === mapped.pageUuid)
+      : result.pages.find((page) => page.uuid === selectedUuidRef.current) ??
+        result.pages[Math.min(selectedPageNumberRef.current - 1, result.pages.length - 1)];
+    if (mapped) pendingSelectionRef.current = mapped.selection;
+    if (next) {
+      selectedUuidRef.current = next.uuid;
+      selectedPageNumberRef.current = next.number;
+      setSelectedUuid(next.uuid);
+    }
+  }, []);
+  const preparePages = useCallback(
+    async (currentPages: LetterPage[], signal: AbortSignal) => {
+      const { flowLetterPages } = await import("../letter-page-flow");
+      return flowLetterPages(
+        currentPages,
+        letterExport.canvas,
+        letterExport.uuid,
+        signal,
+      );
+    },
+    [letterExport.canvas, letterExport.uuid],
+  );
   const { flush, getPages, pages, saveStatus, updatePages } = useLetterPageAutosave({
     letterExport,
     letterUuid,
+    onSaved,
+    preparePages,
+    onLayout,
+    isComposing: () => controlsRef.current?.isComposing() ?? false,
   });
-  const [selectedUuid, setSelectedUuid] = useState(pages[0]?.uuid);
-  const selectedUuidRef = useRef(selectedUuid);
   const [closing, setClosing] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState(0);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
-  const [selectedPageOverflows, setSelectedPageOverflows] = useState(false);
   const [historyState, setHistoryState] = useState<NoteEditorHistoryState>({
     canUndo: false,
     canRedo: false,
   });
   const [editorControls, setEditorControls] =
     useState<NoteRichTextEditorControls | null>(null);
+  const restorePendingSelection = useCallback(() => {
+    if (pendingSelectionRef.current && controlsRef.current) {
+      controlsRef.current.restoreSelection(pendingSelectionRef.current);
+      pendingSelectionRef.current = null;
+    }
+  }, []);
+  const handleEditorReady = useCallback((controls: NoteRichTextEditorControls | null) => {
+    controlsRef.current = controls;
+    setEditorControls(controls);
+    restorePendingSelection();
+  }, [restorePendingSelection]);
   const canvasRef = useRef<HTMLDivElement>(null);
   const autoFitKeyRef = useRef<string | undefined>(undefined);
   const sensors = useSensors(
@@ -156,16 +207,24 @@ export function LetterPageWorkspace({
   }, [selectedUuid]);
 
   useEffect(() => {
-    const timer = window.setTimeout(() => {
-      const content = canvasRef.current?.querySelector<HTMLElement>("[data-page-content]");
-      const editor = content?.querySelector<HTMLElement>(".bn-editor");
-      const measured = editor ?? content;
-      setSelectedPageOverflows(
-        Boolean(measured && measured.scrollHeight > measured.clientHeight + 2),
-      );
-    }, 200);
-    return () => window.clearTimeout(timer);
-  }, [open, selectedPage]);
+    if (pages.some((page) => page.uuid === selectedUuidRef.current)) return;
+    const next =
+      pages[Math.min(selectedPageNumberRef.current - 1, pages.length - 1)] ??
+      pages[0];
+    selectedUuidRef.current = next?.uuid;
+    setSelectedUuid(next?.uuid);
+  }, [pages]);
+
+  useEffect(() => {
+    if (!open) {
+      reflowedExportRef.current = undefined;
+      return;
+    }
+    if (reflowedExportRef.current === letterExport.uuid) return;
+
+    reflowedExportRef.current = letterExport.uuid;
+    updatePages((current) => current);
+  }, [letterExport.uuid, open, updatePages]);
 
   const pageIds = useMemo(() => pages.map((page) => page.uuid), [pages]);
 
@@ -179,8 +238,8 @@ export function LetterPageWorkspace({
     try {
       await flush();
       onOpenChange(false);
-    } catch {
-      toast.add({ type: "error", description: "Your page edits could not be saved. Try again before closing." });
+    } catch (error) {
+      toast.add({ type: "error", description: error instanceof Error ? error.message : "Your page edits could not be saved. Try again before closing." });
     } finally {
       setClosing(false);
     }
@@ -197,10 +256,39 @@ export function LetterPageWorkspace({
     );
   }, [updatePages]);
 
+  const uploadImage = useCallback(
+    async (file: File) => {
+      try {
+        if (!file.type.startsWith("image/")) {
+          throw new Error("Letter pages only support image uploads.");
+        }
+        if (file.size >= MAX_LETTER_IMAGE_REQUEST_BYTES) {
+          throw new Error("Images must be smaller than 8 MB.");
+        }
+
+        const response = await letterService.uploadMedia(letterUuid, file);
+        if (!response.data.url) {
+          throw new Error("The upload response did not include a media URL.");
+        }
+
+        return response.data.url;
+      } catch (error) {
+        const uploadError = parseApiError(error);
+        const description = uploadError.message.includes("POST Content-Length")
+          ? "Images must be smaller than 8 MB."
+          : uploadError.message;
+        toast.add({ type: "error", description });
+        throw uploadError;
+      }
+    },
+    [letterUuid],
+  );
+
   useEffect(() => {
     if (
       !open ||
       !selectedPage ||
+      selectedPage.layout === "body" ||
       selectedTextScaleMode !== "auto" ||
       !selectedContentKey
     ) {
@@ -228,7 +316,9 @@ export function LetterPageWorkspace({
           }
         }
 
-        const measured = measureLetterPageContent(canvasRef.current);
+        const measured = canvasRef.current
+          ? measureLetterPage(canvasRef.current)
+          : null;
         if (!measured) return;
 
         const nextScale = getLetterPageAutoFitScale(
@@ -293,10 +383,12 @@ export function LetterPageWorkspace({
   ]);
 
   const selectPage = useCallback((uuid: string) => {
+    const page = pages.find((item) => item.uuid === uuid);
+    selectedPageNumberRef.current = page?.number ?? 1;
     selectedUuidRef.current = uuid;
     setSelectedUuid(uuid);
     setConfirmingDelete(false);
-  }, []);
+  }, [pages]);
 
   const handleTextScaleChange = (event: ChangeEvent<HTMLInputElement>) => {
     updateSelected({
@@ -305,34 +397,13 @@ export function LetterPageWorkspace({
     });
   };
 
-  const addPage = () => {
-    if (pages.length >= 10) {
-      toast.add({ type: "info", description: "A page set can contain up to 10 pages." });
-      return;
-    }
-
-    const page = createEmptyPage(pages.length + 1);
-    updatePages((current) => {
-      const next = [...current];
-      next.splice(selectedIndex + 1, 0, page);
-      return next;
-    });
-    selectedUuidRef.current = page.uuid;
-    setSelectedUuid(page.uuid);
-    setConfirmingDelete(false);
-  };
-
   const duplicatePage = () => {
     if (!selectedPage || selectedPage.layout === "cover") return;
-    if (pages.length >= 10) {
-      toast.add({ type: "info", description: "A page set can contain up to 10 pages." });
-      return;
-    }
 
     const duplicate = {
       ...selectedPage,
       uuid: crypto.randomUUID(),
-      blocks: structuredClone(selectedPage.blocks),
+      blocks: duplicateBlocks(selectedPage.blocks),
     };
     updatePages((current) => {
       const next = [...current];
@@ -373,8 +444,8 @@ export function LetterPageWorkspace({
       await flush();
       const latestPages = getPages();
       const latestSelectedPage =
-        latestPages.find((page) => page.uuid === selectedPage.uuid) ??
-        selectedPage;
+        latestPages.find((page) => page.uuid === selectedUuidRef.current) ??
+        latestPages[Math.min(selectedPage.number - 1, latestPages.length - 1)];
       const currentExport = {
         ...letterExport,
         pages: latestPages,
@@ -425,7 +496,7 @@ export function LetterPageWorkspace({
             </div>
             <div className="flex items-center gap-2">
               <span className="text-xs text-muted-foreground" aria-live="polite">
-                {saveStatus === "saving" ? "Saving…" : saveStatus === "dirty" ? "Unsaved changes" : saveStatus === "error" ? "Save failed" : saveStatus === "saved" ? "Saved" : null}
+                {saveStatus === "arranging" ? "Arranging pages…" : saveStatus === "saving" ? "Saving…" : saveStatus === "dirty" ? "Unsaved changes" : saveStatus === "error" ? "Save failed" : saveStatus === "saved" ? "Saved" : null}
               </span>
               <Button type="button" variant="outline" size="sm" disabled={downloading || closing} onClick={() => void download(false)}>
                 <Download data-icon="inline-start" />
@@ -452,9 +523,6 @@ export function LetterPageWorkspace({
                     onSelect={() => selectPage(page.uuid)}
                   />
                 ))}
-                <Button type="button" variant="outline" size="sm" className="min-h-11 shrink-0" disabled={pages.length >= 10} onClick={addPage}>
-                  <Plus data-icon="inline-start" /> Add page
-                </Button>
               </nav>
             </SortableContext>
           </DndContext>
@@ -477,7 +545,9 @@ export function LetterPageWorkspace({
                   updateSelected({ subtitle: subtitle || null })
                 }
                 onBlocksChange={(blocks) => updateSelected({ blocks })}
-                onEditorReady={setEditorControls}
+                onUploadFile={uploadImage}
+                onEditorReady={handleEditorReady}
+                onContentApplied={restorePendingSelection}
                 onHistoryStateChange={setHistoryState}
                 onBlur={() => void flush().catch(() => undefined)}
               />
@@ -499,20 +569,13 @@ export function LetterPageWorkspace({
                     </>
                   ) : (
                     <>
-                      <Button type="button" variant="ghost" size="icon-sm" aria-label="Duplicate page" title="Duplicate page" disabled={pages.length >= 10} onClick={duplicatePage}><Copy /></Button>
+                      <Button type="button" variant="ghost" size="icon-sm" aria-label="Duplicate page" title="Duplicate page" onClick={duplicatePage}><Copy /></Button>
                       <Button type="button" variant="ghost" size="icon-sm" aria-label="Delete page" title="Delete page" disabled={pages.length <= 2} onClick={() => setConfirmingDelete(true)}><Trash2 /></Button>
                     </>
                   )}
                 </div>
               ) : null}
             </div>
-
-            {selectedPageOverflows ? (
-              <div role="alert" className="flex items-start gap-2 rounded-lg border bg-muted px-3 py-2 text-sm text-foreground">
-                <AlertTriangle className="mt-0.5 size-4 shrink-0 text-destructive" aria-hidden="true" />
-                <p>This content does not fit. Shorten it or move some text to another page before downloading.</p>
-              </div>
-            ) : null}
 
             <div className="flex flex-col gap-2 border-b pb-4">
               <div className="flex items-center justify-between gap-3">
@@ -565,7 +628,9 @@ export function LetterPageWorkspace({
                 <span>{LETTER_PAGE_TEXT_SCALE_MAX * 100}%</span>
               </div>
               <p className="text-xs text-muted-foreground">
-                {selectedTextScaleMode === "auto"
+                {selectedPage.layout === "body"
+                  ? "Text flows between pages at the selected size. Reset restores the default size for this format."
+                  : selectedTextScaleMode === "auto"
                   ? "Auto-fits this page to its canvas. Use the slider to override it."
                   : "Manual override for this page. Reset to let it auto-fit again."} Branding and signatures stay fixed.
               </p>
@@ -666,44 +731,9 @@ function SortablePage({
   );
 }
 
-function createEmptyPage(number: number): LetterPage {
-  return {
-    uuid: crypto.randomUUID(),
-    number,
-    kind: "body",
-    layout: "body",
-    text_scale: LETTER_PAGE_TEXT_SCALE_DEFAULT,
-    text_scale_mode: "auto",
-    title: null,
-    subtitle: null,
-    blocks: parseNoteDocument(EMPTY_NOTE_DOCUMENT).blocks,
-    signature: null,
-    truncated: false,
-    continuation_label: null,
-  };
-}
-
-function measureLetterPageContent(canvas: HTMLElement | null) {
-  const content = canvas?.querySelector<HTMLElement>("[data-page-content]");
-  if (!content) return null;
-
-  const editor = content.querySelector<HTMLElement>(".bn-editor");
-  if (!editor) {
-    return {
-      availableHeight: content.clientHeight,
-      contentHeight: content.scrollHeight,
-    };
-  }
-
-  const blockGroup = editor.querySelector<HTMLElement>(".bn-block-group");
-  return {
-    availableHeight: editor.clientHeight,
-    contentHeight: blockGroup
-      ? Math.max(
-          editor.scrollHeight,
-          blockGroup.scrollHeight,
-          blockGroup.getBoundingClientRect().height,
-        )
-      : editor.scrollHeight,
-  };
+function duplicateBlocks(blocks: unknown[]): unknown[] {
+  return blocks.map((value) => {
+    const block = structuredClone(value) as Record<string, unknown>;
+    return { ...block, id: crypto.randomUUID(), ...(Array.isArray(block.children) ? { children: duplicateBlocks(block.children) } : {}) };
+  });
 }

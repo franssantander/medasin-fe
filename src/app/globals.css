@@ -297,59 +297,83 @@
     overflow-wrap: anywhere;
     word-break: break-word;
   }
+}
 
-  .letter-page-canvas {
-    container-type: inline-size;
-  }
+/* Keep page-rendering rules outside Tailwind's layers so they can override
+   BlockNote's unlayered default editor styles. */
+.letter-page-canvas {
+  container-type: size;
+}
 
-  .letter-page-document .note-rich-text,
-  .letter-page-document .note-rich-text .bn-container,
-  .letter-page-document .note-rich-text .bn-editor,
-  .letter-page-document .note-rich-text .ProseMirror {
-    height: 100%;
-    overflow: hidden;
-  }
+.letter-page-measuring *,
+.letter-page-measuring *::before,
+.letter-page-measuring *::after {
+  transition: none !important;
+  animation: none !important;
+}
 
-  .letter-page-document .note-rich-text .bn-editor {
-    padding: 0;
-    font-size: var(--letter-page-editor-font-size, 1.72cqw);
-    line-height: 1.55;
-  }
+.letter-page-document .note-rich-text,
+.letter-page-document .note-rich-text .bn-container,
+.letter-page-document .note-rich-text .bn-editor,
+.letter-page-document .note-rich-text .ProseMirror {
+  height: 100%;
+  overflow: hidden;
+}
 
-  .letter-page-document .note-rich-text .bn-block-group,
-  .letter-page-document .note-rich-text .bn-block-outer,
-  .letter-page-document .note-rich-text .bn-block {
-    padding-inline: 0;
-  }
+.letter-page-document .note-rich-text .bn-editor {
+  padding: 0;
+  font-size: var(--letter-page-editor-font-size, 1.72cqw);
+  line-height: 1.55;
+}
 
-  .letter-page-quote-document .note-rich-text,
-  .letter-page-quote-document .note-rich-text .bn-container,
-  .letter-page-quote-document .note-rich-text .bn-editor,
-  .letter-page-quote-document .note-rich-text .ProseMirror {
-    height: 100%;
-    overflow: hidden;
-  }
+.letter-page-document .note-rich-text .bn-block-group,
+.letter-page-document .note-rich-text .bn-block-outer,
+.letter-page-document .note-rich-text .bn-block {
+  padding-inline: 0;
+}
 
-  .letter-page-quote-document .note-rich-text .bn-editor {
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    padding: 6cqw;
-    font-family: var(--font-spectral-sans);
-    font-size: var(--letter-page-editor-font-size, 4.3cqw);
-    line-height: 1.14;
-    letter-spacing: -0.025em;
-    text-align: center;
-  }
+.letter-page-document .note-rich-text [data-content-type="image"],
+.letter-page-document .note-rich-text [data-content-type="image"] .bn-file-block-content-wrapper,
+.letter-page-document .note-rich-text [data-content-type="image"] .bn-visual-media-wrapper {
+  max-height: 100%;
+  max-width: 100%;
+}
 
-  .letter-page-quote-document .note-rich-text .bn-block-group,
-  .letter-page-quote-document .note-rich-text .bn-block-outer,
-  .letter-page-quote-document .note-rich-text .bn-block {
-    padding-inline: 0;
-  }
+.letter-page-document .note-rich-text [data-content-type="image"] .bn-visual-media {
+  display: block;
+  height: auto;
+  max-height: 62cqh;
+  max-width: 100%;
+  object-fit: contain;
+}
 
-  .letter-page-editable-text[data-empty="true"][data-placeholder]::before {
-    color: oklch(55.6% 0 0 / 55%);
-    content: attr(data-placeholder);
-  }
+.letter-page-quote-document .note-rich-text,
+.letter-page-quote-document .note-rich-text .bn-container,
+.letter-page-quote-document .note-rich-text .bn-editor,
+.letter-page-quote-document .note-rich-text .ProseMirror {
+  height: 100%;
+  overflow: hidden;
+}
+
+.letter-page-quote-document .note-rich-text .bn-editor {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 6cqw;
+  font-family: var(--font-spectral-sans);
+  font-size: var(--letter-page-editor-font-size, 4.3cqw);
+  line-height: 1.14;
+  letter-spacing: -0.025em;
+  text-align: center;
+}
+
+.letter-page-quote-document .note-rich-text .bn-block-group,
+.letter-page-quote-document .note-rich-text .bn-block-outer,
+.letter-page-quote-document .note-rich-text .bn-block {
+  padding-inline: 0;
+}
+
+.letter-page-editable-text[data-empty="true"][data-placeholder]::before {
+  color: oklch(55.6% 0 0 / 55%);
+  content: attr(data-placeholder);
 }
