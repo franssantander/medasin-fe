@@ -80,11 +80,12 @@ export async function imageUrlToFile(source: string, name?: string) {
 }
 
 export function imageFetchSource(source: string) {
-  if (typeof window === "undefined") return source;
+  const baseUrl =
+    typeof window === "undefined" ? "http://localhost" : window.location.origin;
 
   let sourceUrl: URL;
   try {
-    sourceUrl = new URL(source, window.location.origin);
+    sourceUrl = new URL(source, baseUrl);
   } catch {
     return source;
   }
@@ -100,7 +101,7 @@ export function imageFetchSource(source: string) {
     return `${sourceUrl.pathname}${sourceUrl.search}`;
   }
 
-  if (sourceUrl.origin === window.location.origin) {
+  if (typeof window !== "undefined" && sourceUrl.origin === window.location.origin) {
     return `${sourceUrl.pathname}${sourceUrl.search}`;
   }
 

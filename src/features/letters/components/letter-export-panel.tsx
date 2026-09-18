@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import {
   AlertTriangle,
@@ -66,6 +66,7 @@ export function LetterExportPanel({
   const [preparationError, setPreparationError] = useState("");
   const [preparing, setPreparing] = useState(false);
   const invalidatedExportRef = useRef<string | undefined>(undefined);
+  const requestedRenderRef = useRef<string | undefined>(undefined);
   const exportUuid = activeExportUuid ?? latestExport?.uuid;
   const exportQuery = useLetterExportQuery(letterUuid, exportUuid);
   const currentExport = activeExportUuid
@@ -78,6 +79,10 @@ export function LetterExportPanel({
     exportPending ||
     currentExport?.status === "queued" ||
     currentExport?.status === "processing";
+  const isCurrentForLetter =
+    currentExport?.uuid === latestExport?.uuid
+      ? Boolean(currentExport?.is_current && latestExport?.is_current)
+      : Boolean(currentExport?.is_current);
 
   useEffect(() => {
     if (
@@ -97,20 +102,69 @@ export function LetterExportPanel({
     ]);
   }, [currentExport, exportUuid, letterUuid, queryClient]);
 
-  const handlePrepare = async () => {
-    setPreparationError("");
-    setPreparing(true);
-    try {
-      await onExport(format);
-    } catch (error) {
-      setPreparationError(
-        error instanceof Error
-          ? error.message
-          : "The pages could not be prepared.",
-      );
-    } finally {
-      setPreparing(false);
+  const renderFormat = useCallback(
+    async (nextFormat: LetterExportFormat) => {
+      setPreparationError("");
+      setPreparing(true);
+      try {
+        await onExport(nextFormat);
+      } catch (error) {
+        setPreparationError(
+          error instanceof Error
+            ? error.message
+            : "The pages could not be rendered.",
+        );
+      } finally {
+        setPreparing(false);
+      }
+    },
+    [onExport],
+  );
+
+  useEffect(() => {
+    if (
+      hasUnsavedChanges ||
+      isPreparing ||
+      (activeExportUuid && exportQuery.isLoading && !currentExport)
+    ) {
+      return;
     }
+
+    const needsRender =
+      !currentExport ||
+      currentExport.format !== format ||
+      !isCurrentForLetter;
+    if (!needsRender) {
+      requestedRenderRef.current = undefined;
+      return;
+    }
+
+    const requestKey = [
+      letterUuid ?? "draft",
+      format,
+      currentExport?.uuid ?? "new",
+      currentExport?.updated_at ?? "",
+      String(isCurrentForLetter),
+    ].join(":");
+    if (requestedRenderRef.current === requestKey) return;
+
+    requestedRenderRef.current = requestKey;
+    void renderFormat(format);
+  }, [
+    currentExport,
+    activeExportUuid,
+    exportQuery.isLoading,
+    format,
+    hasUnsavedChanges,
+    isCurrentForLetter,
+    isPreparing,
+    letterUuid,
+    renderFormat,
+  ]);
+
+  const retryRender = () => {
+    requestedRenderRef.current = undefined;
+    void renderFormat(format);
   };
 
   const formatDetails = LETTER_EXPORT_FORMATS[format];
@@ -132,7 +186,11 @@ export function LetterExportPanel({
         </div>
         <Select
           value={format}
-          onValueChange={(value) => setFormat(value as LetterExportFormat)}
+          disabled={isPreparing}
+          onValueChange={(value) => {
+            requestedRenderRef.current = undefined;
+            setFormat(value as LetterExportFormat);
+          }}
         >
           <SelectTrigger size="sm" aria-label="Export format">
             <SelectValue />
@@ -166,28 +224,33 @@ export function LetterExportPanel({
               Try again
             </Button>
           </ExportState>
-        ) : !currentExport && exportQuery.isLoading ? (
+        ) : !currentExport && (exportQuery.isLoading || isPreparing) ? (
           <ExportPreviewSkeleton />
         ) : !currentExport ? (
           <ExportState
             icon={<FileText className="size-5 text-muted-foreground" />}
-            title="Prepare your first page set"
-            description={`Choose ${formatDetails.label.toLowerCase()} pages at ${formatDetails.width} × ${formatDetails.height}px, then review the generated split here.`}
+            title="Rendering your first page set"
+            description={`${formatDetails.label} pages render automatically at ${formatDetails.width} × ${formatDetails.height}px.`}
           />
         ) : currentExport.status === "failed" ? (
           <ExportState
             icon={<AlertTriangle className="size-5 text-destructive" />}
-            title="Page preparation failed"
+            title="Page rendering failed"
             description={
               currentExport.error ||
-              "Something went wrong while preparing these pages."
+              "Something went wrong while rendering these pages."
             }
-          />
+          >
+            <Button type="button" variant="outline" size="sm" onClick={retryRender}>
+              <RefreshCw data-icon="inline-start" />
+              Try again
+            </Button>
+          </ExportState>
         ) : currentExport.status !== "ready" || !isReady ? (
           <ExportState
             icon={<LoaderCircle className="size-5 animate-spin text-muted-foreground" />}
-            title="Preparing pages..."
-            description="Your page set is being prepared. This panel will update automatically."
+            title="Rendering pages..."
+            description="Your selected page size is rendering. This panel will update automatically."
           />
         ) : (
           <ReadyExport
@@ -203,29 +266,21 @@ export function LetterExportPanel({
       </div>
 
       {preparationError && (
-        <p role="alert" className="mt-3 shrink-0 text-sm text-destructive">
-          {preparationError}
-        </p>
+        <div className="mt-3 flex shrink-0 items-center justify-between gap-3" role="alert">
+          <p className="text-sm text-destructive">{preparationError}</p>
+          <Button type="button" variant="outline" size="sm" onClick={retryRender}>
+            <RefreshCw data-icon="inline-start" />
+            Try again
+          </Button>
+        </div>
       )}
 
-      <div className="mt-4 flex shrink-0 flex-col gap-2 border-t pt-3">
-        <Button
-          type="button"
-          className="w-full"
-          disabled={isPreparing}
-          aria-busy={isPreparing}
-          onClick={() => void handlePrepare()}
-        >
-          {isPreparing ? (
-            <LoaderCircle className="animate-spin" data-icon="inline-start" />
-          ) : (
-            <RefreshCw data-icon="inline-start" />
-          )}
-          {isPreparing ? "Preparing..." : "Prepare pages"}
-        </Button>
+      <div className="mt-4 flex shrink-0 flex-col gap-2 border-t pt-3" aria-live="polite">
         <p className="text-center text-xs text-muted-foreground">
-          {currentExport?.status === "ready"
-            ? `${currentExport.page_count ?? pages.length} ${pages.length === 1 ? "page" : "pages"} · Prepared as ${LETTER_EXPORT_FORMATS[currentExport.format].label} ${LETTER_EXPORT_FORMATS[currentExport.format].ratio}`
+          {isPreparing
+            ? `Rendering ${formatDetails.label} at ${formatDetails.width} × ${formatDetails.height}px…`
+            : currentExport?.status === "ready"
+            ? `${currentExport.page_count ?? pages.length} ${pages.length === 1 ? "page" : "pages"} · Rendered as ${LETTER_EXPORT_FORMATS[currentExport.format].label} ${LETTER_EXPORT_FORMATS[currentExport.format].ratio}`
             : `${formatDetails.width} × ${formatDetails.height}px canvas`}
         </p>
       </div>
@@ -263,8 +318,8 @@ function ReadyExport({
         >
           <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
           <p>
-            This preview does not include your latest edits. Prepare pages
-            again to include them.
+            This preview does not include your latest edits. It will update
+            automatically after those edits are saved.
           </p>
         </div>
       )}

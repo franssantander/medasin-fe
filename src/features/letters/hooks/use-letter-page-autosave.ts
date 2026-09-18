@@ -13,6 +13,7 @@ import type {
   LetterPage,
 } from "../type";
 import type { LetterPageFlowResult } from "../letter-page-flow";
+import { normalizeLetterPageCover } from "../letter-cover";
 
 export type LetterPageSaveStatus = "idle" | "dirty" | "arranging" | "saving" | "saved" | "error";
 
@@ -137,17 +138,27 @@ export function useLetterPageAutosave({
 }
 
 function normalizePages(letterExport: LetterExport) {
+  const sourcePages = letterExport.pages ?? [];
+  const sourceAuthor = [...sourcePages]
+    .reverse()
+    .find((page) => page.signature)?.signature?.name;
+
   return renumberPages(
-    (letterExport.pages ?? []).map((page) => ({
-      ...page,
-      uuid: page.uuid || crypto.randomUUID(),
-      layout: page.layout || (page.kind === "cover" ? "cover" : "body"),
-      text_scale: normalizeLetterPageTextScale(page.text_scale),
-      text_scale_mode: normalizeLetterPageTextScaleMode(
-        page.text_scale_mode,
-        page.text_scale,
+    sourcePages.map((page) =>
+      normalizeLetterPageCover(
+        {
+          ...page,
+          uuid: page.uuid || crypto.randomUUID(),
+          layout: page.layout || (page.kind === "cover" ? "cover" : "body"),
+          text_scale: normalizeLetterPageTextScale(page.text_scale),
+          text_scale_mode: normalizeLetterPageTextScaleMode(
+            page.text_scale_mode,
+            page.text_scale,
+          ),
+        },
+        { author_name: sourceAuthor },
       ),
-    })),
+    ),
   );
 }
 
@@ -174,7 +185,7 @@ function renumberPages(pages: LetterPage[]): LetterPage[] {
 }
 
 function toPageInput(page: LetterPage): LetterExportPageInput {
-  return {
+  const input: LetterExportPageInput = {
     uuid: page.uuid,
     layout: page.layout,
     text_scale: normalizeLetterPageTextScale(page.text_scale),
@@ -184,6 +195,15 @@ function toPageInput(page: LetterPage): LetterExportPageInput {
     ),
     title: page.layout === "cover" ? page.title : null,
     subtitle: page.layout === "cover" ? page.subtitle : null,
-    blocks: page.layout === "cover" ? [] : page.blocks,
+    content_source:
+      page.content_source ??
+      (page.layout === "cover" ? undefined : "letter_body"),
+    blocks: page.blocks,
   };
+
+  if (page.layout === "cover") {
+    input.cover = page.cover;
+  }
+
+  return input;
 }

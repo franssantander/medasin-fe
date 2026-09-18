@@ -15,12 +15,14 @@ import {
   horizontalListSortingStrategy,
   sortableKeyboardCoordinates,
   useSortable,
+  verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import {
   Copy,
   Download,
   GripVertical,
+  ImagePlus,
   LoaderCircle,
   Redo2,
   RotateCcw,
@@ -35,8 +37,15 @@ import {
   useRef,
   useState,
   type ChangeEvent,
+  type RefObject,
 } from "react";
 import { Button } from "@/components/ui/button";
+import {
+  ImageCropDialog,
+  type ImageCropAspectOption,
+} from "@/components/ui/image-crop-dialog";
+import { Input } from "@/components/ui/input";
+import { NoteRichTextEditor } from "@/components/ui/note-rich-text-editor";
 import {
   Dialog,
   DialogContent,
@@ -49,7 +58,11 @@ import type {
   NoteEditorSelection,
   NoteRichTextEditorControls,
 } from "@/components/ui/note-rich-text-editor-client";
-import { serializeNoteDocument } from "@/components/ui/note-editor-document";
+import {
+  getNoteDocumentPreview,
+  parseNoteDocument,
+  serializeNoteDocument,
+} from "@/components/ui/note-editor-document";
 import {
   Select,
   SelectContent,
@@ -59,10 +72,17 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "@/components/ui/toast";
+import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
 import { parseApiError } from "@/lib/axios";
 import { cn } from "@/lib/utils";
+import { getImageAspectRatio, imageUrlToFile } from "@/lib/image/crop-image";
 import { useLetterPageAutosave } from "../hooks/use-letter-page-autosave";
 import { LETTER_EXPORT_FORMATS } from "../letter-export-formats";
+import {
+  LETTER_COVER_SECTION_LABELS,
+  normalizeLetterCover,
+} from "../letter-cover";
 import { mapFlowSelection, type LetterPageFlowResult } from "../letter-page-flow";
 import { measureLetterPage } from "../letter-page-renderer";
 import { letterService } from "../services/letter-service";
@@ -78,6 +98,8 @@ import {
 } from "../letter-page-text-scale";
 import type {
   Letter,
+  LetterCover,
+  LetterCoverSection,
   LetterExport,
   LetterPage,
   LetterPageLayout,
@@ -89,6 +111,34 @@ import {
 } from "./letter-page-preview";
 
 const MAX_LETTER_IMAGE_REQUEST_BYTES = 8 * 1024 * 1024;
+const LETTER_IMAGE_TYPES = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/gif",
+  "image/webp",
+  "image/avif",
+]);
+const unavailableCoverUpload = async (): Promise<never> => {
+  throw new Error("Images cannot be embedded in a cover description.");
+};
+const unavailableChild = async (): Promise<never> => {
+  throw new Error("Child pages are unavailable in cover descriptions.");
+};
+const noop = () => undefined;
+type CoverCropSession = {
+  file: File;
+  source: string;
+  originalAspect: number;
+};
+
+function validateLetterImage(file: File) {
+  if (!LETTER_IMAGE_TYPES.has(file.type)) {
+    throw new Error("Choose a JPG, PNG, GIF, WebP, or AVIF image.");
+  }
+  if (file.size > MAX_LETTER_IMAGE_REQUEST_BYTES) {
+    throw new Error("Images must be 8 MB or smaller.");
+  }
+}
 
 export function LetterPageWorkspace({
   open,
@@ -146,9 +196,19 @@ export function LetterPageWorkspace({
     isComposing: () => controlsRef.current?.isComposing() ?? false,
   });
   const [closing, setClosing] = useState(false);
+  const closingRef = useRef(false);
   const [downloading, setDownloading] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState(0);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [uploadingCoverImage, setUploadingCoverImage] = useState<
+    "avatar" | "hero" | null
+  >(null);
+  const [coverImageErrors, setCoverImageErrors] = useState<
+    Partial<Record<"avatar" | "hero", string>>
+  >({});
+  const [coverCrop, setCoverCrop] = useState<CoverCropSession>();
+  const avatarInputRef = useRef<HTMLInputElement>(null);
+  const heroInputRef = useRef<HTMLInputElement>(null);
   const [historyState, setHistoryState] = useState<NoteEditorHistoryState>({
     canUndo: false,
     canRedo: false,
@@ -177,6 +237,9 @@ export function LetterPageWorkspace({
   const selectedIndex = selectedPage
     ? pages.findIndex((page) => page.uuid === selectedPage.uuid)
     : 0;
+  const selectedIsCoverContinuation =
+    selectedPage?.layout !== "cover" &&
+    selectedPage?.content_source === "cover_entry";
   const selectedTextScale = normalizeLetterPageTextScale(
     selectedPage?.text_scale,
   );
@@ -192,6 +255,7 @@ export function LetterPageWorkspace({
       selectedPage.layout,
       selectedPage.title ?? "",
       selectedPage.subtitle ?? "",
+      JSON.stringify(selectedPage.cover ?? null),
       serializeNoteDocument(selectedPage.blocks),
       letterExport.canvas.width,
       letterExport.canvas.height,
@@ -233,14 +297,24 @@ export function LetterPageWorkspace({
       onOpenChange(true);
       return;
     }
+    if (closingRef.current) return;
 
+    closingRef.current = true;
     setClosing(true);
+    const pendingSave = flush();
+    onOpenChange(false);
     try {
-      await flush();
-      onOpenChange(false);
+      await pendingSave;
     } catch (error) {
-      toast.add({ type: "error", description: error instanceof Error ? error.message : "Your page edits could not be saved. Try again before closing." });
+      toast.add({
+        type: "error",
+        description:
+          error instanceof Error
+            ? error.message
+            : "Your page edits could not be saved. Reopen the workspace and try again.",
+      });
     } finally {
+      closingRef.current = false;
       setClosing(false);
     }
   };
@@ -259,12 +333,7 @@ export function LetterPageWorkspace({
   const uploadImage = useCallback(
     async (file: File) => {
       try {
-        if (!file.type.startsWith("image/")) {
-          throw new Error("Letter pages only support image uploads.");
-        }
-        if (file.size >= MAX_LETTER_IMAGE_REQUEST_BYTES) {
-          throw new Error("Images must be smaller than 8 MB.");
-        }
+        validateLetterImage(file);
 
         const response = await letterService.uploadMedia(letterUuid, file);
         if (!response.data.url) {
@@ -284,12 +353,111 @@ export function LetterPageWorkspace({
     [letterUuid],
   );
 
+  const updateCover = useCallback(
+    (update: Partial<LetterCover>) => {
+      const currentUuid = selectedUuidRef.current;
+      if (!currentUuid) return;
+
+      updatePages((current) =>
+        current.map((page) =>
+          page.uuid === currentUuid && page.layout === "cover"
+            ? {
+                ...page,
+                cover: { ...normalizeLetterCover(page.cover), ...update },
+              }
+            : page,
+        ),
+      );
+    },
+    [updatePages],
+  );
+
+  const handleCoverImage = useCallback(
+    async (kind: "avatar" | "hero", file?: File) => {
+      if (!file) return;
+      setCoverImageErrors((current) => ({ ...current, [kind]: undefined }));
+
+      if (kind === "hero") {
+        let source: string | undefined;
+        try {
+          validateLetterImage(file);
+          source = URL.createObjectURL(file);
+          const originalAspect = await getImageAspectRatio(source);
+          setCoverCrop({ file, source, originalAspect });
+        } catch (error) {
+          if (source) URL.revokeObjectURL(source);
+          setCoverImageErrors((current) => ({
+            ...current,
+            hero:
+              error instanceof Error
+                ? error.message
+                : "The image could not be prepared for cropping.",
+          }));
+        }
+        return;
+      }
+
+      setUploadingCoverImage(kind);
+      try {
+        const url = await uploadImage(file);
+        updateCover(
+          kind === "avatar" ? { avatar_url: url } : { hero_image_url: url },
+        );
+      } catch (error) {
+        setCoverImageErrors((current) => ({
+          ...current,
+          [kind]:
+            error instanceof Error
+              ? error.message
+              : "The image could not be uploaded.",
+        }));
+      } finally {
+        setUploadingCoverImage(null);
+      }
+    },
+    [updateCover, uploadImage],
+  );
+
+  const prepareExistingCoverCrop = useCallback(async () => {
+    const page = getPages().find(
+      (item) => item.uuid === selectedUuidRef.current,
+    );
+    const url = normalizeLetterCover(page?.cover).hero_image_url;
+    if (!url) return;
+
+    setCoverImageErrors((current) => ({ ...current, hero: undefined }));
+    let source: string | undefined;
+    try {
+      const file = await imageUrlToFile(url, "cover-image");
+      source = URL.createObjectURL(file);
+      const originalAspect = await getImageAspectRatio(source);
+      setCoverCrop({ file, source, originalAspect });
+    } catch (error) {
+      if (source) URL.revokeObjectURL(source);
+      setCoverImageErrors((current) => ({
+        ...current,
+        hero:
+          error instanceof Error
+            ? error.message
+            : "The cover image could not be prepared for cropping.",
+      }));
+    }
+  }, [getPages]);
+
+  const closeCoverCrop = useCallback(() => {
+    setCoverCrop(undefined);
+  }, []);
+
+  useEffect(() => () => {
+    if (coverCrop) URL.revokeObjectURL(coverCrop.source);
+  }, [coverCrop]);
+
   useEffect(() => {
     if (
       !open ||
       !selectedPage ||
       selectedPage.layout === "body" ||
-      selectedTextScaleMode !== "auto" ||
+      (selectedPage.layout !== "cover" && selectedTextScaleMode !== "auto") ||
       !selectedContentKey
     ) {
       autoFitKeyRef.current = undefined;
@@ -325,10 +493,20 @@ export function LetterPageWorkspace({
           selectedTextScale,
           measured.availableHeight,
           measured.contentHeight,
+          selectedPage.layout === "cover"
+            ? LETTER_PAGE_TEXT_SCALE_MIN
+            : undefined,
         );
         if (nextScale !== selectedTextScale) {
-          updateSelected({ text_scale: nextScale });
+          updateSelected({
+            text_scale: nextScale,
+            ...(selectedPage.layout === "cover"
+              ? { text_scale_mode: "auto" as const }
+              : {}),
+          });
+          return;
         }
+
       });
     };
 
@@ -398,7 +576,7 @@ export function LetterPageWorkspace({
   };
 
   const duplicatePage = () => {
-    if (!selectedPage || selectedPage.layout === "cover") return;
+    if (!selectedPage || selectedPage.layout === "cover" || selectedIsCoverContinuation) return;
 
     const duplicate = {
       ...selectedPage,
@@ -416,7 +594,7 @@ export function LetterPageWorkspace({
   };
 
   const deletePage = () => {
-    if (!selectedPage || selectedPage.layout === "cover" || pages.length <= 2) return;
+    if (!selectedPage || selectedPage.layout === "cover" || selectedIsCoverContinuation || pages.length <= 2) return;
     const fallback = pages[selectedIndex - 1] ?? pages[selectedIndex + 1];
     updatePages((current) => current.filter((page) => page.uuid !== selectedPage.uuid));
     selectedUuidRef.current = fallback?.uuid;
@@ -429,6 +607,10 @@ export function LetterPageWorkspace({
     const oldIndex = pages.findIndex((page) => page.uuid === active.id);
     const newIndex = pages.findIndex((page) => page.uuid === over.id);
     if (oldIndex <= 0 || newIndex <= 0) return;
+    if (
+      pages[oldIndex]?.content_source === "cover_entry" ||
+      pages[newIndex]?.content_source === "cover_entry"
+    ) return;
     updatePages((current) => arrayMove(current, oldIndex, newIndex));
   };
 
@@ -481,6 +663,7 @@ export function LetterPageWorkspace({
   if (!selectedPage) return null;
 
   return (
+    <>
     <Dialog open={open} onOpenChange={(nextOpen) => void requestClose(nextOpen)}>
       <DialogContent
         showCloseButton={!closing && !downloading}
@@ -539,11 +722,10 @@ export function LetterPageWorkspace({
                 canvas={letterExport.canvas}
                 exportUuid={letterExport.uuid}
                 textScale={selectedTextScale}
-                editable
-                onTitleChange={(title) => updateSelected({ title })}
-                onSubtitleChange={(subtitle) =>
-                  updateSelected({ subtitle: subtitle || null })
-                }
+                editable={!selectedIsCoverContinuation}
+                onTitleChange={(title) => {
+                  updateSelected({ title, text_scale_mode: "auto" });
+                }}
                 onBlocksChange={(blocks) => updateSelected({ blocks })}
                 onUploadFile={uploadImage}
                 onEditorReady={handleEditorReady}
@@ -558,9 +740,13 @@ export function LetterPageWorkspace({
             <div className="flex items-center justify-between gap-3">
               <div>
                 <p className="font-medium">{selectedPage.layout === "cover" ? "Cover" : `Page ${selectedPage.number}`}</p>
-                <p className="text-xs text-muted-foreground">Click the text on the page to edit it directly.</p>
+                <p className="text-xs text-muted-foreground">
+                  {selectedIsCoverContinuation
+                    ? "This page is generated from the cover entry."
+                    : "Click the text on the page to edit it directly."}
+                </p>
               </div>
-              {selectedPage.layout !== "cover" ? (
+              {selectedPage.layout !== "cover" && !selectedIsCoverContinuation ? (
                 <div className="flex gap-1">
                   {confirmingDelete ? (
                     <>
@@ -577,8 +763,9 @@ export function LetterPageWorkspace({
               ) : null}
             </div>
 
-            <div className="flex flex-col gap-2 border-b pb-4">
-              <div className="flex items-center justify-between gap-3">
+            {!selectedIsCoverContinuation ? (
+              <div className="flex flex-col gap-2 border-b pb-4">
+                <div className="flex items-center justify-between gap-3">
                 <label
                   htmlFor={`letter-page-text-scale-${selectedPage.uuid}`}
                   className="flex items-center gap-2 text-sm font-medium"
@@ -594,8 +781,8 @@ export function LetterPageWorkspace({
                   {selectedTextScaleMode === "auto" ? "Auto · " : ""}
                   {letterPageTextScalePercent(selectedTextScale)}%
                 </output>
-              </div>
-              <input
+                </div>
+                <input
                 id={`letter-page-text-scale-${selectedPage.uuid}`}
                 type="range"
                 min={LETTER_PAGE_TEXT_SCALE_MIN * 100}
@@ -607,7 +794,7 @@ export function LetterPageWorkspace({
                 aria-label="Text size"
                 aria-valuetext={`${letterPageTextScalePercent(selectedTextScale)}%${selectedTextScaleMode === "auto" ? " automatic" : " manual"}`}
               />
-              <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+                <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
                 <span>{LETTER_PAGE_TEXT_SCALE_MIN * 100}%</span>
                 <Button
                   type="button"
@@ -626,17 +813,32 @@ export function LetterPageWorkspace({
                   Reset
                 </Button>
                 <span>{LETTER_PAGE_TEXT_SCALE_MAX * 100}%</span>
-              </div>
-              <p className="text-xs text-muted-foreground">
+                </div>
+                <p className="text-xs text-muted-foreground">
                 {selectedPage.layout === "body"
                   ? "Text flows between pages at the selected size. Reset restores the default size for this format."
                   : selectedTextScaleMode === "auto"
                   ? "Auto-fits this page to its canvas. Use the slider to override it."
                   : "Manual override for this page. Reset to let it auto-fit again."} Branding and signatures stay fixed.
-              </p>
-            </div>
+                </p>
+              </div>
+            ) : null}
 
-            {selectedPage.layout !== "cover" ? (
+            {selectedIsCoverContinuation ? (
+              <div className="flex flex-col gap-3 rounded-lg border bg-muted/30 p-4">
+                <p className="text-sm font-medium">Cover entry continuation</p>
+                <p className="text-sm text-muted-foreground">
+                  This page is arranged automatically. Edit the complete rich-text entry from the cover page.
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => pages[0] && selectPage(pages[0].uuid)}
+                >
+                  Edit cover entry
+                </Button>
+              </div>
+            ) : selectedPage.layout !== "cover" ? (
               <div className="flex flex-col gap-4">
                 <label className="flex flex-col gap-1.5 text-sm font-medium">
                   Page layout
@@ -674,14 +876,346 @@ export function LetterPageWorkspace({
                 </p>
               </div>
             ) : (
-              <p className="text-sm text-muted-foreground">
-                The cover title and subtitle are plain text so the prepared design remains consistent.
-              </p>
+              <CoverControls
+                page={selectedPage}
+                uploading={uploadingCoverImage}
+                avatarInputRef={avatarInputRef}
+                heroInputRef={heroInputRef}
+                imageErrors={coverImageErrors}
+                onTitleChange={(title) => {
+                  updateSelected({ title, text_scale_mode: "auto" });
+                }}
+                onDescriptionChange={(descriptionBlocks, subtitle) => {
+                  updateSelected({
+                    subtitle: subtitle.slice(0, 240) || null,
+                    text_scale_mode: "auto",
+                  });
+                  updateCover({ description_blocks: descriptionBlocks });
+                }}
+                onCoverChange={updateCover}
+                onImageChange={(kind, file) =>
+                  void handleCoverImage(kind, file)
+                }
+                onCropCoverImage={() => void prepareExistingCoverCrop()}
+              />
             )}
           </aside>
         </div>
       </DialogContent>
     </Dialog>
+    {coverCrop ? (
+      <ImageCropDialog
+        open
+        source={coverCrop.source}
+        file={coverCrop.file}
+        aspect={coverCrop.originalAspect}
+        title="Crop cover image"
+        description="Choose the area that should appear in the cover image section."
+        aspectOptions={
+          [
+            { label: "Free", value: undefined },
+            { label: "Original", value: coverCrop.originalAspect },
+            { label: "Square", value: 1 },
+            { label: "4:3", value: 4 / 3 },
+            { label: "4:5", value: 4 / 5 },
+            { label: "16:9", value: 16 / 9 },
+            { label: "9:16", value: 9 / 16 },
+          ] satisfies ImageCropAspectOption[]
+        }
+        onOpenChange={(cropOpen) => {
+          if (!cropOpen) closeCoverCrop();
+        }}
+        onCrop={async (file) => {
+          setUploadingCoverImage("hero");
+          try {
+            const url = await uploadImage(file);
+            updateCover({ hero_image_url: url });
+          } finally {
+            setUploadingCoverImage(null);
+          }
+        }}
+      />
+    ) : null}
+    </>
+  );
+}
+
+function CoverControls({
+  page,
+  uploading,
+  avatarInputRef,
+  heroInputRef,
+  imageErrors,
+  onTitleChange,
+  onDescriptionChange,
+  onCoverChange,
+  onImageChange,
+  onCropCoverImage,
+}: {
+  page: LetterPage;
+  uploading: "avatar" | "hero" | null;
+  avatarInputRef: RefObject<HTMLInputElement | null>;
+  heroInputRef: RefObject<HTMLInputElement | null>;
+  imageErrors: Partial<Record<"avatar" | "hero", string>>;
+  onTitleChange: (value: string) => void;
+  onDescriptionChange: (blocks: unknown[], plainText: string) => void;
+  onCoverChange: (update: Partial<LetterCover>) => void;
+  onImageChange: (kind: "avatar" | "hero", file?: File) => void;
+  onCropCoverImage: () => void;
+}) {
+  const cover = normalizeLetterCover(page.cover);
+  const descriptionContent = serializeNoteDocument(cover.description_blocks);
+  const descriptionLength = getNoteDocumentPreview(descriptionContent).length;
+  const coverSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+  const reorderSections = ({ active, over }: DragEndEvent) => {
+    if (!over || active.id === over.id) return;
+    const oldIndex = cover.section_order.indexOf(active.id as LetterCoverSection);
+    const newIndex = cover.section_order.indexOf(over.id as LetterCoverSection);
+    if (oldIndex < 0 || newIndex < 0) return;
+    onCoverChange({
+      section_order: arrayMove(cover.section_order, oldIndex, newIndex),
+    });
+  };
+
+  return (
+    <div className="flex flex-col gap-5">
+      <label className="flex flex-col gap-1.5 text-sm font-medium">
+        Background
+        <Select
+          value={cover.theme}
+          onValueChange={(value) =>
+            onCoverChange({ theme: value as LetterCover["theme"] })
+          }
+        >
+          <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectGroup>
+              <SelectItem value="light">White</SelectItem>
+              <SelectItem value="dark">Dark</SelectItem>
+            </SelectGroup>
+          </SelectContent>
+        </Select>
+      </label>
+
+      <div className="flex items-center justify-between gap-3">
+        <label htmlFor={`cover-logo-${page.uuid}`} className="text-sm font-medium">
+          Show Medasin logo
+        </label>
+        <Switch
+          id={`cover-logo-${page.uuid}`}
+          checked={cover.show_logo}
+          onCheckedChange={(checked) => onCoverChange({ show_logo: checked })}
+        />
+      </div>
+
+      <label className="flex flex-col gap-1.5 text-sm font-medium">
+        Subheader
+        <Input
+          value={cover.subheader}
+          maxLength={80}
+          placeholder="A LETTER"
+          onChange={(event) => onCoverChange({ subheader: event.target.value })}
+        />
+      </label>
+      <label className="flex flex-col gap-1.5 text-sm font-medium">
+        Title
+        <Textarea
+          value={page.title ?? ""}
+          maxLength={120}
+          rows={3}
+          onChange={(event) => onTitleChange(event.target.value)}
+        />
+      </label>
+      <div className="flex flex-col gap-2">
+        <div className="flex items-center justify-between gap-3 text-sm font-medium">
+          <span>Entry</span>
+          <span className="text-xs tabular-nums text-muted-foreground" aria-live="polite">
+            {descriptionLength.toLocaleString()} characters
+          </span>
+        </div>
+        <div className="cover-description-editor min-h-32 overflow-hidden rounded-md border bg-white">
+          <NoteRichTextEditor
+            mode="resource"
+            editorChrome="formatting-only"
+            documentId={`letter-cover-description-control-${page.uuid}`}
+            content={descriptionContent}
+            syncContent
+            editable
+            noteOptions={[]}
+            onChange={(content) => {
+              const plainText = getNoteDocumentPreview(content);
+              onDescriptionChange(
+                parseNoteDocument(content).blocks,
+                plainText,
+              );
+            }}
+            onUploadFile={unavailableCoverUpload}
+            onCreateChild={unavailableChild}
+            onOpenNote={noop}
+            onEditorReady={noop}
+            onHistoryStateChange={noop}
+          />
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Formatting is preserved. Text that does not fit on the cover continues automatically on the following pages.
+        </p>
+      </div>
+      <label className="flex flex-col gap-1.5 text-sm font-medium">
+        Author name
+        <Input
+          value={cover.author_name}
+          maxLength={120}
+          onChange={(event) => onCoverChange({ author_name: event.target.value })}
+        />
+      </label>
+      <label className="flex flex-col gap-1.5 text-sm font-medium">
+        Date label
+        <Input
+          value={cover.date_label}
+          maxLength={80}
+          placeholder="September 10 at 10:35 PM"
+          onChange={(event) => onCoverChange({ date_label: event.target.value })}
+        />
+      </label>
+
+      <CoverImageControl
+        label="Avatar image"
+        hasImage={Boolean(cover.avatar_url)}
+        uploading={uploading === "avatar"}
+        error={imageErrors.avatar}
+        inputRef={avatarInputRef}
+        onFile={(file) => onImageChange("avatar", file)}
+        onRemove={() => onCoverChange({ avatar_url: null })}
+      />
+      <CoverImageControl
+        label="Landscape cover image"
+        hasImage={Boolean(cover.hero_image_url)}
+        uploading={uploading === "hero"}
+        error={imageErrors.hero}
+        inputRef={heroInputRef}
+        onFile={(file) => onImageChange("hero", file)}
+        onCrop={onCropCoverImage}
+        onRemove={() => onCoverChange({ hero_image_url: null })}
+      />
+
+      <div className="flex flex-col gap-2">
+        <p className="text-sm font-medium">Section order</p>
+        <p className="text-xs text-muted-foreground">
+          Drag a section or focus its handle and use the keyboard to reorder it.
+        </p>
+        <DndContext sensors={coverSensors} collisionDetection={closestCenter} onDragEnd={reorderSections}>
+          <SortableContext items={cover.section_order} strategy={verticalListSortingStrategy}>
+            <div className="flex flex-col gap-2">
+              {cover.section_order.map((section) => (
+                <SortableCoverSection key={section} section={section} />
+              ))}
+            </div>
+          </SortableContext>
+        </DndContext>
+      </div>
+    </div>
+  );
+}
+
+function CoverImageControl({
+  label,
+  hasImage,
+  uploading,
+  error,
+  inputRef,
+  onFile,
+  onCrop,
+  onRemove,
+}: {
+  label: string;
+  hasImage: boolean;
+  uploading: boolean;
+  error?: string;
+  inputRef: RefObject<HTMLInputElement | null>;
+  onFile: (file?: File) => void;
+  onCrop?: () => void;
+  onRemove: () => void;
+}) {
+  return (
+    <div className="flex flex-col gap-2">
+      <p className="text-sm font-medium">{label}</p>
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/jpeg,image/png,image/gif,image/webp,image/avif"
+        className="sr-only"
+        onChange={(event) => {
+          onFile(event.target.files?.[0]);
+          event.target.value = "";
+        }}
+      />
+      <div className="flex flex-wrap gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={uploading}
+          onClick={() => inputRef.current?.click()}
+        >
+          {uploading ? (
+            <LoaderCircle className="animate-spin" data-icon="inline-start" />
+          ) : (
+            <ImagePlus data-icon="inline-start" />
+          )}
+          {uploading ? "Uploading…" : hasImage ? "Replace" : "Upload"}
+        </Button>
+        {hasImage ? (
+          <>
+            {onCrop ? (
+              <Button type="button" variant="outline" size="sm" disabled={uploading} onClick={onCrop}>
+                Crop
+              </Button>
+            ) : null}
+            <Button type="button" variant="ghost" size="sm" disabled={uploading} onClick={onRemove}>
+              Remove
+            </Button>
+          </>
+        ) : null}
+      </div>
+      <p className="text-xs text-muted-foreground">
+        JPG, PNG, GIF, WebP, or AVIF · max 8 MB.
+        {!hasImage ? " Hidden until an image is provided." : ""}
+      </p>
+      {error ? (
+        <p role="alert" className="text-xs text-destructive">
+          {error}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+function SortableCoverSection({ section }: { section: LetterCoverSection }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: section });
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+      className={cn(
+        "flex min-h-11 items-center gap-2 rounded-md border bg-background px-3 py-2 text-sm",
+        isDragging && "opacity-60",
+      )}
+    >
+      <button
+        type="button"
+        className="flex size-11 touch-none items-center justify-center rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring sm:size-8"
+        aria-label={`Reorder ${LETTER_COVER_SECTION_LABELS[section]}`}
+        {...attributes}
+        {...listeners}
+      >
+        <GripVertical aria-hidden="true" />
+      </button>
+      <span>{LETTER_COVER_SECTION_LABELS[section]}</span>
+    </div>
   );
 }
 
@@ -698,7 +1232,7 @@ function SortablePage({
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: page.uuid,
-    disabled: page.layout === "cover",
+    disabled: page.layout === "cover" || page.content_source === "cover_entry",
   });
 
   return (
@@ -716,7 +1250,7 @@ function SortablePage({
       >
         <LetterPageThumbnail page={page} canvas={canvas} selected={selected} />
       </button>
-      {page.layout !== "cover" ? (
+      {page.layout !== "cover" && page.content_source !== "cover_entry" ? (
         <button
           type="button"
           className="absolute top-1 right-1 flex size-11 touch-none items-center justify-center rounded-md bg-white/90 text-zinc-700 shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-ring sm:size-8"

@@ -147,6 +147,7 @@ export function useCreateLetterExportMutation() {
       letterUuid: string;
       format: LetterExportFormat;
       pages?: LetterExportPageInput[];
+      silent?: boolean;
     }) => letterService.createExport(letterUuid, { format, pages }),
     onSuccess: (response, variables) => {
       const letterUuid = response.data.letter_uuid ?? variables.letterUuid;
@@ -156,10 +157,14 @@ export function useCreateLetterExportMutation() {
         }),
         queryClient.invalidateQueries({ queryKey: letterKeys.list() }),
       ]);
-      toast.add({ type: "info", description: response.message });
+      if (!variables.silent) {
+        toast.add({ type: "info", description: response.message });
+      }
     },
-    onError: (error) => {
-      toast.add({ type: "error", description: error.message });
+    onError: (error, variables) => {
+      if (!variables.silent) {
+        toast.add({ type: "error", description: error.message });
+      }
     },
   });
 }

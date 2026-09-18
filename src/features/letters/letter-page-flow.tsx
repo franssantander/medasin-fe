@@ -1,8 +1,10 @@
 import { parseNoteDocument } from "@/components/ui/note-editor-document";
 import type { NoteEditorSelection } from "@/components/ui/note-rich-text-editor-client";
 import { LETTER_EXPORT_FORMATS } from "./letter-export-formats";
+import { createLetterCover, normalizeLetterPageCover } from "./letter-cover";
 import {
   LETTER_PAGE_AUTO_FIT_SCALE_MIN,
+  LETTER_PAGE_TEXT_SCALE_MIN,
   LETTER_PAGE_TEXT_SCALE_STEP,
   getLetterPageAutoFitScale,
   getLetterPageCanvasBaseline,
@@ -30,21 +32,35 @@ export async function prepareLetterPages(letter: Letter, format: LetterExportFor
   const body = bodyPage(canvas);
   body.blocks = parseNoteDocument(letter.content).blocks;
   body.signature = letter.author;
-  const cover: LetterPage = { ...bodyPage(canvas), number: 1, kind: "cover", layout: "cover", title: letter.title, subtitle: letter.subtitle };
+  const cover: LetterPage = { ...bodyPage(canvas), number: 1, kind: "cover", layout: "cover", title: letter.title, subtitle: letter.subtitle, cover: createLetterCover(letter) };
   const result = await flowLetterPages([cover, body], canvas, `prepare-${letter.uuid}`);
-  return result.pages.map(({ uuid, layout, text_scale, text_scale_mode, title, subtitle, blocks }) =>
-    ({ uuid, layout, text_scale, text_scale_mode, title, subtitle, blocks }));
+  return result.pages.map(({ uuid, layout, text_scale, text_scale_mode, title, subtitle, cover, content_source, blocks }) =>
+    ({ uuid, layout, text_scale, text_scale_mode, title, subtitle, cover, content_source, blocks }));
 }
 
 export async function flowLetterPages(source: LetterPage[], canvas: LetterCanvas, exportUuid: string, signal?: AbortSignal): Promise<LetterPageFlowResult> {
   // Never mutate editor snapshots while an asynchronous measurement is running.
-  const pages = structuredClone(source);
+  const snapshot = structuredClone(source);
+  const sourceAuthor = [...snapshot]
+    .reverse()
+    .find((page) => page.signature)?.signature?.name;
+  const pages = snapshot.map((page) =>
+    normalizeLetterPageCover(page, { author_name: sourceAuthor }),
+  );
+  const coverEntryTemplates = pages.filter(
+    (page) =>
+      page.layout !== "cover" && page.content_source === "cover_entry",
+  );
+  const sourcePages = pages.filter(
+    (page) =>
+      page.layout === "cover" || page.content_source !== "cover_entry",
+  );
   const before: Span[] = [];
-  const signature = [...pages].reverse().find((page) => page.signature)?.signature ?? null;
-  if (pages.some((page) => page.truncated)) {
+  const signature = [...sourcePages].reverse().find((page) => page.signature)?.signature ?? null;
+  if (sourcePages.some((page) => page.truncated)) {
     throw new Error("This older page set contains only part of your Letter. Prepare pages again from the full Letter before editing it.");
   }
-  if (!pages.length) {
+  if (!sourcePages.length) {
     const empty = bodyPage(canvas);
     const after = spans(empty.blocks, empty.uuid);
     return { pages: [empty], selectionMap: { before, after } };
@@ -54,17 +70,18 @@ export async function flowLetterPages(source: LetterPage[], canvas: LetterCanvas
   const output: LetterPage[] = [];
 
   try {
-    output.push(
-      await autoFitFixedPage(
-        { ...pages[0], signature: null },
-        renderer.render,
-        signal,
-      ),
+    const entry = await paginateCoverEntry(
+      { ...sourcePages[0], signature: null },
+      coverEntryTemplates,
+      canvas,
+      fits,
+      signal,
     );
+    output.push(entry.cover, ...entry.continuations);
     let index = 1;
-    while (index < pages.length) {
+    while (index < sourcePages.length) {
       signal?.throwIfAborted();
-      const first = pages[index];
+      const first = sourcePages[index];
       if (first.layout === "quote") {
         assignBlockIds(first.blocks);
         before.push(...spans(first.blocks, first.uuid));
@@ -72,7 +89,7 @@ export async function flowLetterPages(source: LetterPage[], canvas: LetterCanvas
           await autoFitFixedPage(
             {
               ...first,
-              signature: index === pages.length - 1 ? signature : null,
+              signature: index === sourcePages.length - 1 ? signature : null,
             },
             renderer.render,
             signal,
@@ -82,14 +99,14 @@ export async function flowLetterPages(source: LetterPage[], canvas: LetterCanvas
         continue;
       }
       const templates: LetterPage[] = [];
-      while (index < pages.length && pages[index].layout !== "quote") templates.push(pages[index++]);
-      const terminal = index === pages.length;
+      while (index < sourcePages.length && sourcePages[index].layout !== "quote") templates.push(sourcePages[index++]);
+      const terminal = index === sourcePages.length;
       const blocks = flattenBodyBlocks(templates, before);
       if (!blocks.length && !terminal) continue;
       output.push(...await paginateBodyBlocks(templates, blocks, terminal, signature, canvas, fits, signal));
     }
     if (output.length === 1) {
-      const template = pages[1] ?? bodyPage(canvas);
+      const template = sourcePages[1] ?? bodyPage(canvas);
       output.push(createBodyPage(template, canvas, template.uuid, [], signature));
     }
     const normalized = output.map((page, index): LetterPage => ({
@@ -99,6 +116,89 @@ export async function flowLetterPages(source: LetterPage[], canvas: LetterCanvas
     const after = normalized.flatMap((page) => spans(page.blocks, page.uuid));
     return { pages: normalized, selectionMap: { before, after } };
   } finally { renderer.dispose(); }
+}
+
+async function paginateCoverEntry(
+  sourceCover: LetterPage,
+  continuationTemplates: LetterPage[],
+  canvas: LetterCanvas,
+  fits: (page: LetterPage) => Promise<boolean>,
+  signal?: AbortSignal,
+): Promise<{ cover: LetterPage; continuations: LetterPage[] }> {
+  const completeEntry = structuredClone(
+    sourceCover.cover?.description_blocks ?? [],
+  ) as Block[];
+  assignBlockIds(completeEntry);
+  const remaining = completeEntry.slice();
+  let cover = {
+    ...sourceCover,
+    cover: sourceCover.cover
+      ? { ...sourceCover.cover, description_blocks: completeEntry }
+      : sourceCover.cover,
+    content_source: "cover_entry" as const,
+    blocks: [] as Block[],
+    text_scale: Math.max(
+      LETTER_PAGE_TEXT_SCALE_MIN,
+      getLetterPageCanvasBaseline(canvas),
+    ),
+    text_scale_mode: "auto" as const,
+  };
+
+  while (remaining.length) {
+    signal?.throwIfAborted();
+    const block = remaining[0];
+    let candidate = { ...cover, blocks: [...cover.blocks, block] };
+
+    if (await fits(candidate)) {
+      cover.blocks.push(remaining.shift()!);
+      continue;
+    }
+
+    while (cover.text_scale > LETTER_PAGE_TEXT_SCALE_MIN) {
+      const textScale = Math.max(
+        LETTER_PAGE_TEXT_SCALE_MIN,
+        normalizeLetterPageTextScale(
+          cover.text_scale - LETTER_PAGE_TEXT_SCALE_STEP,
+        ),
+      );
+      candidate = { ...candidate, text_scale: textScale };
+      cover = { ...cover, text_scale: textScale };
+      if (await fits(candidate)) {
+        cover.blocks.push(remaining.shift()!);
+        break;
+      }
+    }
+    if (candidate.blocks.length === cover.blocks.length) continue;
+
+    const split = await splitToFit(block, cover, fits);
+    if (split) {
+      cover.blocks.push(split[0]);
+      remaining[0] = split[1];
+    }
+    break;
+  }
+
+  if (!remaining.length) return { cover, continuations: [] };
+
+  const template = continuationTemplates[0] ?? bodyPage(canvas);
+  const continuations = await paginateBodyBlocks(
+    continuationTemplates.length ? continuationTemplates : [template],
+    remaining,
+    false,
+    null,
+    canvas,
+    fits,
+    signal,
+  );
+
+  return {
+    cover,
+    continuations: continuations.map((page) => ({
+      ...page,
+      content_source: "cover_entry" as const,
+      continuation_label: "Cover entry · Continued",
+    })),
+  };
 }
 
 async function autoFitFixedPage(
@@ -126,6 +226,7 @@ async function autoFitFixedPage(
         scale,
         measurement.availableHeight,
         measurement.contentHeight,
+        page.layout === "cover" ? LETTER_PAGE_TEXT_SCALE_MIN : undefined,
       );
       if (nextScale === scale) break;
       scale = nextScale;
@@ -133,12 +234,18 @@ async function autoFitFixedPage(
     }
   }
 
-  // Fixed layouts cannot paginate. Reduce them below the manual slider minimum
-  // when necessary so page preparation never fails because of text overflow.
-  while (scale > LETTER_PAGE_AUTO_FIT_SCALE_MIN) {
+  // Fixed layouts cannot paginate. Quote pages may shrink further, while cover
+  // pages keep the same 70% readability floor used by the live workspace.
+  const minimumScale = page.layout === "cover"
+    ? LETTER_PAGE_TEXT_SCALE_MIN
+    : LETTER_PAGE_AUTO_FIT_SCALE_MIN;
+  while (scale > minimumScale) {
     signal?.throwIfAborted();
     if (letterPageFits(await render(fitted))) return fitted;
-    scale = normalizeLetterPageTextScale(scale - LETTER_PAGE_TEXT_SCALE_STEP);
+    scale = Math.max(
+      minimumScale,
+      normalizeLetterPageTextScale(scale - LETTER_PAGE_TEXT_SCALE_STEP),
+    );
     fitted = { ...fitted, text_scale: scale, text_scale_mode: "auto" };
   }
 
@@ -338,7 +445,7 @@ async function splitToFit(block: Block, page: LetterPage, fits: (page: LetterPag
 }
 
 function bodyPage(canvas: LetterCanvas): LetterPage {
-  return { uuid: crypto.randomUUID(), number: 2, kind: "body", layout: "body", text_scale: getLetterPageCanvasBaseline(canvas), text_scale_mode: "auto", title: null, subtitle: null, blocks: [], signature: null, truncated: false, continuation_label: null };
+  return { uuid: crypto.randomUUID(), number: 2, kind: "body", layout: "body", text_scale: getLetterPageCanvasBaseline(canvas), text_scale_mode: "auto", title: null, subtitle: null, content_source: "letter_body", blocks: [], signature: null, truncated: false, continuation_label: null };
 }
 function identity(id: string) {
   const [base, offset] = id.split(fragmentSeparator);

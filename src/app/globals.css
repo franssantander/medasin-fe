@@ -347,6 +347,35 @@
   object-fit: contain;
 }
 
+.letter-cover-description .note-rich-text,
+.letter-cover-description .note-rich-text .bn-container,
+.letter-cover-description .note-rich-text .bn-editor,
+.letter-cover-description .note-rich-text .ProseMirror {
+  height: auto;
+  min-height: 0;
+  overflow: hidden;
+  background: transparent;
+  color: inherit;
+}
+
+.letter-cover-description .note-rich-text .bn-editor {
+  padding: 0;
+  font-size: var(--letter-cover-description-font-size, 1.8cqw);
+  line-height: 1.55;
+}
+
+.letter-cover-description .note-rich-text .bn-block-group,
+.letter-cover-description .note-rich-text .bn-block-outer,
+.letter-cover-description .note-rich-text .bn-block {
+  padding-inline: 0;
+}
+
+.cover-description-editor .note-rich-text .bn-editor {
+  min-height: 8rem;
+  max-height: 14rem;
+  padding: 0.75rem;
+}
+
 .letter-page-quote-document .note-rich-text,
 .letter-page-quote-document .note-rich-text .bn-container,
 .letter-page-quote-document .note-rich-text .bn-editor,

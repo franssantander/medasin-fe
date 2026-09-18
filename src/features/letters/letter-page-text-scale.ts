@@ -55,6 +55,7 @@ export function getLetterPageAutoFitScale(
   currentScale: unknown,
   availableHeight: number,
   contentHeight: number,
+  minimumScale = LETTER_PAGE_AUTO_FIT_SCALE_MIN,
 ): number {
   const current = normalizeLetterPageTextScale(currentScale);
 
@@ -70,8 +71,11 @@ export function getLetterPageAutoFitScale(
   // Only adjust pages that are clearly overflowing or unusually sparse. The
   // small safety margin prevents a rounded scale from landing on the edge.
   if (contentHeight > availableHeight) {
-    return normalizeLetterPageTextScale(
-      current * ((availableHeight / contentHeight) * 0.98),
+    return Math.max(
+      minimumScale,
+      normalizeLetterPageTextScale(
+        current * ((availableHeight / contentHeight) * 0.98),
+      ),
     );
   }
 

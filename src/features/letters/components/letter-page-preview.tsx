@@ -21,7 +21,9 @@ import {
   parseNoteDocument,
   serializeNoteDocument,
 } from "@/components/ui/note-editor-document";
+import { imageFetchSource } from "@/lib/image/crop-image";
 import { cn } from "@/lib/utils";
+import { normalizeLetterCover } from "../letter-cover";
 import {
   letterPageTextSize,
   normalizeLetterPageTextScale,
@@ -44,7 +46,6 @@ type LetterPageCanvasProps = {
   editable?: boolean;
   className?: string;
   onTitleChange?: (title: string) => void;
-  onSubtitleChange?: (subtitle: string) => void;
   onBlocksChange?: (blocks: unknown[]) => void;
   onUploadFile?: (file: File) => Promise<string>;
   onEditorReady?: (controls: NoteRichTextEditorControls | null) => void;
@@ -65,7 +66,6 @@ export const LetterPageCanvas = forwardRef<
     editable = false,
     className,
     onTitleChange,
-    onSubtitleChange,
     onBlocksChange,
     onUploadFile = unavailable,
     onEditorReady = noop,
@@ -81,6 +81,20 @@ export const LetterPageCanvas = forwardRef<
   const textScale = normalizeLetterPageTextScale(
     textScaleOverride ?? page.text_scale,
   );
+  const cover = normalizeLetterCover(page.cover);
+  const coverDescription = serializeNoteDocument(
+    page.content_source === "cover_entry"
+      ? page.blocks
+      : cover.description_blocks,
+  );
+  const coverDescriptionText = getNoteDocumentPreview(coverDescription);
+  const coverIsDark = cover.theme === "dark";
+  const coverSections = cover.hero_image_url
+    ? cover.section_order
+    : [
+        ...cover.section_order.filter((section) => section !== "author"),
+        "author" as const,
+      ];
   const editorStyle = {
     "--letter-page-editor-font-size": letterPageTextSize(
       layout === "quote" ? 4.3 : 1.72,
@@ -100,61 +114,164 @@ export const LetterPageCanvas = forwardRef<
     <div
       ref={ref}
       className={cn(
-        "letter-page-canvas relative overflow-hidden bg-white text-zinc-900",
+        "letter-page-canvas relative overflow-hidden",
+        layout === "cover" && coverIsDark
+          ? "bg-zinc-950 text-zinc-50"
+          : "bg-white text-zinc-900",
         className,
       )}
       style={{ width: canvas.width, height: canvas.height }}
       data-page-canvas
+      data-page-layout={layout}
       role={editable ? "group" : "img"}
       aria-label={`${editable ? "Editable social page" : "Preview"} ${page.number}`}
     >
       {layout === "cover" ? (
-        <div className="flex h-full flex-col justify-between p-[9cqw]">
-          <Image
-            src="/images/medasin-ph.svg"
-            alt=""
-            width={96}
-            height={96}
-            className="size-[9cqw] min-h-7 min-w-7 object-contain object-left"
-            priority={!editable}
-          />
-          <div
-            className="max-h-[62%] max-w-[86%] overflow-hidden"
-            data-page-content
-          >
-            <p className="mb-[5cqw] text-[1.35cqw] font-medium uppercase tracking-[0.18em] text-zinc-500">
-              A letter
-            </p>
-            <CanvasText
-              as="h2"
-              ariaLabel="Cover title"
-              className="font-spectral text-[5.2cqw] leading-[0.98] tracking-[-0.03em]"
-              style={{ fontSize: letterPageTextSize(5.2, textScale) }}
-              editable={editable}
-              maxLength={120}
-              placeholder="Untitled letter"
-              value={page.title ?? ""}
-              onChange={onTitleChange}
-              onBlur={onBlur}
-            />
-            {editable || page.subtitle ? (
-              <CanvasText
-                as="p"
-                ariaLabel="Cover subtitle"
-                className="mt-[5cqw] max-w-[70%] text-[1.8cqw] leading-relaxed text-zinc-600"
-                style={{ fontSize: letterPageTextSize(1.8, textScale) }}
-                editable={editable}
-                maxLength={240}
-                placeholder="Add a subtitle"
-                value={page.subtitle ?? ""}
-                onChange={onSubtitleChange}
-                onBlur={onBlur}
-              />
-            ) : null}
-          </div>
-          <p className="text-[1.2cqw] uppercase tracking-[0.16em] text-zinc-400">
-            Medasin
-          </p>
+        <div
+          className="flex h-full flex-col gap-[4cqh] overflow-hidden p-[7cqw]"
+          data-page-content
+        >
+          {coverSections.map((section) => {
+            if (section === "header") {
+              if (!cover.show_logo && !cover.subheader) return null;
+              return (
+                <div key={section} className="flex shrink-0 items-center justify-between gap-[4cqw]">
+                  {cover.subheader ? (
+                    <p
+                      className={cn(
+                        "text-[1.35cqw] font-medium uppercase tracking-[0.18em]",
+                        coverIsDark ? "text-zinc-300" : "text-zinc-500",
+                      )}
+                      style={{ fontSize: letterPageTextSize(1.35, textScale) }}
+                    >
+                      {cover.subheader}
+                    </p>
+                  ) : <span />}
+                  {cover.show_logo ? (
+                    <Image
+                      src="/images/medasin-ph.svg"
+                      alt="Medasin"
+                      width={96}
+                      height={96}
+                      className={cn(
+                        "size-[7cqw] min-h-7 min-w-7 object-contain object-right",
+                        coverIsDark && "brightness-0 invert",
+                      )}
+                      priority={!editable}
+                    />
+                  ) : null}
+                </div>
+              );
+            }
+
+            if (section === "title") {
+              return (
+                <div key={section} className="shrink-0 overflow-hidden">
+                  <CanvasText
+                    as="h2"
+                    ariaLabel="Cover title"
+                    className="font-spectral leading-[0.98] tracking-[-0.03em]"
+                    style={{ fontSize: letterPageTextSize(5.2, textScale) }}
+                    editable={editable}
+                    maxLength={120}
+                    placeholder="Untitled letter"
+                    value={page.title ?? ""}
+                    onChange={onTitleChange}
+                    onBlur={onBlur}
+                  />
+                </div>
+              );
+            }
+
+            if (section === "entry" && coverDescriptionText) {
+              return (
+                <div
+                  key={section}
+                  className={cn(
+                    "letter-cover-description max-w-[92%] shrink-0 overflow-hidden",
+                    coverIsDark ? "text-zinc-300" : "text-zinc-600",
+                  )}
+                  style={{
+                    "--letter-cover-description-font-size":
+                      letterPageTextSize(1.8, textScale),
+                  } as CSSProperties}
+                >
+                  <NoteRichTextEditor
+                    mode="resource"
+                    editorChrome="none"
+                    documentId={`letter-cover-description-${exportUuid}-${pageUuid}`}
+                    content={coverDescription}
+                    syncContent
+                    editable={false}
+                    noteOptions={[]}
+                    onChange={noop}
+                    onUploadFile={unavailable}
+                    onCreateChild={unavailableChild}
+                    onOpenNote={noop}
+                    onEditorReady={noop}
+                    onHistoryStateChange={noop}
+                  />
+                </div>
+              );
+            }
+
+            if (section === "author") {
+              if (!cover.author_name && !cover.date_label && !cover.avatar_url) return null;
+              return (
+                <div
+                  key={section}
+                  data-cover-section="author"
+                  className={cn(
+                    "flex shrink-0 items-center gap-[2.5cqw]",
+                    !cover.hero_image_url && "mt-auto",
+                  )}
+                >
+                  {cover.avatar_url ? (
+                    <Image
+                      unoptimized
+                      src={imageFetchSource(cover.avatar_url)}
+                      alt={cover.author_name ? `${cover.author_name}'s avatar` : "Cover author avatar"}
+                      width={96}
+                      height={96}
+                      className="size-[7cqw] rounded-full object-cover"
+                    />
+                  ) : null}
+                  <div className="min-w-0">
+                    {cover.author_name ? (
+                      <p className="truncate font-medium" style={{ fontSize: letterPageTextSize(1.65, textScale) }}>
+                        {cover.author_name}
+                      </p>
+                    ) : null}
+                    {cover.date_label ? (
+                      <p
+                        className={coverIsDark ? "text-zinc-400" : "text-zinc-500"}
+                        style={{ fontSize: letterPageTextSize(1.25, textScale) }}
+                      >
+                        {cover.date_label}
+                      </p>
+                    ) : null}
+                  </div>
+                </div>
+              );
+            }
+
+            if (section === "hero" && cover.hero_image_url) {
+              return (
+                <div key={section} className="min-h-[30%] flex-1 overflow-hidden rounded-[2cqw]">
+                  <Image
+                    unoptimized
+                    src={imageFetchSource(cover.hero_image_url)}
+                    alt="Letter cover"
+                    width={1600}
+                    height={900}
+                    className="size-full object-cover"
+                  />
+                </div>
+              );
+            }
+
+            return null;
+          })}
         </div>
       ) : layout === "quote" ? (
         <div className="flex h-full flex-col p-[9cqw]">
@@ -251,7 +368,7 @@ export const LetterPageCanvas = forwardRef<
               </p>
             </div>
           ) : null}
-          {page.truncated && page.continuation_label ? (
+          {page.continuation_label ? (
             <p className="mt-[3cqw] shrink-0 text-[1.2cqw] uppercase tracking-[0.12em] text-zinc-400">
               {page.continuation_label}
             </p>

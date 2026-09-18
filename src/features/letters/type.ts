@@ -16,6 +16,8 @@ export type LetterPageLayout = "cover" | "body" | "quote";
 
 export type LetterPageTextScaleMode = "auto" | "manual";
 
+export type LetterPageContentSource = "cover_entry" | "letter_body";
+
 export type LetterExportStatus =
   | "queued"
   | "processing"
@@ -37,6 +39,25 @@ export type LetterSignature = {
   handle: string;
 };
 
+export type LetterCoverSection =
+  | "header"
+  | "title"
+  | "entry"
+  | "author"
+  | "hero";
+
+export type LetterCover = {
+  theme: "light" | "dark";
+  show_logo: boolean;
+  subheader: string;
+  description_blocks: unknown[];
+  author_name: string;
+  date_label: string;
+  avatar_url: string | null;
+  hero_image_url: string | null;
+  section_order: LetterCoverSection[];
+};
+
 export type LetterPage = {
   uuid: string;
   number: number;
@@ -46,10 +67,12 @@ export type LetterPage = {
   text_scale_mode: LetterPageTextScaleMode;
   title: string | null;
   subtitle: string | null;
+  cover?: LetterCover | null;
   blocks: unknown[];
   signature: LetterSignature | null;
   truncated: boolean;
   continuation_label: string | null;
+  content_source?: LetterPageContentSource;
 };
 
 export type LetterExport = {
@@ -125,6 +148,8 @@ export type LetterExportPageInput = Pick<
   | "text_scale_mode"
   | "title"
   | "subtitle"
+  | "cover"
+  | "content_source"
   | "blocks"
 >;
 

@@ -96,6 +96,7 @@ export function LetterEditor({
       letterUuid: uuid,
       format,
       pages,
+      silent: true,
     });
     setActiveExportUuid(response.data.uuid);
   };

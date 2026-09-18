@@ -6,7 +6,11 @@ async function fixture(
   page: Page,
   content: string,
   format: LetterExportFormat = "portrait",
-  metadata?: { title?: string; subtitle?: string | null },
+  metadata?: {
+    title?: string;
+    subtitle?: string | null;
+    updateDelayMs?: number;
+  },
 ) {
   let letter: Letter = {
     uuid: "letter-test",
@@ -37,6 +41,11 @@ async function fixture(
       data = exported;
     } else if (path === "/letters/letter-test/exports/export-test") {
       if (method === "PATCH") {
+        if (metadata?.updateDelayMs) {
+          await new Promise((resolve) =>
+            setTimeout(resolve, metadata.updateDelayMs),
+          );
+        }
         const input = route.request().postDataJSON();
         updates.push(input.pages);
         exported = { ...exported!, pages: normalize(input.pages), page_count: input.pages.length };
@@ -47,9 +56,10 @@ async function fixture(
     await route.fulfill({ json: { data, status: 200, message: "Saved" } });
   });
   await page.goto("/letters?letter=letter-test");
-  await expect(page.getByRole("button", { name: "Prepare pages", exact: true })).toBeVisible();
   if (format !== "portrait") {
-    await page.getByRole("combobox", { name: "Export format" }).click();
+    const formatSelect = page.getByRole("combobox", { name: "Export format" });
+    await expect(formatSelect).toBeEnabled({ timeout: 60_000 });
+    await formatSelect.click();
     await page.getByRole("option", { name: new RegExp(LETTER_EXPORT_FORMATS[format].shortLabel) }).click();
   }
   return { letter: () => letter, exported: () => exported!, updates };
@@ -58,15 +68,27 @@ async function fixture(
 test("long cover text auto-fits before the export is created", async ({ page }) => {
   const state = await fixture(page, document(2), "portrait", {
     title: "A deliberately long cover title ".repeat(4).trim(),
-    subtitle: "Supporting cover copy that should be measured and fitted before page preparation reports an overflow. ".repeat(2).trim(),
+    subtitle: "Supporting cover copy that should continue onto generated pages without changing the original letter body. ".repeat(35).trim(),
   });
 
-  await page.getByRole("button", { name: "Prepare pages", exact: true }).click();
   await expect(
     page.getByRole("button", { name: "Customize pages", exact: true }),
   ).toBeVisible({ timeout: 60_000 });
   await expect(page.getByRole("alert")).toHaveCount(0);
   expect(state.exported().pages?.[0].text_scale).toBeLessThanOrEqual(1);
+  expect(state.exported().pages?.[1].content_source).toBe("cover_entry");
+  expect(
+    state.exported().pages?.filter(
+      (item) => item.content_source === "cover_entry" && item.layout !== "cover",
+    ).length,
+  ).toBeGreaterThan(0);
+  expect(
+    text(
+      state.exported().pages
+        ?.filter((item) => item.content_source !== "cover_entry")
+        .flatMap((item) => item.blocks),
+    ),
+  ).toBe(text(JSON.parse(document(2)).blocks));
 });
 
 function normalize(pages: LetterPage[]): LetterPage[] {
@@ -86,7 +108,6 @@ for (const format of ["portrait", "square", "story", "landscape"] as const) {
   test(`${format}: measured pages preserve text, fit, and reflow with text size`, async ({ page }) => {
     const original = document(100);
     const state = await fixture(page, original, format);
-    await page.getByRole("button", { name: "Prepare pages", exact: true }).click();
     await expect(page.getByRole("button", { name: "Customize pages", exact: true })).toBeVisible({ timeout: 60_000 });
     expect(text(state.exported().pages?.slice(1).flatMap((p) => p.blocks))).toBe(text(JSON.parse(original).blocks));
     await page.getByRole("button", { name: "Customize pages", exact: true }).click();
@@ -117,7 +138,6 @@ for (const format of ["portrait", "square", "story", "landscape"] as const) {
 test("long letters create every page they need without blocking preparation", async ({ page }) => {
   const original = document(250);
   const state = await fixture(page, original, "landscape");
-  await page.getByRole("button", { name: "Prepare pages", exact: true }).click();
   await expect(
     page.getByRole("button", { name: "Customize pages", exact: true }),
   ).toBeVisible({ timeout: 120_000 });
@@ -125,4 +145,82 @@ test("long letters create every page they need without blocking preparation", as
   expect(text(state.exported().pages?.slice(1).flatMap((p) => p.blocks))).toBe(
     text(JSON.parse(original).blocks),
   );
+});
+
+test("the page workspace closes while pending edits save", async ({ page }) => {
+  const state = await fixture(page, document(2), "portrait", {
+    updateDelayMs: 1_500,
+  });
+  await expect(
+    page.getByRole("button", { name: "Customize pages", exact: true }),
+  ).toBeVisible({ timeout: 60_000 });
+  await page
+    .getByRole("button", { name: "Customize pages", exact: true })
+    .click();
+
+  const dialog = page.getByRole("dialog");
+  await dialog.getByRole("textbox", { name: "Subheader" }).fill("CLOSE NOW");
+  await dialog.getByRole("button", { name: "Close", exact: true }).click();
+
+  await expect(dialog).toBeHidden({ timeout: 500 });
+  await expect
+    .poll(() => state.updates.length, { timeout: 60_000 })
+    .toBeGreaterThan(0);
+  expect(state.exported().pages?.[0].cover?.subheader).toBe("CLOSE NOW");
+  expect(
+    state.updates.at(-1)?.slice(1).every((page) => !("cover" in page)),
+  ).toBe(true);
+});
+
+test("cover controls persist theme, branding, and author metadata", async ({ page }) => {
+  const state = await fixture(page, document(2));
+  await expect(
+    page.getByRole("button", { name: "Customize pages", exact: true }),
+  ).toBeVisible({ timeout: 60_000 });
+  await page.getByRole("button", { name: "Customize pages", exact: true }).click();
+  const dialog = page.getByRole("dialog");
+
+  await dialog.getByRole("combobox", { name: "Background" }).click();
+  await page.getByRole("option", { name: "Dark", exact: true }).click();
+  await dialog.getByRole("switch", { name: "Show Medasin logo" }).click();
+  await dialog.getByRole("textbox", { name: "Subheader" }).fill("CIPER DATASETS");
+  await dialog.getByRole("textbox", { name: "Author name" }).fill("Ciper");
+  await expect(dialog.getByRole("button", { name: "Reorder Title" })).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Reorder Entry" })).toBeVisible();
+  await dialog
+    .locator('.cover-description-editor [contenteditable="true"]')
+    .fill("A formatted cover description");
+  await expect(dialog.getByText("29 characters", { exact: true })).toBeVisible();
+
+  await expect(
+    dialog.locator('[data-cover-section="author"]'),
+  ).toHaveClass(/mt-auto/);
+
+  await expect.poll(() => state.updates.length, { timeout: 60_000 }).toBeGreaterThan(0);
+  await expect(dialog.getByText("Saved", { exact: true })).toBeVisible();
+  const cover = state.exported().pages?.[0].cover;
+  expect(cover?.theme).toBe("dark");
+  expect(cover?.show_logo).toBe(false);
+  expect(cover?.subheader).toBe("CIPER DATASETS");
+  expect(state.letter().subtitle).toBe("A formatted cover description");
+  expect(cover?.description_blocks).toBeTruthy();
+  expect(cover?.author_name).toBe("Ciper");
+
+  await dialog
+    .getByText("Landscape cover image", { exact: true })
+    .locator("..")
+    .locator('input[type="file"]')
+    .setInputFiles({
+      name: "cover.png",
+      mimeType: "image/png",
+      buffer: Buffer.from(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+        "base64",
+      ),
+    });
+  const cropDialog = page.getByRole("dialog", { name: "Crop cover image" });
+  await expect(cropDialog).toBeVisible();
+  await expect(cropDialog.getByRole("button", { name: "4:5" })).toBeVisible();
+  await expect(cropDialog.getByRole("button", { name: "9:16" })).toBeVisible();
+  await cropDialog.getByRole("button", { name: "Cancel" }).click();
 });

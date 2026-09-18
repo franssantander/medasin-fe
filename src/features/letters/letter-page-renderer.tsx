@@ -23,7 +23,10 @@ export function measureLetterPage(
     };
   }
   const content = canvas.querySelector<HTMLElement>("[data-page-content]");
-  const editor = content?.querySelector<HTMLElement>(".bn-editor");
+  const editor =
+    canvas.dataset.pageLayout === "cover"
+      ? null
+      : content?.querySelector<HTMLElement>(".bn-editor");
   const measured = editor ?? content;
   if (
     !content ||
