@@ -926,6 +926,7 @@ export function NoteRichTextEditorClient({
           formattingToolbar={false}
           sideMenu={false}
           slashMenu={false}
+          emojiPicker={mode !== "letter"}
           theme="light"
           onChange={handleEditorChange}
         >

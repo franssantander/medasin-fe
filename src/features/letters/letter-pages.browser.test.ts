@@ -104,6 +104,33 @@ function text(value: unknown): string {
 const sentence = "A thoughtful letter fills each page and preserves every word. ";
 const document = (repeat: number) => JSON.stringify({ version: 1, blocks: [{ id: "paragraph", type: "paragraph", content: [{ type: "text", text: sentence.repeat(repeat), styles: { bold: true } }] }] });
 
+test("letter text accepts a space immediately after a colon", async ({ page }) => {
+  const state = await fixture(page, document(1));
+  const editor = page.locator(
+    '.letter-composer-document [contenteditable="true"]',
+  );
+  await expect(editor).toBeVisible({ timeout: 60_000 });
+  await editor.fill("reliable:how well");
+  await editor.press("Home");
+  await editor.press("ArrowRight");
+  await editor.press("ArrowRight");
+  await editor.press("ArrowRight");
+  await editor.press("ArrowRight");
+  await editor.press("ArrowRight");
+  await editor.press("ArrowRight");
+  await editor.press("ArrowRight");
+  await editor.press("ArrowRight");
+  await editor.press("ArrowRight");
+  await editor.press("Space");
+
+  await expect(editor).toContainText("reliable: how well");
+  await expect
+    .poll(() => text(JSON.parse(state.letter().content).blocks), {
+      timeout: 60_000,
+    })
+    .toContain("reliable: how well");
+});
+
 for (const format of ["portrait", "square", "story", "landscape"] as const) {
   test(`${format}: measured pages preserve text, fit, and reflow with text size`, async ({ page }) => {
     const original = document(100);
