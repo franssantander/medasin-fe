@@ -23,7 +23,10 @@ import {
 } from "@/components/ui/note-editor-document";
 import { imageFetchSource } from "@/lib/image/crop-image";
 import { cn } from "@/lib/utils";
-import { normalizeLetterCover } from "../letter-cover";
+import {
+  LETTER_COVER_HERO_ASPECT_RATIO,
+  normalizeLetterCover,
+} from "../letter-cover";
 import {
   letterPageTextSize,
   normalizeLetterPageTextScale,
@@ -139,33 +142,18 @@ export const LetterPageCanvas = forwardRef<
         >
           {coverSections.map((section, index) => {
             if (section === "header") {
-              if (!cover.show_logo && !cover.subheader) return null;
+              if (!cover.subheader) return null;
               return (
-                <div key={section} className="flex shrink-0 items-end justify-between gap-[4cqw]">
-                  {cover.subheader ? (
-                    <p
-                      className={cn(
-                        "text-[1.35cqw] font-medium uppercase tracking-[0.18em]",
-                        coverIsDark ? "text-zinc-300" : "text-zinc-500",
-                      )}
-                      style={{ fontSize: letterPageTextSize(1.35, textScale) }}
-                    >
-                      {cover.subheader}
-                    </p>
-                  ) : <span />}
-                  {cover.show_logo ? (
-                    <Image
-                      src="/images/medasin-ph.svg"
-                      alt="Medasin"
-                      width={96}
-                      height={96}
-                      className={cn(
-                        "size-[7cqw] min-h-7 min-w-7 object-contain object-right",
-                        coverIsDark && "brightness-0 invert",
-                      )}
-                      priority={!editable}
-                    />
-                  ) : null}
+                <div key={section} className="flex shrink-0 items-center">
+                  <p
+                    className={cn(
+                      "text-[1.35cqw] font-medium uppercase tracking-[0.18em]",
+                      coverIsDark ? "text-zinc-300" : "text-zinc-500",
+                    )}
+                    style={{ fontSize: letterPageTextSize(1.35, textScale) }}
+                  >
+                    {cover.subheader}
+                  </p>
                 </div>
               );
             }
@@ -238,48 +226,67 @@ export const LetterPageCanvas = forwardRef<
             }
 
             if (section === "author") {
-              if (!cover.author_name && !cover.date_label && !cover.avatar_url) return null;
+              if (!cover.show_logo && !cover.author_name && !cover.date_label && !cover.avatar_url) return null;
               return (
                 <div
                   key={section}
                   data-cover-section="author"
                   className={cn(
-                    "flex shrink-0 items-center gap-[2.5cqw]",
+                    "flex shrink-0 items-center justify-between gap-[2.5cqw]",
                     !cover.hero_image_url && "mt-auto",
                   )}
                 >
-                  {cover.avatar_url ? (
+                  <div className="flex min-w-0 items-center gap-[2.5cqw]">
+                    {cover.avatar_url ? (
+                      <Image
+                        unoptimized
+                        src={imageFetchSource(cover.avatar_url)}
+                        alt={cover.author_name ? `${cover.author_name}'s avatar` : "Cover author avatar"}
+                        width={96}
+                        height={96}
+                        className="size-[7cqw] rounded-full object-cover"
+                      />
+                    ) : null}
+                    <div className="min-w-0">
+                      {cover.author_name ? (
+                        <p className="truncate font-medium" style={{ fontSize: letterPageTextSize(1.65, textScale) }}>
+                          {cover.author_name}
+                        </p>
+                      ) : null}
+                      {cover.date_label ? (
+                        <p
+                          className={coverIsDark ? "text-zinc-400" : "text-zinc-500"}
+                          style={{ fontSize: letterPageTextSize(1.25, textScale) }}
+                        >
+                          {cover.date_label}
+                        </p>
+                      ) : null}
+                    </div>
+                  </div>
+                  {cover.show_logo ? (
                     <Image
-                      unoptimized
-                      src={imageFetchSource(cover.avatar_url)}
-                      alt={cover.author_name ? `${cover.author_name}'s avatar` : "Cover author avatar"}
+                      src="/images/medasin-leaf.svg"
+                      alt="Medasin"
                       width={96}
                       height={96}
-                      className="size-[7cqw] rounded-full object-cover"
+                      className={cn(
+                        "size-[7cqw] shrink-0 object-contain object-right",
+                        coverIsDark && "brightness-0 invert",
+                      )}
+                      priority={!editable}
                     />
                   ) : null}
-                  <div className="min-w-0">
-                    {cover.author_name ? (
-                      <p className="truncate font-medium" style={{ fontSize: letterPageTextSize(1.65, textScale) }}>
-                        {cover.author_name}
-                      </p>
-                    ) : null}
-                    {cover.date_label ? (
-                      <p
-                        className={coverIsDark ? "text-zinc-400" : "text-zinc-500"}
-                        style={{ fontSize: letterPageTextSize(1.25, textScale) }}
-                      >
-                        {cover.date_label}
-                      </p>
-                    ) : null}
-                  </div>
                 </div>
               );
             }
 
             if (section === "hero" && cover.hero_image_url) {
               return (
-                <div key={section} className="min-h-[30%] w-full max-w-[92%] flex-1 overflow-hidden rounded-[2cqw]">
+                <div
+                  key={section}
+                  className="w-full max-w-[92%] shrink-0 overflow-hidden rounded-[2cqw]"
+                  style={{ aspectRatio: `${LETTER_COVER_HERO_ASPECT_RATIO}` }}
+                >
                   <Image
                     unoptimized
                     src={imageFetchSource(cover.hero_image_url)}
@@ -298,7 +305,7 @@ export const LetterPageCanvas = forwardRef<
       ) : layout === "quote" ? (
         <div className="flex h-full flex-col p-[9cqw]">
           <Image
-            src="/images/medasin-ph.svg"
+            src="/images/medasin-leaf.svg"
             alt=""
             width={72}
             height={72}

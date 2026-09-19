@@ -14,6 +14,9 @@ export const LETTER_COVER_SECTIONS: LetterCoverSection[] = [
   "hero",
 ];
 
+/** The display frame used for the cover image and its crop preset. */
+export const LETTER_COVER_HERO_ASPECT_RATIO = 16 / 9;
+
 export const LETTER_COVER_SECTION_LABELS: Record<LetterCoverSection, string> = {
   header: "Header",
   title: "Title",

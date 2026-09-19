@@ -80,6 +80,7 @@ import { useLetterPageAutosave } from "../hooks/use-letter-page-autosave";
 import { LETTER_EXPORT_FORMATS } from "../letter-export-formats";
 import {
   LETTER_COVER_SECTION_LABELS,
+  LETTER_COVER_HERO_ASPECT_RATIO,
   normalizeLetterCover,
 } from "../letter-cover";
 import { mapFlowSelection, type LetterPageFlowResult } from "../letter-page-flow";
@@ -231,6 +232,7 @@ export function LetterPageWorkspace({
     Partial<Record<"avatar" | "hero", string>>
   >({});
   const [coverCrop, setCoverCrop] = useState<CoverCropSession>();
+  const coverHeroRevisionRef = useRef(0);
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const heroInputRef = useRef<HTMLInputElement>(null);
   const [historyState, setHistoryState] = useState<NoteEditorHistoryState>({
@@ -436,14 +438,20 @@ export function LetterPageWorkspace({
       setCoverImageErrors((current) => ({ ...current, [kind]: undefined }));
 
       if (kind === "hero") {
+        const revision = ++coverHeroRevisionRef.current;
         let source: string | undefined;
         try {
           validateLetterImage(file);
           source = URL.createObjectURL(file);
           const originalAspect = await getImageAspectRatio(source);
+          if (revision !== coverHeroRevisionRef.current) {
+            URL.revokeObjectURL(source);
+            return;
+          }
           setCoverCrop({ file, source, originalAspect });
         } catch (error) {
           if (source) URL.revokeObjectURL(source);
+          if (revision !== coverHeroRevisionRef.current) return;
           setCoverImageErrors((current) => ({
             ...current,
             hero:
@@ -477,6 +485,7 @@ export function LetterPageWorkspace({
   );
 
   const prepareExistingCoverCrop = useCallback(async () => {
+    const revision = ++coverHeroRevisionRef.current;
     const page = getPages().find(
       (item) => item.uuid === selectedUuidRef.current,
     );
@@ -489,9 +498,14 @@ export function LetterPageWorkspace({
       const file = await imageUrlToFile(url, "cover-image");
       source = URL.createObjectURL(file);
       const originalAspect = await getImageAspectRatio(source);
+      if (revision !== coverHeroRevisionRef.current) {
+        URL.revokeObjectURL(source);
+        return;
+      }
       setCoverCrop({ file, source, originalAspect });
     } catch (error) {
       if (source) URL.revokeObjectURL(source);
+      if (revision !== coverHeroRevisionRef.current) return;
       setCoverImageErrors((current) => ({
         ...current,
         hero:
@@ -505,6 +519,32 @@ export function LetterPageWorkspace({
   const closeCoverCrop = useCallback(() => {
     setCoverCrop(undefined);
   }, []);
+
+  const removeCoverImage = useCallback(() => {
+    coverHeroRevisionRef.current += 1;
+    closeCoverCrop();
+    setUploadingCoverImage((current) => (current === "hero" ? null : current));
+    setCoverImageErrors((current) => ({ ...current, hero: undefined }));
+    if (heroInputRef.current) heroInputRef.current.value = "";
+    updateCover({ hero_image_url: null });
+  }, [closeCoverCrop, updateCover]);
+
+  const applyCoverCrop = useCallback(
+    async (file: File) => {
+      const revision = coverHeroRevisionRef.current;
+      setUploadingCoverImage("hero");
+      try {
+        const url = await uploadImage(file);
+        if (revision !== coverHeroRevisionRef.current) return;
+        updateCover({ hero_image_url: url });
+      } finally {
+        setUploadingCoverImage((current) =>
+          current === "hero" ? null : current,
+        );
+      }
+    },
+    [updateCover, uploadImage],
+  );
 
   useEffect(() => () => {
     if (coverCrop) URL.revokeObjectURL(coverCrop.source);
@@ -959,6 +999,7 @@ export function LetterPageWorkspace({
                   void handleCoverImage(kind, file)
                 }
                 onCropCoverImage={() => void prepareExistingCoverCrop()}
+                onRemoveCoverImage={removeCoverImage}
               />
             )}
           </aside>
@@ -970,13 +1011,17 @@ export function LetterPageWorkspace({
         open
         source={coverCrop.source}
         file={coverCrop.file}
-        aspect={coverCrop.originalAspect}
+        aspect={LETTER_COVER_HERO_ASPECT_RATIO}
         title="Crop cover image"
         description="Choose the area that should appear in the cover image section."
         aspectOptions={
           [
-            { label: "Free", value: undefined },
+            {
+              label: "Cover fit",
+              value: LETTER_COVER_HERO_ASPECT_RATIO,
+            },
             { label: "Original", value: coverCrop.originalAspect },
+            { label: "Free", value: undefined },
             { label: "Square", value: 1 },
             { label: "4:3", value: 4 / 3 },
             { label: "4:5", value: 4 / 5 },
@@ -987,15 +1032,7 @@ export function LetterPageWorkspace({
         onOpenChange={(cropOpen) => {
           if (!cropOpen) closeCoverCrop();
         }}
-        onCrop={async (file) => {
-          setUploadingCoverImage("hero");
-          try {
-            const url = await uploadImage(file);
-            updateCover({ hero_image_url: url });
-          } finally {
-            setUploadingCoverImage(null);
-          }
-        }}
+        onCrop={applyCoverCrop}
       />
     ) : null}
     </>
@@ -1012,6 +1049,7 @@ function CoverControls({
   onCoverChange,
   onImageChange,
   onCropCoverImage,
+  onRemoveCoverImage,
 }: {
   page: LetterPage;
   uploading: "avatar" | "hero" | null;
@@ -1022,6 +1060,7 @@ function CoverControls({
   onCoverChange: (update: Partial<LetterCover>) => void;
   onImageChange: (kind: "avatar" | "hero", file?: File) => void;
   onCropCoverImage: () => void;
+  onRemoveCoverImage: () => void;
 }) {
   const cover = normalizeLetterCover(page.cover);
   const coverSensors = useSensors(
@@ -1122,7 +1161,7 @@ function CoverControls({
         inputRef={heroInputRef}
         onFile={(file) => onImageChange("hero", file)}
         onCrop={onCropCoverImage}
-        onRemove={() => onCoverChange({ hero_image_url: null })}
+        onRemove={onRemoveCoverImage}
       />
 
       <div className="flex flex-col gap-2">
