@@ -47,6 +47,7 @@ type LetterPageCanvasProps = {
   className?: string;
   onTitleChange?: (title: string) => void;
   onBlocksChange?: (blocks: unknown[]) => void;
+  onCoverBodyChange?: (blocks: unknown[], plainText: string) => void;
   onUploadFile?: (file: File) => Promise<string>;
   onEditorReady?: (controls: NoteRichTextEditorControls | null) => void;
   onHistoryStateChange?: (state: NoteEditorHistoryState) => void;
@@ -67,6 +68,7 @@ export const LetterPageCanvas = forwardRef<
     className,
     onTitleChange,
     onBlocksChange,
+    onCoverBodyChange,
     onUploadFile = unavailable,
     onEditorReady = noop,
     onHistoryStateChange = noop,
@@ -83,7 +85,9 @@ export const LetterPageCanvas = forwardRef<
   );
   const cover = normalizeLetterCover(page.cover);
   const coverDescription = serializeNoteDocument(
-    page.content_source === "cover_entry"
+    editable
+      ? cover.description_blocks
+      : page.content_source === "cover_entry"
       ? page.blocks
       : cover.description_blocks,
   );
@@ -103,12 +107,12 @@ export const LetterPageCanvas = forwardRef<
   } as CSSProperties;
 
   useEffect(() => {
-    if (layout === "cover") {
+    if (layout === "cover" && !editable) {
       onEditorReady(null);
       onHistoryStateChange({ canUndo: false, canRedo: false });
       onContentApplied?.();
     }
-  }, [layout, onEditorReady, onHistoryStateChange, onContentApplied]);
+  }, [editable, layout, onEditorReady, onHistoryStateChange, onContentApplied]);
 
   return (
     <div
@@ -131,11 +135,11 @@ export const LetterPageCanvas = forwardRef<
           className="flex h-full flex-col gap-[4cqh] overflow-hidden p-[7cqw]"
           data-page-content
         >
-          {coverSections.map((section) => {
+          {coverSections.map((section, index) => {
             if (section === "header") {
               if (!cover.show_logo && !cover.subheader) return null;
               return (
-                <div key={section} className="flex shrink-0 items-center justify-between gap-[4cqw]">
+                <div key={section} className="flex shrink-0 items-end justify-between gap-[4cqw]">
                   {cover.subheader ? (
                     <p
                       className={cn(
@@ -166,7 +170,13 @@ export const LetterPageCanvas = forwardRef<
 
             if (section === "title") {
               return (
-                <div key={section} className="shrink-0 overflow-hidden">
+                <div
+                  key={section}
+                  className={cn(
+                    "shrink-0 overflow-hidden",
+                    coverSections[index - 1] === "header" && "-mt-[3cqh]",
+                  )}
+                >
                   <CanvasText
                     as="h2"
                     ariaLabel="Cover title"
@@ -183,7 +193,7 @@ export const LetterPageCanvas = forwardRef<
               );
             }
 
-            if (section === "entry" && coverDescriptionText) {
+            if (section === "entry" && (coverDescriptionText || editable)) {
               return (
                 <div
                   key={section}
@@ -198,18 +208,27 @@ export const LetterPageCanvas = forwardRef<
                 >
                   <NoteRichTextEditor
                     mode="resource"
-                    editorChrome="none"
+                    editorChrome={editable ? "full" : "none"}
+                    slashMenuPortalToBody={editable}
                     documentId={`letter-cover-description-${exportUuid}-${pageUuid}`}
                     content={coverDescription}
                     syncContent
-                    editable={false}
+                    onContentApplied={onContentApplied}
+                    editable={editable}
                     noteOptions={[]}
-                    onChange={noop}
+                    onChange={(content) => {
+                      if (!editable) return;
+                      onCoverBodyChange?.(
+                        parseNoteDocument(content).blocks,
+                        getNoteDocumentPreview(content),
+                      );
+                    }}
                     onUploadFile={unavailable}
                     onCreateChild={unavailableChild}
                     onOpenNote={noop}
-                    onEditorReady={noop}
-                    onHistoryStateChange={noop}
+                    onEditorReady={onEditorReady}
+                    onHistoryStateChange={onHistoryStateChange}
+                    onBlur={onBlur}
                   />
                 </div>
               );

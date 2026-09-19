@@ -9,6 +9,7 @@ import {
   filterSuggestionItems,
   insertOrUpdateBlockForSlashMenu,
   SideMenuExtension,
+  SuggestionMenu as SuggestionMenuExtension,
 } from "@blocknote/core/extensions";
 import {
   createReactBlockSpec,
@@ -367,6 +368,7 @@ type ImageCropSession = CropImageRequest & {
 export type NoteRichTextEditorClientProps = {
   mode?: "note" | "task" | "resource" | "letter";
   editorChrome?: "full" | "formatting-only" | "none";
+  slashMenuPortalToBody?: boolean;
   documentId: string;
   content: string;
   syncContent?: boolean;
@@ -389,6 +391,7 @@ export type NoteRichTextEditorControls = {
   getSelection: () => NoteEditorSelection | null;
   restoreSelection: (selection: NoteEditorSelection) => void;
   isComposing: () => boolean;
+  isSlashMenuOpen: () => boolean;
 };
 
 export type NoteEditorSelection = {
@@ -405,6 +408,7 @@ export type NoteEditorHistoryState = {
 export function NoteRichTextEditorClient({
   mode = "note",
   editorChrome = "full",
+  slashMenuPortalToBody = false,
   documentId,
   content,
   syncContent = false,
@@ -560,6 +564,8 @@ export function NoteRichTextEditorClient({
   const editorControls = useMemo<NoteRichTextEditorControls>(
     () => ({
       isComposing: () => editor.prosemirrorView.composing,
+      isSlashMenuOpen: () =>
+        editor.getExtension(SuggestionMenuExtension)?.shown() ?? false,
       getSelection: () => {
         const { selection } = editor.prosemirrorState;
         const point = (position: typeof selection.$anchor) => {
@@ -931,6 +937,7 @@ export function NoteRichTextEditorClient({
                   <SideMenuController sideMenu={NoteBlockSideMenu} />
                   <SuggestionMenuController
                     triggerCharacter="/"
+                    portalElement={slashMenuPortalToBody ? null : undefined}
                     suggestionMenuComponent={NoteSlashMenu}
                     getItems={async (query) =>
                       filterSuggestionItems(slashItems, query)

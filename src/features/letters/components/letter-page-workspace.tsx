@@ -45,7 +45,6 @@ import {
   type ImageCropAspectOption,
 } from "@/components/ui/image-crop-dialog";
 import { Input } from "@/components/ui/input";
-import { NoteRichTextEditor } from "@/components/ui/note-rich-text-editor";
 import {
   Dialog,
   DialogContent,
@@ -58,11 +57,7 @@ import type {
   NoteEditorSelection,
   NoteRichTextEditorControls,
 } from "@/components/ui/note-rich-text-editor-client";
-import {
-  getNoteDocumentPreview,
-  parseNoteDocument,
-  serializeNoteDocument,
-} from "@/components/ui/note-editor-document";
+import { serializeNoteDocument } from "@/components/ui/note-editor-document";
 import {
   Select,
   SelectContent,
@@ -118,13 +113,6 @@ const LETTER_IMAGE_TYPES = new Set([
   "image/webp",
   "image/avif",
 ]);
-const unavailableCoverUpload = async (): Promise<never> => {
-  throw new Error("Images cannot be embedded in a cover description.");
-};
-const unavailableChild = async (): Promise<never> => {
-  throw new Error("Child pages are unavailable in cover descriptions.");
-};
-const noop = () => undefined;
 type CoverCropSession = {
   file: File;
   source: string;
@@ -193,7 +181,11 @@ export function LetterPageWorkspace({
     onSaved,
     preparePages,
     onLayout,
-    isComposing: () => controlsRef.current?.isComposing() ?? false,
+    isComposing: () =>
+      Boolean(
+        controlsRef.current?.isComposing() ||
+          controlsRef.current?.isSlashMenuOpen(),
+      ),
   });
   const [closing, setClosing] = useState(false);
   const closingRef = useRef(false);
@@ -727,6 +719,14 @@ export function LetterPageWorkspace({
                   updateSelected({ title, text_scale_mode: "auto" });
                 }}
                 onBlocksChange={(blocks) => updateSelected({ blocks })}
+                onCoverBodyChange={(blocks, plainText) => {
+                  updateSelected({
+                    blocks,
+                    subtitle: plainText.slice(0, 240) || null,
+                    text_scale_mode: "auto",
+                  });
+                  updateCover({ description_blocks: blocks });
+                }}
                 onUploadFile={uploadImage}
                 onEditorReady={handleEditorReady}
                 onContentApplied={restorePendingSelection}
@@ -885,13 +885,6 @@ export function LetterPageWorkspace({
                 onTitleChange={(title) => {
                   updateSelected({ title, text_scale_mode: "auto" });
                 }}
-                onDescriptionChange={(descriptionBlocks, subtitle) => {
-                  updateSelected({
-                    subtitle: subtitle.slice(0, 240) || null,
-                    text_scale_mode: "auto",
-                  });
-                  updateCover({ description_blocks: descriptionBlocks });
-                }}
                 onCoverChange={updateCover}
                 onImageChange={(kind, file) =>
                   void handleCoverImage(kind, file)
@@ -947,7 +940,6 @@ function CoverControls({
   heroInputRef,
   imageErrors,
   onTitleChange,
-  onDescriptionChange,
   onCoverChange,
   onImageChange,
   onCropCoverImage,
@@ -958,14 +950,11 @@ function CoverControls({
   heroInputRef: RefObject<HTMLInputElement | null>;
   imageErrors: Partial<Record<"avatar" | "hero", string>>;
   onTitleChange: (value: string) => void;
-  onDescriptionChange: (blocks: unknown[], plainText: string) => void;
   onCoverChange: (update: Partial<LetterCover>) => void;
   onImageChange: (kind: "avatar" | "hero", file?: File) => void;
   onCropCoverImage: () => void;
 }) {
   const cover = normalizeLetterCover(page.cover);
-  const descriptionContent = serializeNoteDocument(cover.description_blocks);
-  const descriptionLength = getNoteDocumentPreview(descriptionContent).length;
   const coverSensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
@@ -1029,40 +1018,6 @@ function CoverControls({
           onChange={(event) => onTitleChange(event.target.value)}
         />
       </label>
-      <div className="flex flex-col gap-2">
-        <div className="flex items-center justify-between gap-3 text-sm font-medium">
-          <span>Entry</span>
-          <span className="text-xs tabular-nums text-muted-foreground" aria-live="polite">
-            {descriptionLength.toLocaleString()} characters
-          </span>
-        </div>
-        <div className="cover-description-editor min-h-32 overflow-hidden rounded-md border bg-white">
-          <NoteRichTextEditor
-            mode="resource"
-            editorChrome="formatting-only"
-            documentId={`letter-cover-description-control-${page.uuid}`}
-            content={descriptionContent}
-            syncContent
-            editable
-            noteOptions={[]}
-            onChange={(content) => {
-              const plainText = getNoteDocumentPreview(content);
-              onDescriptionChange(
-                parseNoteDocument(content).blocks,
-                plainText,
-              );
-            }}
-            onUploadFile={unavailableCoverUpload}
-            onCreateChild={unavailableChild}
-            onOpenNote={noop}
-            onEditorReady={noop}
-            onHistoryStateChange={noop}
-          />
-        </div>
-        <p className="text-xs text-muted-foreground">
-          Formatting is preserved. Text that does not fit on the cover continues automatically on the following pages.
-        </p>
-      </div>
       <label className="flex flex-col gap-1.5 text-sm font-medium">
         Author name
         <Input

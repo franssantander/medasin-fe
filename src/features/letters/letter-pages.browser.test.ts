@@ -186,11 +186,24 @@ test("cover controls persist theme, branding, and author metadata", async ({ pag
   await dialog.getByRole("textbox", { name: "Subheader" }).fill("CIPER DATASETS");
   await dialog.getByRole("textbox", { name: "Author name" }).fill("Ciper");
   await expect(dialog.getByRole("button", { name: "Reorder Title" })).toBeVisible();
-  await expect(dialog.getByRole("button", { name: "Reorder Entry" })).toBeVisible();
-  await dialog
-    .locator('.cover-description-editor [contenteditable="true"]')
-    .fill("A formatted cover description");
-  await expect(dialog.getByText("29 characters", { exact: true })).toBeVisible();
+  await expect(
+    dialog.getByRole("button", { name: "Reorder Cover body text" }),
+  ).toBeVisible();
+  const coverBody = dialog.locator(
+    'main .letter-cover-description [contenteditable="true"]',
+  );
+  await coverBody.fill("A formatted cover description");
+  await coverBody.click();
+  await coverBody.press("End");
+  await coverBody.pressSequentially("/");
+  const slashMenu = page.getByRole("listbox", { name: "Insert block" });
+  await expect(slashMenu).toBeVisible();
+  await page.waitForTimeout(1_000);
+  await expect(slashMenu).toBeVisible();
+  await expect(slashMenu.getByText("Image", { exact: true })).toHaveCount(0);
+  await expect(slashMenu.getByText("Video", { exact: true })).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  await coverBody.press("Backspace");
 
   await expect(
     dialog.locator('[data-cover-section="author"]'),

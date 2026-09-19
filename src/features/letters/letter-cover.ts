@@ -17,7 +17,7 @@ export const LETTER_COVER_SECTIONS: LetterCoverSection[] = [
 export const LETTER_COVER_SECTION_LABELS: Record<LetterCoverSection, string> = {
   header: "Header",
   title: "Title",
-  entry: "Entry",
+  entry: "Cover body text",
   author: "Author and date",
   hero: "Cover image",
 };
