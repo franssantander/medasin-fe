@@ -142,6 +142,17 @@ test("long letters create every page they need without blocking preparation", as
     page.getByRole("button", { name: "Customize pages", exact: true }),
   ).toBeVisible({ timeout: 120_000 });
   expect(state.exported().pages?.length).toBeGreaterThan(10);
+  const nextPage = page.getByRole("button", { name: "View next page" });
+  const previousPage = page.getByRole("button", {
+    name: "View previous page",
+  });
+  await expect(previousPage).toBeDisabled();
+  await nextPage.click();
+  await expect(page.getByText(/^Page 2 of \d+$/)).toBeVisible();
+  await expect(previousPage).toBeEnabled();
+  await expect(
+    page.getByRole("button", { name: "View page 2" }),
+  ).toHaveAttribute("aria-current", "page");
   expect(text(state.exported().pages?.slice(1).flatMap((p) => p.blocks))).toBe(
     text(JSON.parse(original).blocks),
   );
@@ -170,6 +181,41 @@ test("the page workspace closes while pending edits save", async ({ page }) => {
   expect(
     state.updates.at(-1)?.slice(1).every((page) => !("cover" in page)),
   ).toBe(true);
+});
+
+test("body text survives autosave, page changes, and an immediate close", async ({ page }) => {
+  const state = await fixture(page, document(2));
+  await expect(
+    page.getByRole("button", { name: "Customize pages", exact: true }),
+  ).toBeVisible({ timeout: 60_000 });
+  await page.getByRole("button", { name: "Customize pages", exact: true }).click();
+
+  const dialog = page.getByRole("dialog");
+  await dialog.getByRole("button", { name: "Edit page 2", exact: true }).click();
+  const bodyEditor = dialog.locator(
+    'main .letter-page-document [contenteditable="true"]',
+  );
+  await bodyEditor.fill("A page draft that must survive autosave.");
+
+  await expect
+    .poll(() => state.updates.length, { timeout: 60_000 })
+    .toBeGreaterThan(0);
+  await expect(bodyEditor).toContainText("A page draft that must survive autosave.");
+
+  await dialog.getByRole("button", { name: "Edit page 1", exact: true }).click();
+  await dialog.getByRole("button", { name: "Edit page 2", exact: true }).click();
+  await expect(bodyEditor).toContainText("A page draft that must survive autosave.");
+
+  await bodyEditor.press("End");
+  await bodyEditor.pressSequentially(" Final words.");
+  await dialog.getByRole("button", { name: "Close", exact: true }).click();
+  await expect(dialog).toBeHidden({ timeout: 500 });
+  await expect
+    .poll(
+      () => text(state.exported().pages?.slice(1).flatMap((item) => item.blocks)),
+      { timeout: 60_000 },
+    )
+    .toContain("A page draft that must survive autosave. Final words.");
 });
 
 test("cover controls persist theme, branding, and author metadata", async ({ page }) => {

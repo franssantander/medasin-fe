@@ -48,6 +48,7 @@ type LetterPageCanvasProps = {
   onTitleChange?: (title: string) => void;
   onBlocksChange?: (blocks: unknown[]) => void;
   onCoverBodyChange?: (blocks: unknown[], plainText: string) => void;
+  onEditorDocumentChange?: (content: string) => void;
   onUploadFile?: (file: File) => Promise<string>;
   onEditorReady?: (controls: NoteRichTextEditorControls | null) => void;
   onHistoryStateChange?: (state: NoteEditorHistoryState) => void;
@@ -69,6 +70,7 @@ export const LetterPageCanvas = forwardRef<
     onTitleChange,
     onBlocksChange,
     onCoverBodyChange,
+    onEditorDocumentChange,
     onUploadFile = unavailable,
     onEditorReady = noop,
     onHistoryStateChange = noop,
@@ -218,6 +220,7 @@ export const LetterPageCanvas = forwardRef<
                     noteOptions={[]}
                     onChange={(content) => {
                       if (!editable) return;
+                      onEditorDocumentChange?.(content);
                       onCoverBodyChange?.(
                         parseNoteDocument(content).blocks,
                         getNoteDocumentPreview(content),
@@ -276,7 +279,7 @@ export const LetterPageCanvas = forwardRef<
 
             if (section === "hero" && cover.hero_image_url) {
               return (
-                <div key={section} className="min-h-[30%] flex-1 overflow-hidden rounded-[2cqw]">
+                <div key={section} className="min-h-[30%] w-full max-w-[92%] flex-1 overflow-hidden rounded-[2cqw]">
                   <Image
                     unoptimized
                     src={imageFetchSource(cover.hero_image_url)}
@@ -323,9 +326,10 @@ export const LetterPageCanvas = forwardRef<
               onContentApplied={onContentApplied}
               editable={editable}
               noteOptions={[]}
-              onChange={(content) =>
-                onBlocksChange?.(parseNoteDocument(content).blocks)
-              }
+              onChange={(content) => {
+                onEditorDocumentChange?.(content);
+                onBlocksChange?.(parseNoteDocument(content).blocks);
+              }}
               onUploadFile={onUploadFile}
               onCreateChild={unavailableChild}
               onOpenNote={noop}
@@ -368,9 +372,10 @@ export const LetterPageCanvas = forwardRef<
               onContentApplied={onContentApplied}
               editable={editable}
               noteOptions={[]}
-              onChange={(content) =>
-                onBlocksChange?.(parseNoteDocument(content).blocks)
-              }
+              onChange={(content) => {
+                onEditorDocumentChange?.(content);
+                onBlocksChange?.(parseNoteDocument(content).blocks);
+              }}
               onUploadFile={onUploadFile}
               onCreateChild={unavailableChild}
               onOpenNote={noop}

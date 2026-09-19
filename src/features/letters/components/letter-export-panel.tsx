@@ -4,13 +4,15 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import {
   AlertTriangle,
-  CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   Edit3,
   FileText,
   LoaderCircle,
   RefreshCw,
 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import {
@@ -168,6 +170,21 @@ export function LetterExportPanel({
   };
 
   const formatDetails = LETTER_EXPORT_FORMATS[format];
+  const statusLabel = preparationError
+    ? "Needs attention"
+    : isPreparing
+      ? "Rendering"
+      : currentExport?.status === "failed"
+        ? "Failed"
+        : isReady
+          ? "Ready"
+          : "Waiting";
+  const statusVariant =
+    preparationError || currentExport?.status === "failed"
+      ? "destructive"
+      : isReady
+        ? "secondary"
+        : "outline";
 
   return (
     <section
@@ -175,10 +192,11 @@ export function LetterExportPanel({
       className="flex min-h-0 flex-col overflow-hidden rounded-xl border bg-muted/20 p-3 sm:p-4"
     >
       <div className="flex shrink-0 flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
             <FileText className="size-4 text-muted-foreground" aria-hidden="true" />
             <h2 className="font-semibold">Export pages</h2>
+            <Badge variant={statusVariant}>{statusLabel}</Badge>
           </div>
           <p className="mt-1 text-sm text-muted-foreground">
             Review the page split before sharing.
@@ -275,15 +293,18 @@ export function LetterExportPanel({
         </div>
       )}
 
-      <div className="mt-4 flex shrink-0 flex-col gap-2 border-t pt-3" aria-live="polite">
-        <p className="text-center text-xs text-muted-foreground">
-          {isPreparing
-            ? `Rendering ${formatDetails.label} at ${formatDetails.width} × ${formatDetails.height}px…`
-            : currentExport?.status === "ready"
-            ? `${currentExport.page_count ?? pages.length} ${pages.length === 1 ? "page" : "pages"} · Rendered as ${LETTER_EXPORT_FORMATS[currentExport.format].label} ${LETTER_EXPORT_FORMATS[currentExport.format].ratio}`
-            : `${formatDetails.width} × ${formatDetails.height}px canvas`}
-        </p>
-      </div>
+      {!isReady && (
+        <div
+          className="mt-4 flex shrink-0 flex-col gap-2 border-t pt-3"
+          aria-live="polite"
+        >
+          <p className="text-center text-xs text-muted-foreground">
+            {isPreparing
+              ? `Rendering ${formatDetails.label} at ${formatDetails.width} × ${formatDetails.height}px…`
+              : `${formatDetails.width} × ${formatDetails.height}px canvas`}
+          </p>
+        </div>
+      )}
     </section>
   );
 }
@@ -305,7 +326,20 @@ function ReadyExport({
 }) {
   const [selectedPageIndex, setSelectedPageIndex] = useState(0);
   const [workspaceOpen, setWorkspaceOpen] = useState(false);
-  const selectedPage = pages[selectedPageIndex] ?? pages[0];
+  const thumbnailRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const safeSelectedPageIndex = Math.min(
+    selectedPageIndex,
+    Math.max(0, pages.length - 1),
+  );
+  const selectedPage = pages[safeSelectedPageIndex] ?? pages[0];
+
+  useEffect(() => {
+    thumbnailRefs.current[safeSelectedPageIndex]?.scrollIntoView({
+      behavior: "auto",
+      block: "nearest",
+      inline: "center",
+    });
+  }, [safeSelectedPageIndex]);
 
   if (!selectedPage) return null;
 
@@ -324,64 +358,104 @@ function ReadyExport({
         </div>
       )}
 
-      <div className="flex items-center justify-between gap-3">
-        <p className="text-xs font-medium text-muted-foreground">
-          Page {selectedPage.number} of {pages.length}
-        </p>
-        <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-          <CheckCircle2 className="size-3.5 text-emerald-600" aria-hidden="true" />
-          Ready
-        </span>
+      <div className="rounded-xl border bg-muted/40 p-2 sm:p-3">
+        <LetterPagePreview
+          page={selectedPage}
+          exportUuid={letterExport.uuid}
+          canvas={letterExport.canvas}
+        />
       </div>
 
-      <LetterPagePreview
-        page={selectedPage}
-        exportUuid={letterExport.uuid}
-        canvas={letterExport.canvas}
-      />
+      <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          size="icon-sm"
+          aria-label="View previous page"
+          title="Previous page"
+          disabled={safeSelectedPageIndex === 0}
+          onClick={() => setSelectedPageIndex((index) => Math.max(0, index - 1))}
+        >
+          <ChevronLeft />
+        </Button>
+        <p className="text-center text-sm font-medium" aria-live="polite">
+          Page {selectedPage.number} of {pages.length}
+        </p>
+        <Button
+          type="button"
+          variant="outline"
+          size="icon-sm"
+          aria-label="View next page"
+          title="Next page"
+          disabled={safeSelectedPageIndex === pages.length - 1}
+          onClick={() =>
+            setSelectedPageIndex((index) =>
+              Math.min(pages.length - 1, index + 1),
+            )
+          }
+        >
+          <ChevronRight />
+        </Button>
+      </div>
 
       <div
-        className="flex min-w-0 gap-2 overflow-x-auto pb-1"
+        className="flex min-w-0 snap-x snap-mandatory items-start gap-2 overflow-x-auto px-1 pb-2"
         aria-label="Letter pages"
+        onKeyDown={(event) => {
+          if (event.key === "ArrowLeft") {
+            event.preventDefault();
+            setSelectedPageIndex((index) => Math.max(0, index - 1));
+          } else if (event.key === "ArrowRight") {
+            event.preventDefault();
+            setSelectedPageIndex((index) =>
+              Math.min(pages.length - 1, index + 1),
+            );
+          }
+        }}
       >
         {pages.map((page, index) => (
           <button
             key={`${letterExport.uuid}-${page.number}`}
+            ref={(node) => {
+              thumbnailRefs.current[index] = node;
+            }}
             type="button"
-            aria-label={`View page ${page.number}`}
-            aria-current={index === selectedPageIndex ? "page" : undefined}
+            aria-label={`View ${index === 0 ? "cover" : `page ${page.number}`}`}
+            aria-current={index === safeSelectedPageIndex ? "page" : undefined}
             className={cn(
-              "min-w-20 snap-start rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 sm:min-w-24",
-              index === selectedPageIndex && "ring-2 ring-ring/40",
+              "grid w-20 shrink-0 snap-center grid-rows-[auto_1rem] gap-1 rounded-md p-1 outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 sm:w-24",
+              index === safeSelectedPageIndex && "bg-muted",
             )}
             onClick={() => setSelectedPageIndex(index)}
           >
             <LetterPageThumbnail
               page={page}
               canvas={letterExport.canvas}
-              selected={index === selectedPageIndex}
+              selected={index === safeSelectedPageIndex}
             />
+            <span className="h-4 truncate px-1 text-center text-[0.6875rem] leading-4 font-medium text-muted-foreground">
+              {index === 0 ? "Cover" : `Page ${page.number}`}
+            </span>
           </button>
         ))}
       </div>
 
-      <div className="grid gap-2 border-t pt-3 sm:flex sm:items-center sm:justify-between">
+      <div className="sticky bottom-0 grid gap-3 rounded-lg border bg-background/95 p-3 shadow-sm backdrop-blur sm:flex sm:items-center sm:justify-between">
         <div className="min-w-0">
           <p className="text-sm font-medium">Customize your page set</p>
           <p className="text-xs text-muted-foreground">
-            Edit the copy, adjust text size, and download exact-size PNG images.
+            {pages.length} {pages.length === 1 ? "page" : "pages"} · {LETTER_EXPORT_FORMATS[letterExport.format].shortLabel} {LETTER_EXPORT_FORMATS[letterExport.format].ratio}
           </p>
         </div>
-        <div className="flex shrink-0 flex-wrap gap-2">
-          <Button
-            type="button"
-            size="sm"
-            onClick={() => setWorkspaceOpen(true)}
-          >
-            <Edit3 data-icon="inline-start" />
-            Customize pages
-          </Button>
-        </div>
+        <Button
+          type="button"
+          size="sm"
+          className="w-full sm:w-auto"
+          onClick={() => setWorkspaceOpen(true)}
+        >
+          <Edit3 data-icon="inline-start" />
+          Customize pages
+        </Button>
       </div>
       <LetterPageWorkspace
         open={workspaceOpen}
@@ -423,8 +497,15 @@ function ExportState({
 function ExportPreviewSkeleton() {
   return (
     <div className="grid gap-3" aria-label="Loading letter preview">
-      <Skeleton className="aspect-[4/5] w-full rounded-xl" />
-      <div className="flex gap-2">
+      <div className="rounded-xl border bg-muted/40 p-2 sm:p-3">
+        <Skeleton className="aspect-[4/5] w-full rounded-lg" />
+      </div>
+      <div className="grid grid-cols-[auto_1fr_auto] items-center gap-2">
+        <Skeleton className="size-8 rounded-md" />
+        <Skeleton className="mx-auto h-4 w-24" />
+        <Skeleton className="size-8 rounded-md" />
+      </div>
+      <div className="flex gap-2 overflow-hidden">
         <Skeleton className="aspect-[4/5] min-w-20 rounded-md" />
         <Skeleton className="aspect-[4/5] min-w-20 rounded-md" />
         <Skeleton className="aspect-[4/5] min-w-20 rounded-md" />

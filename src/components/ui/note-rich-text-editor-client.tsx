@@ -388,6 +388,7 @@ export type NoteRichTextEditorControls = {
   undo: () => boolean;
   redo: () => boolean;
   focusFirstBlock: () => void;
+  getContent: () => string;
   getSelection: () => NoteEditorSelection | null;
   restoreSelection: (selection: NoteEditorSelection) => void;
   isComposing: () => boolean;
@@ -563,6 +564,7 @@ export function NoteRichTextEditorClient({
   }, [editor]);
   const editorControls = useMemo<NoteRichTextEditorControls>(
     () => ({
+      getContent: () => serializeNoteDocument(editor.document),
       isComposing: () => editor.prosemirrorView.composing,
       isSlashMenuOpen: () =>
         editor.getExtension(SuggestionMenuExtension)?.shown() ?? false,

@@ -57,7 +57,11 @@ import type {
   NoteEditorSelection,
   NoteRichTextEditorControls,
 } from "@/components/ui/note-rich-text-editor-client";
-import { serializeNoteDocument } from "@/components/ui/note-editor-document";
+import {
+  getNoteDocumentPreview,
+  parseNoteDocument,
+  serializeNoteDocument,
+} from "@/components/ui/note-editor-document";
 import {
   Select,
   SelectContent,
@@ -148,6 +152,7 @@ export function LetterPageWorkspace({
   const selectedPageNumberRef = useRef(1);
   const reflowedExportRef = useRef<string | undefined>(undefined);
   const controlsRef = useRef<NoteRichTextEditorControls | null>(null);
+  const editorDraftRef = useRef<{ pageUuid: string; content: string } | null>(null);
   const pendingSelectionRef = useRef<NoteEditorSelection | null>(null);
   const onLayout = useCallback((result: LetterPageFlowResult) => {
     const selection = controlsRef.current?.getSelection();
@@ -166,12 +171,39 @@ export function LetterPageWorkspace({
   const preparePages = useCallback(
     async (currentPages: LetterPage[], signal: AbortSignal) => {
       const { flowLetterPages } = await import("../letter-page-flow");
-      return flowLetterPages(
-        currentPages,
+      const draft = editorDraftRef.current;
+      const pagesWithDraft = draft
+        ? currentPages.map((page) => {
+            if (page.uuid !== draft.pageUuid) return page;
+
+            const blocks = parseNoteDocument(draft.content).blocks;
+            if (page.layout !== "cover") return { ...page, blocks };
+
+            return {
+              ...page,
+              blocks,
+              subtitle: getNoteDocumentPreview(draft.content).slice(0, 240) || null,
+              cover: {
+                ...normalizeLetterCover(page.cover),
+                description_blocks: blocks,
+              },
+            };
+          })
+        : currentPages;
+      const result = await flowLetterPages(
+        pagesWithDraft,
         letterExport.canvas,
         letterExport.uuid,
         signal,
       );
+      if (
+        draft &&
+        editorDraftRef.current?.pageUuid === draft.pageUuid &&
+        editorDraftRef.current.content === draft.content
+      ) {
+        editorDraftRef.current = null;
+      }
+      return result;
     },
     [letterExport.canvas, letterExport.uuid],
   );
@@ -293,6 +325,7 @@ export function LetterPageWorkspace({
 
     closingRef.current = true;
     setClosing(true);
+    commitActiveEditor();
     const pendingSave = flush();
     onOpenChange(false);
     try {
@@ -319,6 +352,39 @@ export function LetterPageWorkspace({
       current.map((page) =>
         page.uuid === currentUuid ? { ...page, ...update } : page,
       ),
+    );
+  }, [updatePages]);
+
+  const rememberEditorDocument = useCallback((content: string) => {
+    const pageUuid = selectedUuidRef.current;
+    if (pageUuid) editorDraftRef.current = { pageUuid, content };
+  }, []);
+
+  const commitActiveEditor = useCallback(() => {
+    const pageUuid = selectedUuidRef.current;
+    const content = controlsRef.current?.getContent();
+    if (!pageUuid || content === undefined) return;
+
+    editorDraftRef.current = { pageUuid, content };
+    const blocks = parseNoteDocument(content).blocks;
+    const plainText = getNoteDocumentPreview(content);
+    updatePages((current) =>
+      current.map((page) => {
+        if (page.uuid !== pageUuid) return page;
+        if (page.layout !== "cover") {
+          return serializeNoteDocument(page.blocks) === content
+            ? page
+            : { ...page, blocks };
+        }
+
+        const cover = normalizeLetterCover(page.cover);
+        return {
+          ...page,
+          blocks,
+          subtitle: plainText.slice(0, 240) || null,
+          cover: { ...cover, description_blocks: blocks },
+        };
+      }),
     );
   }, [updatePages]);
 
@@ -553,12 +619,13 @@ export function LetterPageWorkspace({
   ]);
 
   const selectPage = useCallback((uuid: string) => {
+    commitActiveEditor();
     const page = pages.find((item) => item.uuid === uuid);
     selectedPageNumberRef.current = page?.number ?? 1;
     selectedUuidRef.current = uuid;
     setSelectedUuid(uuid);
     setConfirmingDelete(false);
-  }, [pages]);
+  }, [commitActiveEditor, pages]);
 
   const handleTextScaleChange = (event: ChangeEvent<HTMLInputElement>) => {
     updateSelected({
@@ -615,6 +682,7 @@ export function LetterPageWorkspace({
         document.activeElement.blur();
       }
       await Promise.resolve();
+      commitActiveEditor();
       await flush();
       const latestPages = getPages();
       const latestSelectedPage =
@@ -727,6 +795,7 @@ export function LetterPageWorkspace({
                   });
                   updateCover({ description_blocks: blocks });
                 }}
+                onEditorDocumentChange={rememberEditorDocument}
                 onUploadFile={uploadImage}
                 onEditorReady={handleEditorReady}
                 onContentApplied={restorePendingSelection}
