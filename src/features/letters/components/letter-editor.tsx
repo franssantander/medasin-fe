@@ -1,11 +1,18 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Redo2, Undo2 } from "lucide-react";
+import { FileText, Redo2, Undo2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { NoteRichTextEditor } from "@/components/ui/note-rich-text-editor";
+import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/toast";
 import type {
   NoteEditorHistoryState,
@@ -47,6 +54,9 @@ export function LetterEditor({
   const [editorControls, setEditorControls] =
     useState<NoteRichTextEditorControls | null>(null);
   const [activeExportUuid, setActiveExportUuid] = useState<string>();
+  const [exportOpen, setExportOpen] = useState(false);
+  const [previewPageIndex, setPreviewPageIndex] = useState(0);
+  const [editorRevision, setEditorRevision] = useState(0);
   const autosave = useLetterAutosave({
     initialUuid: letter?.uuid,
     initialTitle: letter?.title ?? "",
@@ -66,6 +76,7 @@ export function LetterEditor({
   const handlePagesSaved = useCallback(
     (savedLetter: Letter) => {
       autosave.replaceSavedLetter(savedLetter);
+      setEditorRevision((revision) => revision + 1);
       onSaved(savedLetter, false);
     },
     [autosave, onSaved],
@@ -136,14 +147,79 @@ export function LetterEditor({
   );
 
   return (
-    <div className="flex h-full min-h-0 min-w-0 flex-col gap-4 overflow-y-auto lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(19rem,25rem)] lg:overflow-hidden">
-      <div className="flex min-h-[34rem] min-w-0 flex-col gap-4 lg:min-h-0">
-        <div className="grid shrink-0 gap-3">
-          <div className="flex min-w-0 items-start gap-2">
-            <Input
+    <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
+      <div className="shrink-0 border-b bg-background/95 px-3 py-2 sm:px-5">
+        <div className="mx-auto flex w-full max-w-4xl items-center gap-2">
+          <span
+            className="mr-auto truncate text-xs text-muted-foreground"
+            aria-live="polite"
+          >
+            {autosave.saveStatus === "saving" ? (
+              "Saving..."
+            ) : autosave.saveStatus === "dirty" ? (
+              "Unsaved changes"
+            ) : autosave.saveStatus === "saved" ? (
+              "Saved"
+            ) : autosave.saveStatus === "error" ? (
+              <button
+                type="button"
+                className="text-destructive underline underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                onClick={() => void autosave.flush().catch(() => undefined)}
+              >
+                Retry save
+              </button>
+            ) : letter?.updated_at ? (
+              `Updated ${formatEditorTimestamp(letter.updated_at)}`
+            ) : (
+              "Ready to write"
+            )}
+          </span>
+          <Badge variant="outline" className="hidden sm:inline-flex">
+            {wordCount.toLocaleString()} {wordCount === 1 ? "word" : "words"}
+          </Badge>
+          <Badge variant="secondary" className="hidden md:inline-flex">
+            {readTimeMinutes} {readTimeMinutes === 1 ? "min" : "mins"} read
+          </Badge>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            aria-label="Undo editor change"
+            title="Undo"
+            disabled={!historyState.canUndo}
+            onPointerDown={(event) => event.preventDefault()}
+            onClick={() => editorControls?.undo()}
+          >
+            <Undo2 />
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            aria-label="Redo editor change"
+            title="Redo"
+            disabled={!historyState.canRedo}
+            onPointerDown={(event) => event.preventDefault()}
+            onClick={() => editorControls?.redo()}
+          >
+            <Redo2 />
+          </Button>
+          <Button type="button" size="sm" onClick={() => setExportOpen(true)}>
+            <FileText data-icon="inline-start" />
+            <span className="hidden sm:inline">Preview pages</span>
+            <span className="sr-only sm:hidden">Preview pages</span>
+          </Button>
+        </div>
+      </div>
+
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="mx-auto flex min-h-full w-full max-w-3xl flex-col px-5 py-8 sm:px-8 sm:py-12 lg:py-14">
+          <div className="grid shrink-0 gap-3 px-[3.25rem]">
+            <Textarea
               aria-label="Letter title"
               autoFocus={!letter}
-              className="h-auto min-w-0 flex-1 border-0 px-0 py-0 text-2xl font-bold shadow-none focus-visible:ring-0 md:text-3xl"
+              rows={1}
+              className="min-h-0 resize-none overflow-hidden border-0 px-0 py-0 font-spectral text-xl leading-relaxed font-semibold tracking-tight shadow-none focus-visible:ring-0 md:text-xl"
               placeholder="Untitled letter"
               maxLength={120}
               value={autosave.title}
@@ -158,107 +234,76 @@ export function LetterEditor({
                 editorControls?.focusFirstBlock();
               }}
             />
+            <Textarea
+              aria-label="Letter subtitle"
+              rows={1}
+              className="min-h-0 resize-none overflow-hidden border-0 px-0 py-0 text-xl leading-relaxed text-muted-foreground shadow-none focus-visible:ring-0 md:text-xl"
+              placeholder="Optional subtitle"
+              maxLength={240}
+              value={autosave.subtitle}
+              onChange={(event) => autosave.updateSubtitle(event.target.value)}
+              onBlur={() => void autosave.flush().catch(() => undefined)}
+              onKeyDown={(event) => {
+                if (event.key !== "Enter" || event.nativeEvent.isComposing) {
+                  return;
+                }
+
+                event.preventDefault();
+                editorControls?.focusFirstBlock();
+              }}
+            />
           </div>
 
-          <Input
-            aria-label="Letter subtitle"
-            className="h-auto border-0 px-0 py-0 text-base text-muted-foreground shadow-none focus-visible:ring-0"
-            placeholder="Optional subtitle"
-            maxLength={240}
-            value={autosave.subtitle}
-            onChange={(event) => autosave.updateSubtitle(event.target.value)}
-            onBlur={() => void autosave.flush().catch(() => undefined)}
-          />
-
-          <div className="flex flex-wrap items-center gap-2">
-            <span
-              className="mr-auto text-xs text-muted-foreground"
-              aria-live="polite"
-            >
-              {autosave.saveStatus === "saving" ? (
-                "Saving..."
-              ) : autosave.saveStatus === "dirty" ? (
-                "Unsaved changes"
-              ) : autosave.saveStatus === "saved" ? (
-                "Saved"
-              ) : autosave.saveStatus === "error" ? (
-                <button
-                  type="button"
-                  className="text-destructive underline underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  onClick={() => void autosave.flush().catch(() => undefined)}
-                >
-                  Retry save
-                </button>
-              ) : letter?.updated_at ? (
-                `Updated ${formatEditorTimestamp(letter.updated_at)}`
-              ) : null}
-            </span>
-            <Badge variant="outline">
-              {wordCount.toLocaleString()} {wordCount === 1 ? "word" : "words"}
-            </Badge>
-            <Badge variant="secondary">
-              {readTimeMinutes} {readTimeMinutes === 1 ? "min" : "mins"} read
-            </Badge>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              aria-label="Undo editor change"
-              title="Undo"
-              disabled={!historyState.canUndo}
-              onPointerDown={(event) => event.preventDefault()}
-              onClick={() => editorControls?.undo()}
-            >
-              <Undo2 />
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              aria-label="Redo editor change"
-              title="Redo"
-              disabled={!historyState.canRedo}
-              onPointerDown={(event) => event.preventDefault()}
-              onClick={() => editorControls?.redo()}
-            >
-              <Redo2 />
-            </Button>
+          <div className="letter-composer-document mt-8 flex min-h-[32rem] min-w-0 flex-1 overflow-hidden border-t bg-background pt-6">
+            <NoteRichTextEditor
+              mode="letter"
+              documentId={`${letter?.uuid ?? `letter-draft-${draftKey}`}-${editorRevision}`}
+              content={autosave.content}
+              editable
+              noteOptions={[]}
+              onChange={autosave.updateContent}
+              onUploadFile={handleUploadImage}
+              onCreateChild={unavailableChild}
+              onOpenNote={noop}
+              onEditorReady={setEditorControls}
+              onHistoryStateChange={setHistoryState}
+              onBlur={() => void autosave.flush().catch(() => undefined)}
+            />
           </div>
-        </div>
-
-        <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden rounded-lg border bg-white">
-          <NoteRichTextEditor
-            mode="letter"
-            documentId={letter?.uuid ?? `letter-draft-${draftKey}`}
-            content={autosave.content}
-            syncContent
-            editable
-            noteOptions={[]}
-            onChange={autosave.updateContent}
-            onUploadFile={handleUploadImage}
-            onCreateChild={unavailableChild}
-            onOpenNote={noop}
-            onEditorReady={setEditorControls}
-            onHistoryStateChange={setHistoryState}
-            onBlur={() => void autosave.flush().catch(() => undefined)}
-          />
         </div>
       </div>
 
-      <LetterExportPanel
-        letterUuid={letter?.uuid ?? autosave.activeUuid}
-        letterTitle={autosave.title.trim() || "Untitled letter"}
-        latestExport={letter?.latest_export}
-        activeExportUuid={activeExportUuid}
-        onExport={handleExport}
-        onPagesSaved={handlePagesSaved}
-        exportPending={exportMutation.isPending}
-        hasUnsavedChanges={
-          autosave.saveStatus === "dirty" ||
-          autosave.saveStatus === "saving" ||
-          autosave.saveStatus === "error"
-        }
-      />
+      <Dialog open={exportOpen} onOpenChange={setExportOpen}>
+        <DialogContent
+          className="h-[calc(100dvh-1rem)] max-h-none w-[calc(100%-1rem)] max-w-6xl gap-0 overflow-hidden p-0 sm:h-[calc(100dvh-2rem)] sm:w-[calc(100%-2rem)]"
+        >
+          <DialogHeader className="sr-only">
+            <DialogTitle>Preview letter pages</DialogTitle>
+            <DialogDescription>
+              Review, customize, and download your letter as social pages.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="min-h-0 flex-1 overflow-hidden p-3 pt-12 sm:p-4 sm:pt-12">
+            <LetterExportPanel
+              className="h-full rounded-none border-0 bg-transparent p-0 shadow-none"
+              letterUuid={letter?.uuid ?? autosave.activeUuid}
+              letterTitle={autosave.title.trim() || "Untitled letter"}
+              latestExport={letter?.latest_export}
+              activeExportUuid={activeExportUuid}
+              onExport={handleExport}
+              onPagesSaved={handlePagesSaved}
+              selectedPageIndex={previewPageIndex}
+              onSelectedPageIndexChange={setPreviewPageIndex}
+              exportPending={exportMutation.isPending}
+              hasUnsavedChanges={
+                autosave.saveStatus === "dirty" ||
+                autosave.saveStatus === "saving" ||
+                autosave.saveStatus === "error"
+              }
+            />
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

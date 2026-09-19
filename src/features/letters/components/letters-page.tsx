@@ -6,7 +6,7 @@ export function LettersPage({
   initialLetterUuid?: string;
 }) {
   return (
-    <div className="h-[calc(100dvh-5.5rem)] sm:h-[calc(100dvh-6.5rem)]">
+    <div className="h-[calc(100dvh-5.5rem)] min-h-0 min-w-0 sm:h-[calc(100dvh-6.5rem)]">
       <LetterWorkspace initialLetterUuid={initialLetterUuid} />
     </div>
   );

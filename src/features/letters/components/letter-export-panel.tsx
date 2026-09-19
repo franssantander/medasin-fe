@@ -43,21 +43,27 @@ import { LetterPagePreview, LetterPageThumbnail } from "./letter-page-preview";
 import { LetterPageWorkspace } from "./letter-page-workspace";
 
 export function LetterExportPanel({
+  className,
   letterUuid,
   letterTitle,
   latestExport,
   activeExportUuid,
   onExport,
   onPagesSaved,
+  selectedPageIndex = 0,
+  onSelectedPageIndexChange,
   exportPending = false,
   hasUnsavedChanges = false,
 }: {
+  className?: string;
   letterUuid?: string;
   letterTitle: string;
   latestExport?: LetterExport | null;
   activeExportUuid?: string;
   onExport: (format: LetterExportFormat) => Promise<void>;
   onPagesSaved: (letter: Letter) => void;
+  selectedPageIndex?: number;
+  onSelectedPageIndexChange?: (index: number) => void;
   exportPending?: boolean;
   hasUnsavedChanges?: boolean;
 }) {
@@ -189,7 +195,10 @@ export function LetterExportPanel({
   return (
     <section
       aria-label="Letter export preview"
-      className="flex min-h-0 flex-col overflow-hidden rounded-xl border bg-muted/20 p-3 sm:p-4"
+      className={cn(
+        "flex min-h-0 flex-col overflow-hidden rounded-xl border bg-muted/20 p-3 sm:p-4",
+        className,
+      )}
     >
       <div className="flex shrink-0 flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
@@ -279,6 +288,8 @@ export function LetterExportPanel({
             letterTitle={letterTitle}
             hasUnsavedChanges={hasUnsavedChanges}
             onPagesSaved={onPagesSaved}
+            selectedPageIndex={selectedPageIndex}
+            onSelectedPageIndexChange={onSelectedPageIndexChange}
           />
         )}
       </div>
@@ -316,6 +327,8 @@ function ReadyExport({
   letterTitle,
   hasUnsavedChanges,
   onPagesSaved,
+  selectedPageIndex,
+  onSelectedPageIndexChange,
 }: {
   letterExport: LetterExport;
   pages: LetterPage[];
@@ -323,8 +336,9 @@ function ReadyExport({
   letterTitle: string;
   hasUnsavedChanges: boolean;
   onPagesSaved: (letter: Letter) => void;
+  selectedPageIndex: number;
+  onSelectedPageIndexChange?: (index: number) => void;
 }) {
-  const [selectedPageIndex, setSelectedPageIndex] = useState(0);
   const [workspaceOpen, setWorkspaceOpen] = useState(false);
   const thumbnailRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const safeSelectedPageIndex = Math.min(
@@ -374,7 +388,11 @@ function ReadyExport({
           aria-label="View previous page"
           title="Previous page"
           disabled={safeSelectedPageIndex === 0}
-          onClick={() => setSelectedPageIndex((index) => Math.max(0, index - 1))}
+          onClick={() =>
+            onSelectedPageIndexChange?.(
+              Math.max(0, safeSelectedPageIndex - 1),
+            )
+          }
         >
           <ChevronLeft />
         </Button>
@@ -389,8 +407,8 @@ function ReadyExport({
           title="Next page"
           disabled={safeSelectedPageIndex === pages.length - 1}
           onClick={() =>
-            setSelectedPageIndex((index) =>
-              Math.min(pages.length - 1, index + 1),
+            onSelectedPageIndexChange?.(
+              Math.min(pages.length - 1, safeSelectedPageIndex + 1),
             )
           }
         >
@@ -404,11 +422,13 @@ function ReadyExport({
         onKeyDown={(event) => {
           if (event.key === "ArrowLeft") {
             event.preventDefault();
-            setSelectedPageIndex((index) => Math.max(0, index - 1));
+            onSelectedPageIndexChange?.(
+              Math.max(0, safeSelectedPageIndex - 1),
+            );
           } else if (event.key === "ArrowRight") {
             event.preventDefault();
-            setSelectedPageIndex((index) =>
-              Math.min(pages.length - 1, index + 1),
+            onSelectedPageIndexChange?.(
+              Math.min(pages.length - 1, safeSelectedPageIndex + 1),
             );
           }
         }}
@@ -426,7 +446,7 @@ function ReadyExport({
               "grid w-20 shrink-0 snap-center grid-rows-[auto_1rem] gap-1 rounded-md p-1 outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 sm:w-24",
               index === safeSelectedPageIndex && "bg-muted",
             )}
-            onClick={() => setSelectedPageIndex(index)}
+            onClick={() => onSelectedPageIndexChange?.(index)}
           >
             <LetterPageThumbnail
               page={page}

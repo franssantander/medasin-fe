@@ -246,6 +246,11 @@
     font-family: var(--font-sans);
   }
 
+  .letter-composer-document .note-rich-text .bn-editor {
+    font-size: 1.25rem;
+    line-height: 1.75;
+  }
+
   .note-rich-text .bn-editor > .bn-block-group,
   .note-rich-text .bn-editor > .bn-block-group > .bn-block-outer,
   .note-rich-text .bn-block-content,
