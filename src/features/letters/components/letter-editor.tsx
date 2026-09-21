@@ -228,14 +228,14 @@ export function LetterEditor({
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto bg-muted/20">
-        <div className="mx-auto flex min-h-full w-full max-w-3xl flex-col bg-background px-5 py-10 sm:px-8 sm:py-14 lg:py-16">
+      <div className="min-h-0 flex-1 overflow-y-auto bg-zinc-100/90 px-3 transition-colors duration-200 sm:px-6 dark:bg-zinc-900/80">
+        <div className="mx-auto my-4 flex min-h-[calc(100%-2rem)] w-full max-w-3xl flex-col rounded-xl border border-zinc-200 bg-white px-5 py-10 text-zinc-950 shadow-sm sm:my-6 sm:min-h-[calc(100%-3rem)] sm:px-8 sm:py-14 lg:py-16">
           <div className="grid shrink-0 gap-4 sm:px-[3.25rem]">
             <Textarea
               aria-label="Letter title"
               autoFocus={!letter}
               rows={1}
-              className="min-h-0 resize-none overflow-hidden border-0 bg-transparent px-0 py-0 font-spectral text-4xl leading-[1.08] font-semibold tracking-[-0.025em] text-foreground shadow-none placeholder:text-muted-foreground/60 focus-visible:ring-0 md:text-5xl dark:bg-transparent"
+              className="min-h-0 resize-none overflow-hidden border-0 bg-transparent px-0 py-0 font-spectral text-4xl leading-[1.08] font-semibold tracking-[-0.025em] text-zinc-950 caret-zinc-950 shadow-none placeholder:text-zinc-400 focus-visible:ring-0 md:text-5xl dark:bg-transparent"
               placeholder="Untitled letter"
               maxLength={120}
               value={autosave.title}
@@ -253,7 +253,7 @@ export function LetterEditor({
             <Textarea
               aria-label="Letter subtitle"
               rows={1}
-              className="min-h-0 max-w-[65ch] resize-none overflow-hidden border-0 bg-transparent px-0 py-0 text-lg leading-relaxed font-normal text-muted-foreground shadow-none placeholder:text-muted-foreground/60 focus-visible:ring-0 sm:text-xl dark:bg-transparent"
+              className="min-h-0 max-w-[65ch] resize-none overflow-hidden border-0 bg-transparent px-0 py-0 text-lg leading-relaxed font-normal text-zinc-600 caret-zinc-950 shadow-none placeholder:text-zinc-400 focus-visible:ring-0 sm:text-xl dark:bg-transparent"
               placeholder="Add a short description for your letter"
               maxLength={240}
               value={autosave.subtitle}
@@ -270,7 +270,7 @@ export function LetterEditor({
             />
           </div>
 
-          <div className="letter-composer-document mt-10 flex min-h-[32rem] min-w-0 flex-1 overflow-hidden border-t bg-background pt-7">
+          <div className="letter-composer-document mt-10 flex min-h-[32rem] min-w-0 flex-1 overflow-hidden border-t border-zinc-200 bg-white pt-7">
             <NoteRichTextEditor
               mode="letter"
               formattingToolbarMode="persistent"
