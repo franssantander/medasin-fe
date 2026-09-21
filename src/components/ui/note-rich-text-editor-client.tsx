@@ -38,8 +38,10 @@ import {
   Bookmark,
   Crop,
   FilePlus2,
+  ImagePlus,
   Link2,
   LoaderCircle,
+  Minus,
   NotebookTabs,
 } from "lucide-react";
 import {
@@ -53,6 +55,7 @@ import {
   useLayoutEffect,
   type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
+import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -175,19 +178,55 @@ function ImageCropToolbarButton({
 
 function NoteFormattingToolbar({
   allowImageCrop,
+  allowBlockInsertion,
   onCropImage,
 }: {
   allowImageCrop: boolean;
+  allowBlockInsertion: boolean;
   onCropImage: (request: CropImageRequest) => void;
 }) {
   const defaultItems = getFormattingToolbarItems();
 
   return (
     <FormattingToolbar>
-      {defaultItems.slice(0, 4)}
+      {defaultItems.slice(0, 1)}
+      {allowBlockInsertion && <LetterInsertToolbarButtons />}
+      {defaultItems.slice(1, 4)}
       {allowImageCrop && <ImageCropToolbarButton onCropImage={onCropImage} />}
       {defaultItems.slice(4)}
     </FormattingToolbar>
+  );
+}
+
+function LetterInsertToolbarButtons() {
+  const Components = useComponentsContext();
+  const editor = useBlockNoteEditor();
+
+  if (!Components) return null;
+
+  const insertBlock = (type: "image" | "divider") => {
+    const currentBlock = editor.getTextCursorPosition().block;
+    editor.insertBlocks([{ type }], currentBlock, "after");
+    editor.focus();
+  };
+
+  return (
+    <>
+      <Components.FormattingToolbar.Button
+        className="bn-button"
+        label="Insert image"
+        mainTooltip="Insert image"
+        icon={<ImagePlus size={16} />}
+        onClick={() => insertBlock("image")}
+      />
+      <Components.FormattingToolbar.Button
+        className="bn-button"
+        label="Insert divider"
+        mainTooltip="Insert divider"
+        icon={<Minus size={16} />}
+        onClick={() => insertBlock("divider")}
+      />
+    </>
   );
 }
 
@@ -368,6 +407,8 @@ type ImageCropSession = CropImageRequest & {
 export type NoteRichTextEditorClientProps = {
   mode?: "note" | "task" | "resource" | "letter";
   editorChrome?: "full" | "formatting-only" | "none";
+  formattingToolbarMode?: "floating" | "persistent";
+  formattingToolbarContainer?: HTMLElement | null;
   slashMenuPortalToBody?: boolean;
   documentId: string;
   content: string;
@@ -409,6 +450,8 @@ export type NoteEditorHistoryState = {
 export function NoteRichTextEditorClient({
   mode = "note",
   editorChrome = "full",
+  formattingToolbarMode = "floating",
+  formattingToolbarContainer,
   slashMenuPortalToBody = false,
   documentId,
   content,
@@ -505,10 +548,13 @@ export function NoteRichTextEditorClient({
     () => (
       <NoteFormattingToolbar
         allowImageCrop={mode === "note" || mode === "letter"}
+        allowBlockInsertion={
+          mode === "letter" && formattingToolbarMode === "persistent"
+        }
         onCropImage={(request) => void prepareImageCrop(request)}
       />
     ),
-    [mode, prepareImageCrop],
+    [formattingToolbarMode, mode, prepareImageCrop],
   );
 
   useEffect(
@@ -932,9 +978,22 @@ export function NoteRichTextEditorClient({
         >
           {editable && editorChrome !== "none" && (
             <>
-              <FormattingToolbarController
-                formattingToolbar={noteFormattingToolbar}
-              />
+              {formattingToolbarMode === "persistent" ? (
+                formattingToolbarContainer ? (
+                  createPortal(
+                    <NoteFormattingToolbar
+                      allowImageCrop={mode === "note" || mode === "letter"}
+                      allowBlockInsertion={mode === "letter"}
+                      onCropImage={(request) => void prepareImageCrop(request)}
+                    />,
+                    formattingToolbarContainer,
+                  )
+                ) : null
+              ) : (
+                <FormattingToolbarController
+                  formattingToolbar={noteFormattingToolbar}
+                />
+              )}
               {editorChrome === "full" ? (
                 <>
                   <SideMenuController sideMenu={NoteBlockSideMenu} />

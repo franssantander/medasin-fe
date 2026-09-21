@@ -131,6 +131,51 @@ test("letter text accepts a space immediately after a colon", async ({ page }) =
     .toContain("reliable: how well");
 });
 
+test("letters use a persistent CMS toolbar and editorial typography", async ({
+  page,
+}) => {
+  const state = await fixture(
+    page,
+    JSON.stringify({
+      version: 1,
+      blocks: [{ id: "paragraph", type: "paragraph", content: [] }],
+    }),
+  );
+  const toolbar = page.getByRole("toolbar", {
+    name: "Letter formatting",
+  });
+  const title = page.getByRole("textbox", { name: "Letter title" });
+  const description = page.getByRole("textbox", {
+    name: "Letter subtitle",
+  });
+  const editor = page.locator(
+    '.letter-composer-document [contenteditable="true"]',
+  );
+
+  await expect(toolbar).toBeVisible({ timeout: 60_000 });
+  await expect(toolbar.getByRole("button", { name: "Bold" })).toBeVisible();
+  await expect(
+    toolbar.getByRole("button", { name: "Insert image" }),
+  ).toBeVisible();
+  await expect(title).toHaveCSS("font-family", /Spectral/);
+  await expect(title).toHaveCSS("font-size", "48px");
+  await expect(description).toHaveCSS("font-size", "20px");
+
+  await editor.click();
+  await toolbar.getByRole("button", { name: "Bold" }).click();
+  await page.keyboard.type("A formatted letter body");
+
+  await expect
+    .poll(() => state.letter().content, { timeout: 60_000 })
+    .toContain('"bold":true');
+
+  await page.setViewportSize({ width: 375, height: 812 });
+  await expect(title).toHaveCSS("font-size", "36px");
+  expect(
+    await page.evaluate(() => window.document.documentElement.scrollWidth),
+  ).toBeLessThanOrEqual(375);
+});
+
 for (const format of ["portrait", "square", "story", "landscape"] as const) {
   test(`${format}: measured pages preserve text, fit, and reflow with text size`, async ({ page }) => {
     const original = document(100);

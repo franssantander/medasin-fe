@@ -246,11 +246,6 @@
     font-family: var(--font-sans);
   }
 
-  .letter-composer-document .note-rich-text .bn-editor {
-    font-size: 1.25rem;
-    line-height: 1.75;
-  }
-
   .note-rich-text .bn-editor > .bn-block-group,
   .note-rich-text .bn-editor > .bn-block-group > .bn-block-outer,
   .note-rich-text .bn-block-content,
@@ -306,6 +301,60 @@
 
 /* Keep page-rendering rules outside Tailwind's layers so they can override
    BlockNote's unlayered default editor styles. */
+.letter-composer-document .note-rich-text .bn-editor {
+  padding-inline: 0;
+  font-size: 1.125rem;
+  line-height: 1.75;
+}
+
+.letter-formatting-toolbar {
+  scrollbar-color: color-mix(
+      in oklab,
+      var(--muted-foreground) 40%,
+      transparent
+    )
+    transparent;
+  scrollbar-width: thin;
+}
+
+.letter-formatting-toolbar .bn-toolbar {
+  width: max-content;
+  min-width: 100%;
+  max-width: none;
+  justify-content: flex-start;
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
+  box-shadow: none;
+}
+
+.letter-formatting-toolbar::-webkit-scrollbar {
+  height: 6px;
+}
+
+.letter-formatting-toolbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.letter-formatting-toolbar::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 9999px;
+  background: color-mix(
+    in oklab,
+    var(--muted-foreground) 40%,
+    transparent
+  );
+  background-clip: padding-box;
+}
+
+@media (min-width: 640px) {
+  .letter-composer-document .note-rich-text .bn-editor {
+    padding-inline: 3.25rem;
+  }
+}
+
 .letter-page-canvas {
   container-type: size;
 }

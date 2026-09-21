@@ -53,6 +53,8 @@ export function LetterEditor({
   });
   const [editorControls, setEditorControls] =
     useState<NoteRichTextEditorControls | null>(null);
+  const [formattingToolbarContainer, setFormattingToolbarContainer] =
+    useState<HTMLDivElement | null>(null);
   const [activeExportUuid, setActiveExportUuid] = useState<string>();
   const [exportOpen, setExportOpen] = useState(false);
   const [previewPageIndex, setPreviewPageIndex] = useState(0);
@@ -212,14 +214,28 @@ export function LetterEditor({
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto flex min-h-full w-full max-w-3xl flex-col px-5 py-8 sm:px-8 sm:py-12 lg:py-14">
-          <div className="grid shrink-0 gap-3 px-[3.25rem]">
+      <div className="shrink-0 border-b bg-muted/30 px-3 py-1.5 sm:px-5">
+        <div className="mx-auto flex min-h-10 w-full max-w-4xl items-center gap-3">
+          <span className="hidden shrink-0 text-xs font-medium text-muted-foreground lg:inline">
+            Format
+          </span>
+          <div
+            ref={setFormattingToolbarContainer}
+            role="toolbar"
+            aria-label="Letter formatting"
+            className="letter-formatting-toolbar min-w-0 flex-1 overflow-x-auto"
+          />
+        </div>
+      </div>
+
+      <div className="min-h-0 flex-1 overflow-y-auto bg-muted/20">
+        <div className="mx-auto flex min-h-full w-full max-w-3xl flex-col bg-background px-5 py-10 sm:px-8 sm:py-14 lg:py-16">
+          <div className="grid shrink-0 gap-4 sm:px-[3.25rem]">
             <Textarea
               aria-label="Letter title"
               autoFocus={!letter}
               rows={1}
-              className="min-h-0 resize-none overflow-hidden border-0 px-0 py-0 font-spectral text-xl leading-relaxed font-semibold tracking-tight shadow-none focus-visible:ring-0 md:text-xl"
+              className="min-h-0 resize-none overflow-hidden border-0 bg-transparent px-0 py-0 font-spectral text-4xl leading-[1.08] font-semibold tracking-[-0.025em] text-foreground shadow-none placeholder:text-muted-foreground/60 focus-visible:ring-0 md:text-5xl dark:bg-transparent"
               placeholder="Untitled letter"
               maxLength={120}
               value={autosave.title}
@@ -237,8 +253,8 @@ export function LetterEditor({
             <Textarea
               aria-label="Letter subtitle"
               rows={1}
-              className="min-h-0 resize-none overflow-hidden border-0 px-0 py-0 text-xl leading-relaxed text-muted-foreground shadow-none focus-visible:ring-0 md:text-xl"
-              placeholder="Optional subtitle"
+              className="min-h-0 max-w-[65ch] resize-none overflow-hidden border-0 bg-transparent px-0 py-0 text-lg leading-relaxed font-normal text-muted-foreground shadow-none placeholder:text-muted-foreground/60 focus-visible:ring-0 sm:text-xl dark:bg-transparent"
+              placeholder="Add a short description for your letter"
               maxLength={240}
               value={autosave.subtitle}
               onChange={(event) => autosave.updateSubtitle(event.target.value)}
@@ -254,9 +270,11 @@ export function LetterEditor({
             />
           </div>
 
-          <div className="letter-composer-document mt-8 flex min-h-[32rem] min-w-0 flex-1 overflow-hidden border-t bg-background pt-6">
+          <div className="letter-composer-document mt-10 flex min-h-[32rem] min-w-0 flex-1 overflow-hidden border-t bg-background pt-7">
             <NoteRichTextEditor
               mode="letter"
+              formattingToolbarMode="persistent"
+              formattingToolbarContainer={formattingToolbarContainer}
               documentId={`${letter?.uuid ?? `letter-draft-${draftKey}`}-${editorRevision}`}
               content={autosave.content}
               editable
