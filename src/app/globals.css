@@ -303,8 +303,8 @@
    BlockNote's unlayered default editor styles. */
 .letter-composer-document .note-rich-text .bn-editor {
   padding-inline: 0;
-  font-size: 1.125rem;
-  line-height: 1.75;
+  font-size: 1rem;
+  line-height: 1.65;
 }
 
 .letter-formatting-toolbar {

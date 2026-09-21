@@ -160,6 +160,7 @@ test("letters use a persistent CMS toolbar and editorial typography", async ({
   await expect(title).toHaveCSS("font-family", /Spectral/);
   await expect(title).toHaveCSS("font-size", "48px");
   await expect(description).toHaveCSS("font-size", "20px");
+  await expect(editor).toHaveCSS("font-size", "16px");
 
   await editor.click();
   await toolbar.getByRole("button", { name: "Bold" }).click();
