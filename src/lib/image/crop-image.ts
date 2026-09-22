@@ -161,8 +161,12 @@ export async function cropImage(
     );
   });
 
-  return new File([blob], croppedFileName(file, blob.type || type), {
-    type: blob.type || type,
-    lastModified: Date.now(),
-  });
+  return {
+    file: new File([blob], croppedFileName(file, blob.type || type), {
+      type: blob.type || type,
+      lastModified: Date.now(),
+    }),
+    width,
+    height,
+  };
 }

@@ -6,16 +6,22 @@ import type {
   LetterPage,
 } from "./type";
 
-export const LETTER_COVER_SECTIONS: LetterCoverSection[] = [
+export const LETTER_COVER_CONTENT_SECTIONS: LetterCoverSection[] = [
   "header",
   "title",
   "entry",
-  "author",
   "hero",
 ];
 
-/** The display frame used for the cover image and its crop preset. */
+export const LETTER_COVER_SECTIONS: LetterCoverSection[] = [
+  ...LETTER_COVER_CONTENT_SECTIONS,
+  "author",
+];
+
+/** The fallback crop used by new and legacy cover images. */
 export const LETTER_COVER_HERO_ASPECT_RATIO = 16 / 9;
+const LETTER_COVER_HERO_ASPECT_RATIO_MIN = 0.1;
+const LETTER_COVER_HERO_ASPECT_RATIO_MAX = 10;
 
 export const LETTER_COVER_SECTION_LABELS: Record<LetterCoverSection, string> = {
   header: "Header",
@@ -36,6 +42,7 @@ export function createLetterCover(letter?: Letter): LetterCover {
     date_label: formatLetterCoverDate(letter?.created_at),
     avatar_url: null,
     hero_image_url: null,
+    hero_image_aspect_ratio: null,
     section_order: [...LETTER_COVER_SECTIONS],
   };
 }
@@ -54,8 +61,16 @@ export function normalizeLetterCover(
       })
     : [];
   const sectionOrder = [
-    ...new Set([...suppliedOrder, ...LETTER_COVER_SECTIONS]),
-  ].slice(0, LETTER_COVER_SECTIONS.length);
+    ...new Set([
+      ...suppliedOrder.filter((section) => section !== "author"),
+      ...LETTER_COVER_CONTENT_SECTIONS,
+    ]),
+    "author" as const,
+  ];
+  const heroImageUrl =
+    typeof source.hero_image_url === "string" && source.hero_image_url
+      ? source.hero_image_url
+      : null;
 
   return {
     theme: source.theme === "dark" ? "dark" : "light",
@@ -77,12 +92,23 @@ export function normalizeLetterCover(
       typeof source.avatar_url === "string" && source.avatar_url
         ? source.avatar_url
         : null,
-    hero_image_url:
-      typeof source.hero_image_url === "string" && source.hero_image_url
-        ? source.hero_image_url
-        : null,
+    hero_image_url: heroImageUrl,
+    hero_image_aspect_ratio: heroImageUrl
+      ? normalizeLetterCoverHeroAspectRatio(source.hero_image_aspect_ratio)
+      : null,
     section_order: sectionOrder,
   };
+}
+
+export function normalizeLetterCoverHeroAspectRatio(value: unknown): number {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+    return LETTER_COVER_HERO_ASPECT_RATIO;
+  }
+
+  return Math.min(
+    LETTER_COVER_HERO_ASPECT_RATIO_MAX,
+    Math.max(LETTER_COVER_HERO_ASPECT_RATIO_MIN, value),
+  );
 }
 
 export function normalizeLetterPageCover(

@@ -46,6 +46,7 @@ import { Button } from "@/components/ui/button";
 import {
   ImageCropDialog,
   type ImageCropAspectOption,
+  type ImageCropMetadata,
 } from "@/components/ui/image-crop-dialog";
 import { Input } from "@/components/ui/input";
 import {
@@ -89,6 +90,7 @@ import {
   LETTER_COVER_SECTION_LABELS,
   LETTER_COVER_HERO_ASPECT_RATIO,
   normalizeLetterCover,
+  normalizeLetterCoverHeroAspectRatio,
 } from "../letter-cover";
 import { mapFlowSelection, type LetterPageFlowResult } from "../letter-page-flow";
 import { measureLetterPage } from "../letter-page-renderer";
@@ -130,6 +132,8 @@ type CoverCropSession = {
   file: File;
   source: string;
   originalAspect: number;
+  initialAspect: number;
+  initialAspectLabel: "Cover fit" | "Current crop";
 };
 
 function validateLetterImage(file: File) {
@@ -456,7 +460,13 @@ export function LetterPageWorkspace({
             URL.revokeObjectURL(source);
             return;
           }
-          setCoverCrop({ file, source, originalAspect });
+          setCoverCrop({
+            file,
+            source,
+            originalAspect,
+            initialAspect: LETTER_COVER_HERO_ASPECT_RATIO,
+            initialAspectLabel: "Cover fit",
+          });
         } catch (error) {
           if (source) URL.revokeObjectURL(source);
           if (revision !== coverHeroRevisionRef.current) return;
@@ -497,7 +507,8 @@ export function LetterPageWorkspace({
     const page = getPages().find(
       (item) => item.uuid === selectedUuidRef.current,
     );
-    const url = normalizeLetterCover(page?.cover).hero_image_url;
+    const cover = normalizeLetterCover(page?.cover);
+    const url = cover.hero_image_url;
     if (!url) return;
 
     setCoverImageErrors((current) => ({ ...current, hero: undefined }));
@@ -510,7 +521,14 @@ export function LetterPageWorkspace({
         URL.revokeObjectURL(source);
         return;
       }
-      setCoverCrop({ file, source, originalAspect });
+      setCoverCrop({
+        file,
+        source,
+        originalAspect,
+        initialAspect:
+          cover.hero_image_aspect_ratio ?? LETTER_COVER_HERO_ASPECT_RATIO,
+        initialAspectLabel: "Current crop",
+      });
     } catch (error) {
       if (source) URL.revokeObjectURL(source);
       if (revision !== coverHeroRevisionRef.current) return;
@@ -534,17 +552,25 @@ export function LetterPageWorkspace({
     setUploadingCoverImage((current) => (current === "hero" ? null : current));
     setCoverImageErrors((current) => ({ ...current, hero: undefined }));
     if (heroInputRef.current) heroInputRef.current.value = "";
-    updateCover({ hero_image_url: null });
+    updateCover({
+      hero_image_url: null,
+      hero_image_aspect_ratio: null,
+    });
   }, [closeCoverCrop, updateCover]);
 
   const applyCoverCrop = useCallback(
-    async (file: File) => {
+    async (file: File, metadata: ImageCropMetadata) => {
       const revision = coverHeroRevisionRef.current;
       setUploadingCoverImage("hero");
       try {
         const url = await uploadImage(file);
         if (revision !== coverHeroRevisionRef.current) return;
-        updateCover({ hero_image_url: url });
+        updateCover({
+          hero_image_url: url,
+          hero_image_aspect_ratio: normalizeLetterCoverHeroAspectRatio(
+            metadata.aspectRatio,
+          ),
+        });
       } finally {
         setUploadingCoverImage((current) =>
           current === "hero" ? null : current,
@@ -562,8 +588,8 @@ export function LetterPageWorkspace({
     if (
       !open ||
       !selectedPage ||
-      selectedPage.layout === "body" ||
-      (selectedPage.layout !== "cover" && selectedTextScaleMode !== "auto") ||
+      selectedPage.layout !== "quote" ||
+      selectedTextScaleMode !== "auto" ||
       !selectedContentKey
     ) {
       autoFitKeyRef.current = undefined;
@@ -599,17 +625,9 @@ export function LetterPageWorkspace({
           selectedTextScale,
           measured.availableHeight,
           measured.contentHeight,
-          selectedPage.layout === "cover"
-            ? LETTER_PAGE_TEXT_SCALE_MIN
-            : undefined,
         );
         if (nextScale !== selectedTextScale) {
-          updateSelected({
-            text_scale: nextScale,
-            ...(selectedPage.layout === "cover"
-              ? { text_scale_mode: "auto" as const }
-              : {}),
-          });
+          updateSelected({ text_scale: nextScale });
           return;
         }
 
@@ -1019,14 +1037,14 @@ export function LetterPageWorkspace({
         open
         source={coverCrop.source}
         file={coverCrop.file}
-        aspect={LETTER_COVER_HERO_ASPECT_RATIO}
+        aspect={coverCrop.initialAspect}
         title="Crop cover image"
         description="Choose the area that should appear in the cover image section."
         aspectOptions={
           [
             {
-              label: "Cover fit",
-              value: LETTER_COVER_HERO_ASPECT_RATIO,
+              label: coverCrop.initialAspectLabel,
+              value: coverCrop.initialAspect,
             },
             { label: "Original", value: coverCrop.originalAspect },
             { label: "Free", value: undefined },
@@ -1071,17 +1089,27 @@ function CoverControls({
   onRemoveCoverImage: () => void;
 }) {
   const cover = normalizeLetterCover(page.cover);
+  const reorderableSections = cover.section_order.filter(
+    (section) => section !== "author",
+  );
   const coverSensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
   const reorderSections = ({ active, over }: DragEndEvent) => {
     if (!over || active.id === over.id) return;
-    const oldIndex = cover.section_order.indexOf(active.id as LetterCoverSection);
-    const newIndex = cover.section_order.indexOf(over.id as LetterCoverSection);
+    const oldIndex = reorderableSections.findIndex(
+      (section) => section === active.id,
+    );
+    const newIndex = reorderableSections.findIndex(
+      (section) => section === over.id,
+    );
     if (oldIndex < 0 || newIndex < 0) return;
     onCoverChange({
-      section_order: arrayMove(cover.section_order, oldIndex, newIndex),
+      section_order: [
+        ...arrayMove(reorderableSections, oldIndex, newIndex),
+        "author",
+      ],
     });
   };
 
@@ -1206,14 +1234,15 @@ function CoverControls({
       />
 
       <div className="flex flex-col gap-2">
-        <p className="text-sm font-medium">Section order</p>
+        <p className="text-sm font-medium">Content order</p>
         <p className="text-xs text-muted-foreground">
-          Drag a section or focus its handle and use the keyboard to reorder it.
+          Reorder the cover content. Author details and the Medasin logo stay at
+          the bottom.
         </p>
         <DndContext sensors={coverSensors} collisionDetection={closestCenter} onDragEnd={reorderSections}>
-          <SortableContext items={cover.section_order} strategy={verticalListSortingStrategy}>
+          <SortableContext items={reorderableSections} strategy={verticalListSortingStrategy}>
             <div className="flex flex-col gap-2">
-              {cover.section_order.map((section) => (
+              {reorderableSections.map((section) => (
                 <SortableCoverSection key={section} section={section} />
               ))}
             </div>

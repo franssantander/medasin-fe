@@ -144,31 +144,34 @@ async function paginateCoverEntry(
     text_scale_mode: "auto" as const,
   };
 
+  // Fit the title, image and fixed footer before placing body copy. Additional
+  // cover text should flow to continuation pages instead of making all cover
+  // typography smaller.
+  while (
+    cover.text_scale > LETTER_PAGE_TEXT_SCALE_MIN &&
+    !(await fits(cover))
+  ) {
+    signal?.throwIfAborted();
+    cover = {
+      ...cover,
+      text_scale: Math.max(
+        LETTER_PAGE_TEXT_SCALE_MIN,
+        normalizeLetterPageTextScale(
+          cover.text_scale - LETTER_PAGE_TEXT_SCALE_STEP,
+        ),
+      ),
+    };
+  }
+
   while (remaining.length) {
     signal?.throwIfAborted();
     const block = remaining[0];
-    let candidate = { ...cover, blocks: [...cover.blocks, block] };
+    const candidate = { ...cover, blocks: [...cover.blocks, block] };
 
     if (await fits(candidate)) {
       cover.blocks.push(remaining.shift()!);
       continue;
     }
-
-    while (cover.text_scale > LETTER_PAGE_TEXT_SCALE_MIN) {
-      const textScale = Math.max(
-        LETTER_PAGE_TEXT_SCALE_MIN,
-        normalizeLetterPageTextScale(
-          cover.text_scale - LETTER_PAGE_TEXT_SCALE_STEP,
-        ),
-      );
-      candidate = { ...candidate, text_scale: textScale };
-      cover = { ...cover, text_scale: textScale };
-      if (await fits(candidate)) {
-        cover.blocks.push(remaining.shift()!);
-        break;
-      }
-    }
-    if (candidate.blocks.length === cover.blocks.length) continue;
 
     const split = await splitToFit(block, cover, fits);
     if (split) {

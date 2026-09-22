@@ -24,6 +24,10 @@ export type ImageCropAspectOption = {
   value?: number;
 };
 
+export type ImageCropMetadata = {
+  aspectRatio: number;
+};
+
 function centeredCrop(
   width: number,
   height: number,
@@ -74,7 +78,10 @@ export function ImageCropDialog({
   title?: string;
   description?: string;
   onOpenChange: (open: boolean) => void;
-  onCrop: (file: File) => void | Promise<void>;
+  onCrop: (
+    file: File,
+    metadata: ImageCropMetadata,
+  ) => void | Promise<void>;
 }) {
   const initialAspect = aspectOptions?.[0] ?? {
     label: "Crop aspect ratio",
@@ -89,6 +96,10 @@ export function ImageCropDialog({
 
   const applyCrop = async () => {
     if (!croppedArea) return;
+    if (croppedArea.width <= 0 || croppedArea.height <= 0) {
+      setError("Choose a crop area with a visible width and height.");
+      return;
+    }
 
     const image = imageRef.current;
     if (!image?.width || !image.height) {
@@ -103,14 +114,15 @@ export function ImageCropDialog({
     setError(null);
 
     try {
-      await onCrop(
-        await cropImage(source, file, {
-          x: croppedArea.x * scaleX,
-          y: croppedArea.y * scaleY,
-          width: croppedArea.width * scaleX,
-          height: croppedArea.height * scaleY,
-        }),
-      );
+      const croppedImage = await cropImage(source, file, {
+        x: croppedArea.x * scaleX,
+        y: croppedArea.y * scaleY,
+        width: croppedArea.width * scaleX,
+        height: croppedArea.height * scaleY,
+      });
+      await onCrop(croppedImage.file, {
+        aspectRatio: croppedImage.width / croppedImage.height,
+      });
       onOpenChange(false);
     } catch (cropError) {
       setError(

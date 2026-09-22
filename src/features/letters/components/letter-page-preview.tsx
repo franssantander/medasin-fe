@@ -116,12 +116,19 @@ export const LetterPageCanvas = forwardRef<
     COVER_TEXT_ALIGNMENT_CLASS[cover.text_alignment];
   const coverTextJustificationClass =
     COVER_TEXT_JUSTIFICATION_CLASS[cover.text_alignment];
-  const coverSections = cover.hero_image_url
-    ? cover.section_order
-    : [
-        ...cover.section_order.filter((section) => section !== "author"),
-        "author" as const,
-      ];
+  const coverSections = cover.section_order.filter(
+    (section) =>
+      section !== "author" &&
+      (section !== "hero" || Boolean(cover.hero_image_url)),
+  );
+  const coverHasFooter = Boolean(
+    cover.show_logo ||
+      cover.author_name ||
+      cover.date_label ||
+      cover.avatar_url,
+  );
+  const coverHeroAspectRatio =
+    cover.hero_image_aspect_ratio ?? LETTER_COVER_HERO_ASPECT_RATIO;
   const editorStyle = {
     "--letter-page-editor-font-size": letterPageTextSize(
       layout === "quote" ? 4.3 : 1.72,
@@ -158,183 +165,199 @@ export const LetterPageCanvas = forwardRef<
           className="flex h-full flex-col gap-[3cqh] overflow-hidden p-[7cqw]"
           data-page-content
         >
-          {coverSections.map((section) => {
-            if (section === "header") {
-              if (!cover.subheader) return null;
-              return (
-                <div
-                  key={section}
-                  data-cover-section="header"
-                  className={cn(
-                    "mx-auto flex w-full max-w-[92%] shrink-0 items-center",
-                    coverTextJustificationClass,
-                    coverTextAlignmentClass,
-                  )}
-                >
-                  <p
+          <div
+            className="flex min-h-0 flex-1 flex-col gap-[3cqh] overflow-hidden"
+            data-cover-main
+          >
+            {coverSections.map((section) => {
+              if (section === "header") {
+                if (!cover.subheader) return null;
+                return (
+                  <div
+                    key={section}
+                    data-cover-section="header"
                     className={cn(
-                      "text-[1.5cqw] font-medium uppercase tracking-[0.18em]",
-                      coverIsDark ? "text-zinc-300" : "text-zinc-500",
-                    )}
-                    style={{ fontSize: letterPageTextSize(1.5, textScale) }}
-                  >
-                    {cover.subheader}
-                  </p>
-                </div>
-              );
-            }
-
-            if (section === "title") {
-              return (
-                <div
-                  key={section}
-                  data-cover-section="title"
-                  className={cn(
-                    "mx-auto w-full max-w-[92%] shrink-0 overflow-hidden",
-                    coverTextAlignmentClass,
-                  )}
-                >
-                  <CanvasText
-                    as="h2"
-                    ariaLabel="Cover title"
-                    className={cn(
-                      "font-spectral leading-[0.98] tracking-[-0.03em]",
+                      "mx-auto flex w-full max-w-[92%] shrink-0 items-center",
+                      coverTextJustificationClass,
                       coverTextAlignmentClass,
                     )}
-                    style={{ fontSize: letterPageTextSize(5.8, textScale) }}
-                    editable={editable}
-                    maxLength={120}
-                    placeholder="Untitled letter"
-                    value={page.title ?? ""}
-                    onChange={onTitleChange}
-                    onBlur={onBlur}
-                  />
-                </div>
-              );
-            }
-
-            if (section === "entry" && (coverDescriptionText || editable)) {
-              return (
-                <div
-                  key={section}
-                  data-cover-section="entry"
-                  data-cover-text-alignment={cover.text_alignment}
-                  className={cn(
-                    "letter-cover-description mx-auto w-full max-w-[92%] shrink-0 overflow-hidden",
-                    coverTextAlignmentClass,
-                    coverIsDark ? "text-zinc-300" : "text-zinc-600",
-                  )}
-                  style={{
-                    "--letter-cover-description-font-size":
-                      letterPageTextSize(1.8, textScale),
-                  } as CSSProperties}
-                >
-                  <NoteRichTextEditor
-                    mode="resource"
-                    editorChrome={editable ? "full" : "none"}
-                    slashMenuPortalToBody={editable}
-                    documentId={`letter-cover-description-${exportUuid}-${pageUuid}`}
-                    content={coverDescription}
-                    syncContent
-                    onContentApplied={onContentApplied}
-                    editable={editable}
-                    noteOptions={[]}
-                    onChange={(content) => {
-                      if (!editable) return;
-                      onEditorDocumentChange?.(content);
-                      onCoverBodyChange?.(
-                        parseNoteDocument(content).blocks,
-                        getNoteDocumentPreview(content),
-                      );
-                    }}
-                    onUploadFile={unavailable}
-                    onCreateChild={unavailableChild}
-                    onOpenNote={noop}
-                    onEditorReady={onEditorReady}
-                    onHistoryStateChange={onHistoryStateChange}
-                    onBlur={onBlur}
-                  />
-                </div>
-              );
-            }
-
-            if (section === "author") {
-              if (!cover.show_logo && !cover.author_name && !cover.date_label && !cover.avatar_url) return null;
-              return (
-                <div
-                  key={section}
-                  data-cover-section="author"
-                  className={cn(
-                    "mx-auto flex w-full max-w-[92%] shrink-0 items-center justify-between gap-[2.5cqw]",
-                    !cover.hero_image_url && "mt-auto",
-                  )}
-                >
-                  <div className="flex min-w-0 items-center gap-[2.5cqw]">
-                    {cover.avatar_url ? (
-                      <Image
-                        unoptimized
-                        src={imageFetchSource(cover.avatar_url)}
-                        alt={cover.author_name ? `${cover.author_name}'s avatar` : "Cover author avatar"}
-                        width={96}
-                        height={96}
-                        className="size-[7cqw] rounded-full object-cover"
-                      />
-                    ) : null}
-                    <div className="min-w-0">
-                      {cover.author_name ? (
-                        <p className="truncate font-medium" style={{ fontSize: letterPageTextSize(1.65, textScale) }}>
-                          {cover.author_name}
-                        </p>
-                      ) : null}
-                      {cover.date_label ? (
-                        <p
-                          className={coverIsDark ? "text-zinc-400" : "text-zinc-500"}
-                          style={{ fontSize: letterPageTextSize(1.25, textScale) }}
-                        >
-                          {cover.date_label}
-                        </p>
-                      ) : null}
-                    </div>
-                  </div>
-                  {cover.show_logo ? (
-                    <Image
-                      src="/images/medasin-leaf.svg"
-                      alt="Medasin"
-                      width={96}
-                      height={96}
+                  >
+                    <p
                       className={cn(
-                        "size-[7cqw] shrink-0 object-contain object-right",
-                        coverIsDark && "brightness-0 invert",
+                        "text-[1.5cqw] font-medium uppercase tracking-[0.18em]",
+                        coverIsDark ? "text-zinc-300" : "text-zinc-500",
                       )}
-                      priority={!editable}
-                    />
-                  ) : null}
-                </div>
-              );
-            }
+                      style={{ fontSize: letterPageTextSize(1.5, textScale) }}
+                    >
+                      {cover.subheader}
+                    </p>
+                  </div>
+                );
+              }
 
-            if (section === "hero" && cover.hero_image_url) {
-              return (
-                <div
-                  key={section}
-                  data-cover-section="hero"
-                  className="mx-auto w-full max-w-[92%] shrink-0 overflow-hidden rounded-[2cqw]"
-                  style={{ aspectRatio: `${LETTER_COVER_HERO_ASPECT_RATIO}` }}
-                >
+              if (section === "title") {
+                return (
+                  <div
+                    key={section}
+                    data-cover-section="title"
+                    className={cn(
+                      "mx-auto w-full max-w-[92%] shrink-0 overflow-hidden",
+                      coverTextAlignmentClass,
+                    )}
+                  >
+                    <CanvasText
+                      as="h2"
+                      ariaLabel="Cover title"
+                      className={cn(
+                        "font-spectral leading-[0.98] tracking-[-0.03em]",
+                        coverTextAlignmentClass,
+                      )}
+                      style={{ fontSize: letterPageTextSize(5.8, textScale) }}
+                      editable={editable}
+                      maxLength={120}
+                      placeholder="Untitled letter"
+                      value={page.title ?? ""}
+                      onChange={onTitleChange}
+                      onBlur={onBlur}
+                    />
+                  </div>
+                );
+              }
+
+              if (section === "entry" && (coverDescriptionText || editable)) {
+                return (
+                  <div
+                    key={section}
+                    data-cover-section="entry"
+                    data-cover-text-alignment={cover.text_alignment}
+                    className={cn(
+                      "letter-cover-description mx-auto w-full max-w-[92%] shrink-0 overflow-hidden",
+                      coverTextAlignmentClass,
+                      coverIsDark ? "text-zinc-300" : "text-zinc-600",
+                    )}
+                    style={{
+                      "--letter-cover-description-font-size":
+                        letterPageTextSize(1.8, textScale),
+                    } as CSSProperties}
+                  >
+                    <NoteRichTextEditor
+                      mode="resource"
+                      editorChrome={editable ? "full" : "none"}
+                      slashMenuPortalToBody={editable}
+                      documentId={`letter-cover-description-${exportUuid}-${pageUuid}`}
+                      content={coverDescription}
+                      syncContent
+                      onContentApplied={onContentApplied}
+                      editable={editable}
+                      noteOptions={[]}
+                      onChange={(content) => {
+                        if (!editable) return;
+                        onEditorDocumentChange?.(content);
+                        onCoverBodyChange?.(
+                          parseNoteDocument(content).blocks,
+                          getNoteDocumentPreview(content),
+                        );
+                      }}
+                      onUploadFile={unavailable}
+                      onCreateChild={unavailableChild}
+                      onOpenNote={noop}
+                      onEditorReady={onEditorReady}
+                      onHistoryStateChange={onHistoryStateChange}
+                      onBlur={onBlur}
+                    />
+                  </div>
+                );
+              }
+
+              if (section === "hero" && cover.hero_image_url) {
+                return (
+                  <div
+                    key={section}
+                    data-cover-section="hero"
+                    className="mx-auto min-h-[12cqh] max-h-[42cqh] shrink overflow-hidden rounded-[2cqw]"
+                    style={{
+                      aspectRatio: `${coverHeroAspectRatio}`,
+                      width: `min(92%, ${42 * coverHeroAspectRatio}cqh)`,
+                    }}
+                  >
+                    <Image
+                      unoptimized
+                      src={imageFetchSource(cover.hero_image_url)}
+                      alt="Letter cover"
+                      width={1600}
+                      height={Math.max(
+                        1,
+                        Math.round(1600 / coverHeroAspectRatio),
+                      )}
+                      className="size-full object-cover object-center"
+                    />
+                  </div>
+                );
+              }
+
+              return null;
+            })}
+          </div>
+          {coverHasFooter ? (
+            <footer
+              data-cover-section="author"
+              className="mx-auto flex w-full max-w-[92%] shrink-0 items-center justify-between gap-[2.5cqw]"
+            >
+              <div className="flex min-w-0 items-center gap-[2.5cqw]">
+                {cover.avatar_url ? (
                   <Image
                     unoptimized
-                    src={imageFetchSource(cover.hero_image_url)}
-                    alt="Letter cover"
-                    width={1600}
-                    height={900}
-                    className="size-full object-cover"
+                    src={imageFetchSource(cover.avatar_url)}
+                    alt={
+                      cover.author_name
+                        ? `${cover.author_name}'s avatar`
+                        : "Cover author avatar"
+                    }
+                    width={96}
+                    height={96}
+                    className="size-[7cqw] rounded-full object-cover"
                   />
+                ) : null}
+                <div className="min-w-0">
+                  {cover.author_name ? (
+                    <p
+                      className="truncate font-medium"
+                      style={{
+                        fontSize: letterPageTextSize(1.65, textScale),
+                      }}
+                    >
+                      {cover.author_name}
+                    </p>
+                  ) : null}
+                  {cover.date_label ? (
+                    <p
+                      className={
+                        coverIsDark ? "text-zinc-400" : "text-zinc-500"
+                      }
+                      style={{
+                        fontSize: letterPageTextSize(1.25, textScale),
+                      }}
+                    >
+                      {cover.date_label}
+                    </p>
+                  ) : null}
                 </div>
-              );
-            }
-
-            return null;
-          })}
+              </div>
+              {cover.show_logo ? (
+                <Image
+                  src="/images/medasin-leaf.svg"
+                  alt="Medasin"
+                  width={96}
+                  height={96}
+                  className={cn(
+                    "size-[7cqw] shrink-0 object-contain object-right",
+                    coverIsDark && "brightness-0 invert",
+                  )}
+                  priority={!editable}
+                />
+              ) : null}
+            </footer>
+          ) : null}
         </div>
       ) : layout === "quote" ? (
         <div className="flex h-full flex-col p-[9cqw]">

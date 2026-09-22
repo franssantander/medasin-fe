@@ -23,11 +23,15 @@ export function measureLetterPage(
     };
   }
   const content = canvas.querySelector<HTMLElement>("[data-page-content]");
+  const coverMain =
+    canvas.dataset.pageLayout === "cover"
+      ? content?.querySelector<HTMLElement>("[data-cover-main]")
+      : null;
   const editor =
     canvas.dataset.pageLayout === "cover"
       ? null
       : content?.querySelector<HTMLElement>(".bn-editor");
-  const measured = editor ?? content;
+  const measured = coverMain ?? editor ?? content;
   if (
     !content ||
     !measured ||
@@ -95,10 +99,14 @@ export function createLetterPageRenderer(canvas: LetterCanvas, exportUuid: strin
         await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
         const element = host.querySelector<HTMLElement>("[data-page-canvas]");
         const content = element?.querySelector<HTMLElement>("[data-page-content]");
+        const coverMain =
+          page.layout === "cover"
+            ? content?.querySelector<HTMLElement>("[data-cover-main]")
+            : null;
         const editor = content?.querySelector<HTMLElement>(".bn-editor");
         if (!applied || !element || !content || (page.layout !== "cover" && !editor)) continue;
         if (document.fonts.status !== "loaded" || Array.from(host.querySelectorAll("img")).some((img) => !img.complete)) continue;
-        const measured = editor ?? content;
+        const measured = coverMain ?? editor ?? content;
         if (!measured.clientHeight || !measured.clientWidth) continue;
         const sizes = `${measured.clientHeight}:${measured.clientWidth}:${measured.scrollHeight}:${measured.scrollWidth}`;
         stableFrames = sizes === previous ? stableFrames + 1 : 0;

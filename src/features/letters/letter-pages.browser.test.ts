@@ -11,6 +11,7 @@ async function fixture(
     subtitle?: string | null;
     updateDelayMs?: number;
     initialHeroImageUrl?: string;
+    initialHeroAspectRatio?: number;
   },
 ) {
   let letter: Letter = {
@@ -44,12 +45,16 @@ async function fixture(
           cover: {
             ...pages[0].cover,
             hero_image_url: metadata.initialHeroImageUrl,
+            hero_image_aspect_ratio:
+              metadata.initialHeroAspectRatio ?? 16 / 9,
           },
         };
       }
       exported = { uuid: "export-test", letter_uuid: letter.uuid, format: input.format, canvas, status: "ready", is_current: true, pages, page_count: pages.length, error: null, created_at: null, updated_at: null, started_at: null, completed_at: null };
       letter = { ...letter, latest_export: exported };
       data = exported;
+    } else if (path === "/letters/letter-test/media" && method === "POST") {
+      data = { url: "/storage/uploaded-cover.png" };
     } else if (path === "/letters/letter-test/exports/export-test") {
       if (method === "PATCH") {
         if (metadata?.updateDelayMs) {
@@ -100,6 +105,96 @@ test("long cover text auto-fits before the export is created", async ({ page }) 
         .flatMap((item) => item.blocks),
     ),
   ).toBe(text(JSON.parse(document(2)).blocks));
+});
+
+test("long cover text crops the image height without resizing the typography", async ({
+  page,
+}) => {
+  const state = await fixture(page, document(2), "portrait", {
+    initialHeroImageUrl: "http://localhost/storage/existing-cover.png",
+    initialHeroAspectRatio: 16 / 9,
+  });
+
+  const customizePages = page.getByRole("button", {
+    name: "Customize pages",
+    exact: true,
+  });
+  await expect(customizePages).toBeVisible({ timeout: 60_000 });
+  await customizePages.click();
+
+  const dialog = page.getByRole("dialog");
+  const coverCanvas = dialog.locator('main [data-page-layout="cover"]');
+  const coverHero = coverCanvas.locator('[data-cover-section="hero"]');
+  const coverBody = dialog.locator(
+    'main .letter-cover-description [contenteditable="true"]',
+  );
+  await expect(coverHero).toBeVisible();
+  await expect(coverBody).toBeVisible();
+
+  const initialMetrics = await coverHero.evaluate((element) => {
+    const canvas = element.closest<HTMLElement>("[data-page-canvas]");
+    if (!canvas) throw new Error("Cover canvas is missing");
+    const bounds = element.getBoundingClientRect();
+    const canvasBounds = canvas.getBoundingClientRect();
+    return {
+      width: bounds.width / canvasBounds.width,
+      height: bounds.height / canvasBounds.height,
+    };
+  });
+  const initialScale = state.exported().pages?.[0].text_scale;
+  const updateCount = state.updates.length;
+
+  await coverBody.fill(sentence.repeat(120));
+
+  await expect
+    .poll(() => state.updates.length, { timeout: 60_000 })
+    .toBeGreaterThan(updateCount);
+  await expect
+    .poll(
+      () =>
+        state
+          .exported()
+          .pages?.some(
+            (item) =>
+              item.layout !== "cover" &&
+              item.content_source === "cover_entry",
+          ) ?? false,
+      { timeout: 60_000 },
+    )
+    .toBe(true);
+  await expect(dialog.getByText("Saved", { exact: true })).toBeVisible();
+
+  expect(state.exported().pages?.[0].text_scale).toBe(initialScale);
+  const finalMetrics = await coverHero.evaluate((element) => {
+    const canvas = element.closest<HTMLElement>("[data-page-canvas]");
+    if (!canvas) throw new Error("Cover canvas is missing");
+    const bounds = element.getBoundingClientRect();
+    const canvasBounds = canvas.getBoundingClientRect();
+    return {
+      width: bounds.width / canvasBounds.width,
+      height: bounds.height / canvasBounds.height,
+    };
+  });
+  expect(finalMetrics.width).toBeCloseTo(initialMetrics.width, 3);
+  expect(finalMetrics.height).toBeLessThan(initialMetrics.height);
+  expect(finalMetrics.height).toBeGreaterThanOrEqual(0.119);
+
+  const settledHeights = await coverHero.evaluate(async (element) => {
+    const canvas = element.closest<HTMLElement>("[data-page-canvas]");
+    if (!canvas) throw new Error("Cover canvas is missing");
+    const heights: number[] = [];
+    for (let frame = 0; frame < 12; frame += 1) {
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      heights.push(
+        element.getBoundingClientRect().height /
+          canvas.getBoundingClientRect().height,
+      );
+    }
+    return heights;
+  });
+  expect(Math.max(...settledHeights) - Math.min(...settledHeights)).toBeLessThan(
+    0.002,
+  );
 });
 
 function normalize(pages: LetterPage[]): LetterPage[] {
@@ -305,6 +400,7 @@ test("body text survives autosave, page changes, and an immediate close", async 
 test("cover controls persist styling, metadata, and image removal", async ({ page }) => {
   const state = await fixture(page, document(2), "portrait", {
     initialHeroImageUrl: "http://localhost/storage/existing-cover.png",
+    initialHeroAspectRatio: 1.25,
   });
   await expect(
     page.getByRole("button", { name: "Customize pages", exact: true }),
@@ -330,6 +426,9 @@ test("cover controls persist styling, metadata, and image removal", async ({ pag
   await expect(
     dialog.getByRole("button", { name: "Reorder Cover body text" }),
   ).toBeVisible();
+  await expect(
+    dialog.getByRole("button", { name: "Reorder Author and date" }),
+  ).toHaveCount(0);
   const coverBody = dialog.locator(
     'main .letter-cover-description [contenteditable="true"]',
   );
@@ -341,6 +440,8 @@ test("cover controls persist styling, metadata, and image removal", async ({ pag
   const coverSubheader = coverCanvas.locator(
     '[data-cover-section="header"] p',
   );
+  const coverHero = coverCanvas.locator('[data-cover-section="hero"]');
+  const coverFooter = coverCanvas.locator('[data-cover-section="author"]');
   await expect(coverTitle).toHaveCSS("font-size", "62.64px");
   await expect(coverSubheader).toHaveCSS("font-size", "16.2px");
   await expect(coverTitle).toHaveCSS("text-align", "center");
@@ -356,6 +457,21 @@ test("cover controls persist styling, metadata, and image removal", async ({ pag
   expect(Math.max(...sectionWidths) - Math.min(...sectionWidths)).toBeLessThan(
     1,
   );
+  expect(
+    await coverHero.evaluate((element) => {
+      const bounds = element.getBoundingClientRect();
+      return bounds.width / bounds.height;
+    }),
+  ).toBeCloseTo(1.25, 2);
+  expect(
+    await coverFooter.evaluate((element) => {
+      const canvasBounds = element
+        .closest<HTMLElement>("[data-page-canvas]")!
+        .getBoundingClientRect();
+      const footerBounds = element.getBoundingClientRect();
+      return (canvasBounds.bottom - footerBounds.bottom) / canvasBounds.height;
+    }),
+  ).toBeCloseTo(0.056, 1);
   await dialog.getByRole("button", { name: "Left", exact: true }).click();
   await expect(
     dialog.getByRole("button", { name: "Left", exact: true }),
@@ -388,9 +504,7 @@ test("cover controls persist styling, metadata, and image removal", async ({ pag
     .poll(() => state.updates.length, { timeout: 60_000 })
     .toBeGreaterThan(updateCount);
 
-  await expect(
-    dialog.locator('[data-cover-section="author"]'),
-  ).toHaveClass(/mt-auto/);
+  await expect(coverFooter).toBeVisible();
 
   await expect.poll(() => state.updates.length, { timeout: 60_000 }).toBeGreaterThan(0);
   await expect(dialog.getByText("Saved", { exact: true })).toBeVisible();
@@ -403,6 +517,7 @@ test("cover controls persist styling, metadata, and image removal", async ({ pag
   expect(cover?.description_blocks).toBeTruthy();
   expect(cover?.author_name).toBe("Ciper");
   expect(cover?.hero_image_url).toBeNull();
+  expect(cover?.hero_image_aspect_ratio).toBeNull();
 
   await heroControl
     .locator('input[type="file"]')
@@ -410,7 +525,7 @@ test("cover controls persist styling, metadata, and image removal", async ({ pag
       name: "cover.png",
       mimeType: "image/png",
       buffer: Buffer.from(
-        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+        "iVBORw0KGgoAAAANSUhEUgAAAGQAAABkCAYAAABw4pVUAAAA/UlEQVR4nO3RMQ0AMAzAsPIn3d5DsBw2gkiZJWV+B/AyJMaQGENiDIkxJMaQGENiDIkxJMaQGENiDIkxJMaQGENiDIkxJMaQGENiDIkxJMaQGENiDIkxJMaQGENiDIkxJMaQGENiDIkxJMaQGENiDIkxJMaQGENiDIkxJMaQGENiDIkxJMaQGENiDIkxJMaQGENiDIkxJMaQGENiDIkxJMaQGENiDIkxJMaQGENiDIkxJMaQGENiDIkxJMaQGENiDIkxJMaQGENiDIkxJMaQGENiDIkxJMaQGENiDIkxJMaQGENiDIkxJMaQGENiDIkxJMaQmAP4K6zWNUjE4wAAAABJRU5ErkJggg==",
         "base64",
       ),
     });
@@ -418,5 +533,13 @@ test("cover controls persist styling, metadata, and image removal", async ({ pag
   await expect(cropDialog).toBeVisible();
   await expect(cropDialog.getByRole("button", { name: "4:5" })).toBeVisible();
   await expect(cropDialog.getByRole("button", { name: "9:16" })).toBeVisible();
-  await cropDialog.getByRole("button", { name: "Cancel" }).click();
+  await cropDialog.getByRole("button", { name: "4:5" }).click();
+  await cropDialog.getByRole("button", { name: "Apply crop" }).click();
+  await expect(cropDialog).toBeHidden();
+  await expect(coverHero).toBeVisible();
+  await expect
+    .poll(() => state.exported().pages?.[0].cover?.hero_image_aspect_ratio, {
+      timeout: 60_000,
+    })
+    .toBeCloseTo(4 / 5, 2);
 });

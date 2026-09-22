@@ -58,6 +58,7 @@ export type LetterCover = {
   date_label: string;
   avatar_url: string | null;
   hero_image_url: string | null;
+  hero_image_aspect_ratio: number | null;
   section_order: LetterCoverSection[];
 };
 
