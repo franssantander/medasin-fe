@@ -139,7 +139,7 @@ export function LetterWorkspace({
 
   if (lettersQuery.isLoading) {
     return (
-      <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-xl border bg-background">
+      <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-background">
         <div className="flex h-12 shrink-0 items-center gap-2 border-b px-3 sm:px-4">
           <Skeleton className="size-8 rounded-md" />
           <Skeleton className="h-4 w-20" />
@@ -180,7 +180,7 @@ export function LetterWorkspace({
       : undefined;
 
   return (
-    <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-xl border bg-background shadow-xs">
+    <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-background">
       <header className="flex h-12 shrink-0 items-center justify-between gap-3 border-b px-3 sm:px-4">
         <Button
           type="button"

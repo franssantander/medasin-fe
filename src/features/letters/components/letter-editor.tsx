@@ -228,8 +228,8 @@ export function LetterEditor({
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto bg-zinc-100/90 px-3 transition-colors duration-200 sm:px-6 dark:bg-zinc-900/80">
-        <div className="mx-auto my-4 flex min-h-[calc(100%-2rem)] w-full max-w-3xl flex-col rounded-xl border border-zinc-200 bg-white px-5 py-10 text-zinc-950 shadow-sm sm:my-6 sm:min-h-[calc(100%-3rem)] sm:px-8 sm:py-14 lg:py-16">
+      <div className="min-h-0 flex-1 overflow-y-auto bg-white">
+        <div className="mx-auto flex min-h-full w-full max-w-3xl flex-col bg-white px-5 py-10 text-zinc-950 sm:px-8 sm:py-14 lg:py-16">
           <div className="grid shrink-0 gap-4 sm:px-[3.25rem]">
             <Textarea
               aria-label="Letter title"
@@ -270,7 +270,7 @@ export function LetterEditor({
             />
           </div>
 
-          <div className="letter-composer-document mt-10 flex min-h-[32rem] min-w-0 flex-1 overflow-hidden border-t border-zinc-200 bg-white pt-7">
+          <div className="letter-composer-document mt-8 flex min-h-[32rem] min-w-0 flex-1 overflow-hidden bg-white sm:mt-10">
             <NoteRichTextEditor
               mode="letter"
               formattingToolbarMode="persistent"
