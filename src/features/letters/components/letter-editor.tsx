@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { FileText, Redo2, Undo2 } from "lucide-react";
+import { Redo2, Undo2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -38,6 +38,7 @@ export function LetterEditor({
   onCreated,
   onSaved,
   onRegisterDeleteFlush,
+  onRegisterPreviewOpen,
 }: {
   letter?: Letter;
   draftKey: number;
@@ -46,6 +47,7 @@ export function LetterEditor({
   onRegisterDeleteFlush: (
     flush?: () => Promise<Letter | undefined>,
   ) => void;
+  onRegisterPreviewOpen: (open?: () => void) => void;
 }) {
   const [historyState, setHistoryState] = useState<NoteEditorHistoryState>({
     canUndo: false,
@@ -74,6 +76,7 @@ export function LetterEditor({
   );
   const wordCount = countWords(contentPreview);
   const readTimeMinutes = Math.max(1, Math.ceil(wordCount / 200));
+  const openPreview = useCallback(() => setExportOpen(true), []);
 
   const handlePagesSaved = useCallback(
     (savedLetter: Letter) => {
@@ -89,6 +92,12 @@ export function LetterEditor({
 
     return () => onRegisterDeleteFlush();
   }, [autosave.flush, onRegisterDeleteFlush]);
+
+  useEffect(() => {
+    onRegisterPreviewOpen(openPreview);
+
+    return () => onRegisterPreviewOpen();
+  }, [onRegisterPreviewOpen, openPreview]);
 
   const handleExport = async (format: LetterExportFormat) => {
     const savedLetter = await autosave.flush(true);
@@ -206,19 +215,11 @@ export function LetterEditor({
           >
             <Redo2 />
           </Button>
-          <Button type="button" size="sm" onClick={() => setExportOpen(true)}>
-            <FileText data-icon="inline-start" />
-            <span className="hidden sm:inline">Preview pages</span>
-            <span className="sr-only sm:hidden">Preview pages</span>
-          </Button>
         </div>
       </div>
 
       <div className="shrink-0 border-b bg-muted/30 px-3 py-1.5 sm:px-5">
-        <div className="mx-auto flex min-h-10 w-full max-w-4xl items-center gap-3">
-          <span className="hidden shrink-0 text-xs font-medium text-muted-foreground lg:inline">
-            Format
-          </span>
+        <div className="mx-auto flex min-h-10 w-full max-w-3xl items-center">
           <div
             ref={setFormattingToolbarContainer}
             role="toolbar"

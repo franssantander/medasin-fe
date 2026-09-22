@@ -1,7 +1,7 @@
 "use client";
 
 import { useQueryClient } from "@tanstack/react-query";
-import { Feather, PanelLeftOpen, Plus, RefreshCw } from "lucide-react";
+import { FileText, PanelLeftOpen, RefreshCw } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -44,6 +44,7 @@ export function LetterWorkspace({
   const deleteFlushRef = useRef<(() => Promise<Letter | undefined>) | null>(
     null,
   );
+  const previewOpenRef = useRef<(() => void) | null>(null);
 
   const registerDeleteFlush = useCallback(
     (flush?: () => Promise<Letter | undefined>) => {
@@ -51,6 +52,10 @@ export function LetterWorkspace({
     },
     [],
   );
+
+  const registerPreviewOpen = useCallback((open?: () => void) => {
+    previewOpenRef.current = open ?? null;
+  }, []);
 
   const letters = useMemo(() => {
     const byUuid = new Map<string, LetterSummary>();
@@ -178,27 +183,32 @@ export function LetterWorkspace({
     derivedSelection.kind === "letter" && loadedLetter?.uuid === selectedUuid
       ? loadedLetter
       : undefined;
+  const canPreview =
+    derivedSelection.kind === "draft" || Boolean(selectedLetter);
 
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-background">
-      <header className="flex h-12 shrink-0 items-center justify-between gap-3 border-b px-3 sm:px-4">
+      <header className="grid h-12 shrink-0 grid-cols-[1fr_auto_1fr] items-center gap-3 border-b px-3 sm:px-4">
         <Button
           type="button"
           variant="ghost"
           size="sm"
+          className="justify-self-start"
           onClick={() => setListOpen(true)}
         >
           <PanelLeftOpen data-icon="inline-start" />
           Letters
         </Button>
-        <div className="flex min-w-0 items-center gap-2 text-sm text-muted-foreground">
-          <Feather className="size-4 shrink-0" aria-hidden="true" />
-          <span className="truncate">Focused writing</span>
-        </div>
-        <Button type="button" variant="outline" size="sm" onClick={startDraft}>
-          <Plus data-icon="inline-start" />
-          <span className="hidden sm:inline">New letter</span>
-          <span className="sr-only sm:hidden">New letter</span>
+        <Button
+          type="button"
+          size="sm"
+          className="col-start-3 justify-self-end"
+          disabled={!canPreview}
+          onClick={() => previewOpenRef.current?.()}
+        >
+          <FileText data-icon="inline-start" />
+          <span className="hidden sm:inline">Preview pages</span>
+          <span className="sr-only sm:hidden">Preview pages</span>
         </Button>
       </header>
 
@@ -253,6 +263,7 @@ export function LetterWorkspace({
               onCreated={handleCreated}
               onSaved={handleSaved}
               onRegisterDeleteFlush={registerDeleteFlush}
+              onRegisterPreviewOpen={registerPreviewOpen}
             />
           ) : detailQuery.isLoading ? (
             <div className="mx-auto grid h-full w-full max-w-3xl content-start gap-4 px-5 py-8 sm:px-8 sm:py-12">
@@ -287,6 +298,7 @@ export function LetterWorkspace({
               onCreated={handleCreated}
               onSaved={handleSaved}
               onRegisterDeleteFlush={registerDeleteFlush}
+              onRegisterPreviewOpen={registerPreviewOpen}
             />
           )}
         </div>

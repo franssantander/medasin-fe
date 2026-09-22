@@ -321,7 +321,7 @@
   width: max-content;
   min-width: 100%;
   max-width: none;
-  justify-content: flex-start;
+  justify-content: center;
   overflow: visible;
   border: 0;
   border-radius: 0;
