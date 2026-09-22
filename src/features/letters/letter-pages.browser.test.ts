@@ -10,6 +10,7 @@ async function fixture(
     title?: string;
     subtitle?: string | null;
     updateDelayMs?: number;
+    initialHeroImageUrl?: string;
   },
 ) {
   let letter: Letter = {
@@ -36,7 +37,17 @@ async function fixture(
     } else if (path === "/letters/letter-test/exports" && method === "POST") {
       const input = route.request().postDataJSON();
       const canvas = LETTER_EXPORT_FORMATS[input.format as LetterExportFormat];
-      exported = { uuid: "export-test", letter_uuid: letter.uuid, format: input.format, canvas, status: "ready", is_current: true, pages: normalize(input.pages), page_count: input.pages.length, error: null, created_at: null, updated_at: null, started_at: null, completed_at: null };
+      const pages = normalize(input.pages);
+      if (metadata?.initialHeroImageUrl && pages[0]?.cover) {
+        pages[0] = {
+          ...pages[0],
+          cover: {
+            ...pages[0].cover,
+            hero_image_url: metadata.initialHeroImageUrl,
+          },
+        };
+      }
+      exported = { uuid: "export-test", letter_uuid: letter.uuid, format: input.format, canvas, status: "ready", is_current: true, pages, page_count: pages.length, error: null, created_at: null, updated_at: null, started_at: null, completed_at: null };
       letter = { ...letter, latest_export: exported };
       data = exported;
     } else if (path === "/letters/letter-test/exports/export-test") {
@@ -291,8 +302,10 @@ test("body text survives autosave, page changes, and an immediate close", async 
     .toContain("A page draft that must survive autosave. Final words.");
 });
 
-test("cover controls persist theme, branding, and author metadata", async ({ page }) => {
-  const state = await fixture(page, document(2));
+test("cover controls persist styling, metadata, and image removal", async ({ page }) => {
+  const state = await fixture(page, document(2), "portrait", {
+    initialHeroImageUrl: "http://localhost/storage/existing-cover.png",
+  });
   await expect(
     page.getByRole("button", { name: "Customize pages", exact: true }),
   ).toBeVisible({ timeout: 60_000 });
@@ -304,6 +317,15 @@ test("cover controls persist theme, branding, and author metadata", async ({ pag
   await dialog.getByRole("switch", { name: "Show Medasin logo" }).click();
   await dialog.getByRole("textbox", { name: "Subheader" }).fill("CIPER DATASETS");
   await dialog.getByRole("textbox", { name: "Author name" }).fill("Ciper");
+  await dialog
+    .getByRole("slider", { name: "Text size", exact: true })
+    .evaluate((node) => {
+      const input = node as HTMLInputElement;
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!
+        .set!.call(input, "100");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    });
   await expect(dialog.getByRole("button", { name: "Reorder Title" })).toBeVisible();
   await expect(
     dialog.getByRole("button", { name: "Reorder Cover body text" }),
@@ -312,6 +334,38 @@ test("cover controls persist theme, branding, and author metadata", async ({ pag
     'main .letter-cover-description [contenteditable="true"]',
   );
   await coverBody.fill("A formatted cover description");
+  const coverCanvas = dialog.locator('main [data-page-layout="cover"]');
+  const coverTitle = coverCanvas.getByRole("textbox", {
+    name: "Cover title",
+  });
+  const coverSubheader = coverCanvas.locator(
+    '[data-cover-section="header"] p',
+  );
+  await expect(coverTitle).toHaveCSS("font-size", "62.64px");
+  await expect(coverSubheader).toHaveCSS("font-size", "16.2px");
+  await expect(coverTitle).toHaveCSS("text-align", "center");
+  await expect(coverBody.locator(".bn-block-content").first()).toHaveCSS(
+    "text-align",
+    "center",
+  );
+  const sectionWidths = await coverCanvas
+    .locator('[data-cover-section]:not([data-cover-section="hero"])')
+    .evaluateAll((sections) =>
+      sections.map((section) => section.getBoundingClientRect().width),
+    );
+  expect(Math.max(...sectionWidths) - Math.min(...sectionWidths)).toBeLessThan(
+    1,
+  );
+  await dialog.getByRole("button", { name: "Left", exact: true }).click();
+  await expect(
+    dialog.getByRole("button", { name: "Left", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await expect(coverSubheader).toHaveCSS("text-align", "left");
+  await expect(coverTitle).toHaveCSS("text-align", "left");
+  await expect(coverBody.locator(".bn-block-content").first()).toHaveCSS(
+    "text-align",
+    "left",
+  );
   await coverBody.click();
   await coverBody.press("End");
   await coverBody.pressSequentially("/");
@@ -324,6 +378,16 @@ test("cover controls persist theme, branding, and author metadata", async ({ pag
   await page.keyboard.press("Escape");
   await coverBody.press("Backspace");
 
+  const heroControl = dialog
+    .getByText("Landscape cover image", { exact: true })
+    .locator("..");
+  const updateCount = state.updates.length;
+  await heroControl.getByRole("button", { name: "Remove", exact: true }).click();
+  await expect(dialog.locator('[data-cover-section="hero"]')).toHaveCount(0);
+  await expect
+    .poll(() => state.updates.length, { timeout: 60_000 })
+    .toBeGreaterThan(updateCount);
+
   await expect(
     dialog.locator('[data-cover-section="author"]'),
   ).toHaveClass(/mt-auto/);
@@ -333,14 +397,14 @@ test("cover controls persist theme, branding, and author metadata", async ({ pag
   const cover = state.exported().pages?.[0].cover;
   expect(cover?.theme).toBe("dark");
   expect(cover?.show_logo).toBe(false);
+  expect(cover?.text_alignment).toBe("left");
   expect(cover?.subheader).toBe("CIPER DATASETS");
   expect(state.letter().subtitle).toBe("A formatted cover description");
   expect(cover?.description_blocks).toBeTruthy();
   expect(cover?.author_name).toBe("Ciper");
+  expect(cover?.hero_image_url).toBeNull();
 
-  await dialog
-    .getByText("Landscape cover image", { exact: true })
-    .locator("..")
+  await heroControl
     .locator('input[type="file"]')
     .setInputFiles({
       name: "cover.png",

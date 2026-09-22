@@ -31,7 +31,11 @@ import {
   letterPageTextSize,
   normalizeLetterPageTextScale,
 } from "../letter-page-text-scale";
-import type { LetterCanvas, LetterPage } from "../type";
+import type {
+  LetterCanvas,
+  LetterCoverTextAlignment,
+  LetterPage,
+} from "../type";
 
 const noop = () => undefined;
 const unavailable = async (): Promise<never> => {
@@ -39,6 +43,16 @@ const unavailable = async (): Promise<never> => {
 };
 const unavailableChild = async (): Promise<never> => {
   throw new Error("Child pages are unavailable in letter previews.");
+};
+const COVER_TEXT_ALIGNMENT_CLASS: Record<LetterCoverTextAlignment, string> = {
+  left: "text-left",
+  center: "text-center",
+  right: "text-right",
+};
+const COVER_TEXT_JUSTIFICATION_CLASS: Record<LetterCoverTextAlignment, string> = {
+  left: "justify-start",
+  center: "justify-center",
+  right: "justify-end",
 };
 
 type LetterPageCanvasProps = {
@@ -98,6 +112,10 @@ export const LetterPageCanvas = forwardRef<
   );
   const coverDescriptionText = getNoteDocumentPreview(coverDescription);
   const coverIsDark = cover.theme === "dark";
+  const coverTextAlignmentClass =
+    COVER_TEXT_ALIGNMENT_CLASS[cover.text_alignment];
+  const coverTextJustificationClass =
+    COVER_TEXT_JUSTIFICATION_CLASS[cover.text_alignment];
   const coverSections = cover.hero_image_url
     ? cover.section_order
     : [
@@ -137,20 +155,28 @@ export const LetterPageCanvas = forwardRef<
     >
       {layout === "cover" ? (
         <div
-          className="flex h-full flex-col gap-[4cqh] overflow-hidden p-[7cqw]"
+          className="flex h-full flex-col gap-[3cqh] overflow-hidden p-[7cqw]"
           data-page-content
         >
-          {coverSections.map((section, index) => {
+          {coverSections.map((section) => {
             if (section === "header") {
               if (!cover.subheader) return null;
               return (
-                <div key={section} className="flex shrink-0 items-center">
+                <div
+                  key={section}
+                  data-cover-section="header"
+                  className={cn(
+                    "mx-auto flex w-full max-w-[92%] shrink-0 items-center",
+                    coverTextJustificationClass,
+                    coverTextAlignmentClass,
+                  )}
+                >
                   <p
                     className={cn(
-                      "text-[1.35cqw] font-medium uppercase tracking-[0.18em]",
+                      "text-[1.5cqw] font-medium uppercase tracking-[0.18em]",
                       coverIsDark ? "text-zinc-300" : "text-zinc-500",
                     )}
-                    style={{ fontSize: letterPageTextSize(1.35, textScale) }}
+                    style={{ fontSize: letterPageTextSize(1.5, textScale) }}
                   >
                     {cover.subheader}
                   </p>
@@ -162,16 +188,20 @@ export const LetterPageCanvas = forwardRef<
               return (
                 <div
                   key={section}
+                  data-cover-section="title"
                   className={cn(
-                    "shrink-0 overflow-hidden",
-                    coverSections[index - 1] === "header" && "-mt-[3cqh]",
+                    "mx-auto w-full max-w-[92%] shrink-0 overflow-hidden",
+                    coverTextAlignmentClass,
                   )}
                 >
                   <CanvasText
                     as="h2"
                     ariaLabel="Cover title"
-                    className="font-spectral leading-[0.98] tracking-[-0.03em]"
-                    style={{ fontSize: letterPageTextSize(5.2, textScale) }}
+                    className={cn(
+                      "font-spectral leading-[0.98] tracking-[-0.03em]",
+                      coverTextAlignmentClass,
+                    )}
+                    style={{ fontSize: letterPageTextSize(5.8, textScale) }}
                     editable={editable}
                     maxLength={120}
                     placeholder="Untitled letter"
@@ -187,8 +217,11 @@ export const LetterPageCanvas = forwardRef<
               return (
                 <div
                   key={section}
+                  data-cover-section="entry"
+                  data-cover-text-alignment={cover.text_alignment}
                   className={cn(
-                    "letter-cover-description max-w-[92%] shrink-0 overflow-hidden",
+                    "letter-cover-description mx-auto w-full max-w-[92%] shrink-0 overflow-hidden",
+                    coverTextAlignmentClass,
                     coverIsDark ? "text-zinc-300" : "text-zinc-600",
                   )}
                   style={{
@@ -232,7 +265,7 @@ export const LetterPageCanvas = forwardRef<
                   key={section}
                   data-cover-section="author"
                   className={cn(
-                    "flex shrink-0 items-center justify-between gap-[2.5cqw]",
+                    "mx-auto flex w-full max-w-[92%] shrink-0 items-center justify-between gap-[2.5cqw]",
                     !cover.hero_image_url && "mt-auto",
                   )}
                 >
@@ -284,7 +317,8 @@ export const LetterPageCanvas = forwardRef<
               return (
                 <div
                   key={section}
-                  className="w-full max-w-[92%] shrink-0 overflow-hidden rounded-[2cqw]"
+                  data-cover-section="hero"
+                  className="mx-auto w-full max-w-[92%] shrink-0 overflow-hidden rounded-[2cqw]"
                   style={{ aspectRatio: `${LETTER_COVER_HERO_ASPECT_RATIO}` }}
                 >
                   <Image

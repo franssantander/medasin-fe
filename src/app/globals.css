@@ -424,6 +424,27 @@
   padding-inline: 0;
 }
 
+.letter-cover-description[data-cover-text-alignment="left"]
+  .note-rich-text
+  .bn-block-content {
+  justify-content: flex-start !important;
+  text-align: left !important;
+}
+
+.letter-cover-description[data-cover-text-alignment="center"]
+  .note-rich-text
+  .bn-block-content {
+  justify-content: center !important;
+  text-align: center !important;
+}
+
+.letter-cover-description[data-cover-text-alignment="right"]
+  .note-rich-text
+  .bn-block-content {
+  justify-content: flex-end !important;
+  text-align: right !important;
+}
+
 .cover-description-editor .note-rich-text .bn-editor {
   min-height: 8rem;
   max-height: 14rem;

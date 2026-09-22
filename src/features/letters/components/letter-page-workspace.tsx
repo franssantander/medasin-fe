@@ -19,6 +19,9 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import {
+  AlignCenter,
+  AlignLeft,
+  AlignRight,
   Copy,
   Download,
   GripVertical,
@@ -73,6 +76,10 @@ import {
 import { toast } from "@/components/ui/toast";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  ToggleGroup,
+  ToggleGroupItem,
+} from "@/components/ui/toggle-group";
 import { parseApiError } from "@/lib/axios";
 import { cn } from "@/lib/utils";
 import { getImageAspectRatio, imageUrlToFile } from "@/lib/image/crop-image";
@@ -100,6 +107,7 @@ import type {
   Letter,
   LetterCover,
   LetterCoverSection,
+  LetterCoverTextAlignment,
   LetterExport,
   LetterPage,
   LetterPageLayout,
@@ -1106,6 +1114,39 @@ function CoverControls({
           checked={cover.show_logo}
           onCheckedChange={(checked) => onCoverChange({ show_logo: checked })}
         />
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <p id={`cover-text-alignment-${page.uuid}`} className="text-sm font-medium">
+          Text alignment
+        </p>
+        <ToggleGroup
+          aria-labelledby={`cover-text-alignment-${page.uuid}`}
+          className="w-full"
+          value={[cover.text_alignment]}
+          variant="outline"
+          spacing={0}
+          onValueChange={(value) => {
+            const alignment = value[0] as LetterCoverTextAlignment | undefined;
+            if (alignment) onCoverChange({ text_alignment: alignment });
+          }}
+        >
+          <ToggleGroupItem className="min-h-11 flex-1" value="left">
+            <AlignLeft aria-hidden="true" />
+            Left
+          </ToggleGroupItem>
+          <ToggleGroupItem className="min-h-11 flex-1" value="center">
+            <AlignCenter aria-hidden="true" />
+            Center
+          </ToggleGroupItem>
+          <ToggleGroupItem className="min-h-11 flex-1" value="right">
+            <AlignRight aria-hidden="true" />
+            Right
+          </ToggleGroupItem>
+        </ToggleGroup>
+        <p className="text-xs text-muted-foreground">
+          Applies to the cover subheader, title, and body text.
+        </p>
       </div>
 
       <label className="flex flex-col gap-1.5 text-sm font-medium">

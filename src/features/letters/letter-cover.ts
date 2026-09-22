@@ -29,6 +29,7 @@ export function createLetterCover(letter?: Letter): LetterCover {
   return {
     theme: "light",
     show_logo: true,
+    text_alignment: "center",
     subheader: "A LETTER",
     description_blocks: descriptionBlocks(letter?.subtitle),
     author_name: letter?.author?.name ?? "",
@@ -59,6 +60,10 @@ export function normalizeLetterCover(
   return {
     theme: source.theme === "dark" ? "dark" : "light",
     show_logo: source.show_logo !== false,
+    text_alignment:
+      source.text_alignment === "left" || source.text_alignment === "right"
+        ? source.text_alignment
+        : "center",
     subheader:
       typeof source.subheader === "string" ? source.subheader : "A LETTER",
     description_blocks: Array.isArray(source.description_blocks)

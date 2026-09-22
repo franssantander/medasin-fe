@@ -18,6 +18,8 @@ export type LetterPageTextScaleMode = "auto" | "manual";
 
 export type LetterPageContentSource = "cover_entry" | "letter_body";
 
+export type LetterCoverTextAlignment = "left" | "center" | "right";
+
 export type LetterExportStatus =
   | "queued"
   | "processing"
@@ -49,6 +51,7 @@ export type LetterCoverSection =
 export type LetterCover = {
   theme: "light" | "dark";
   show_logo: boolean;
+  text_alignment: LetterCoverTextAlignment;
   subheader: string;
   description_blocks: unknown[];
   author_name: string;
