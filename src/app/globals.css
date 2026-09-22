@@ -359,6 +359,30 @@
   container-type: size;
 }
 
+.letter-page-canvas .note-rich-text,
+.letter-page-canvas .note-rich-text > div,
+.letter-page-canvas .note-rich-text .bn-container,
+.letter-page-canvas .note-rich-text .bn-editor,
+.letter-page-canvas .note-rich-text .ProseMirror {
+  background: transparent;
+  color: inherit;
+}
+
+.letter-page-canvas[data-page-theme="light"] .note-rich-text .bn-root {
+  --bn-colors-editor-background: transparent;
+  --bn-colors-editor-text: var(--color-zinc-900);
+}
+
+.letter-page-canvas[data-page-theme="dark"] .note-rich-text .bn-root {
+  --bn-colors-editor-background: transparent;
+  --bn-colors-editor-text: var(--color-zinc-100);
+}
+
+.letter-page-canvas[data-page-theme="dark"]
+  .letter-page-editable-text[data-empty="true"][data-placeholder]::before {
+  color: oklch(87.1% 0.006 286.286 / 55%);
+}
+
 .letter-page-measuring *,
 .letter-page-measuring *::before,
 .letter-page-measuring *::after {
@@ -376,6 +400,7 @@
 
 .letter-page-document .note-rich-text .bn-editor {
   padding: 0;
+  color: inherit;
   font-size: var(--letter-page-editor-font-size, 1.72cqw);
   line-height: 1.55;
 }
@@ -464,6 +489,7 @@
   flex-direction: column;
   justify-content: center;
   padding: 6cqw;
+  color: inherit;
   font-family: var(--font-spectral-sans);
   font-size: var(--letter-page-editor-font-size, 4.3cqw);
   line-height: 1.14;

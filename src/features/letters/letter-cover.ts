@@ -100,6 +100,16 @@ export function normalizeLetterCover(
   };
 }
 
+export function getLetterPageTheme(
+  pages: readonly LetterPage[],
+): LetterCover["theme"] {
+  const coverPage = pages.find(
+    (page) => page.layout === "cover" || page.kind === "cover",
+  );
+
+  return normalizeLetterCover(coverPage?.cover).theme;
+}
+
 export function normalizeLetterCoverHeroAspectRatio(value: unknown): number {
   if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
     return LETTER_COVER_HERO_ASPECT_RATIO;

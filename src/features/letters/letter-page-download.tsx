@@ -1,6 +1,7 @@
 import JSZip from "jszip";
 import { toBlob } from "html-to-image";
 import { imageFetchSource } from "@/lib/image/crop-image";
+import { getLetterPageTheme } from "./letter-cover";
 import { createLetterPageRenderer } from "./letter-page-renderer";
 import { LETTER_EXPORT_FORMATS } from "./letter-export-formats";
 import type { LetterExport, LetterPage } from "./type";
@@ -10,7 +11,11 @@ export async function downloadLetterPage(
   page: LetterPage,
   letterTitle: string,
 ) {
-  const blob = await renderPage(letterExport, page);
+  const blob = await renderPage(
+    letterExport,
+    page,
+    getLetterPageTheme(letterExport.pages ?? [page]),
+  );
   downloadBlob(blob, pageFilename(letterTitle, letterExport, page));
 }
 
@@ -21,9 +26,10 @@ export async function downloadLetterPages(
   onProgress?: (completed: number, total: number) => void,
 ) {
   const zip = new JSZip();
+  const pageTheme = getLetterPageTheme(pages);
 
   for (const [index, page] of pages.entries()) {
-    const blob = await renderPage(letterExport, page);
+    const blob = await renderPage(letterExport, page, pageTheme);
     zip.file(pageFilename(letterTitle, letterExport, page), blob);
     onProgress?.(index + 1, pages.length);
   }
@@ -33,15 +39,24 @@ export async function downloadLetterPages(
   downloadBlob(blob, `${slugify(letterTitle)}-${slugify(format.shortLabel)}.zip`);
 }
 
-async function renderPage(letterExport: LetterExport, page: LetterPage) {
-  const renderer = createLetterPageRenderer(letterExport.canvas, letterExport.uuid);
+async function renderPage(
+  letterExport: LetterExport,
+  page: LetterPage,
+  pageTheme: ReturnType<typeof getLetterPageTheme>,
+) {
+  const renderer = createLetterPageRenderer(
+    letterExport.canvas,
+    letterExport.uuid,
+    undefined,
+    pageTheme,
+  );
   try {
     const canvas = await renderer.render(page);
     await prepareImagesForExport(canvas);
     const blob = await toBlob(canvas, {
       pixelRatio: 1,
       cacheBust: true,
-      backgroundColor: "#ffffff",
+      backgroundColor: getComputedStyle(canvas).backgroundColor,
     });
     if (!blob) throw new Error("The page image could not be created.");
     return blob;

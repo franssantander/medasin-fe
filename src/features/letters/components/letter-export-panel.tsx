@@ -39,6 +39,7 @@ import {
   LETTER_EXPORT_FORMATS,
   LETTER_EXPORT_FORMAT_OPTIONS,
 } from "../letter-export-formats";
+import { getLetterPageTheme } from "../letter-cover";
 import { LetterPagePreview, LetterPageThumbnail } from "./letter-page-preview";
 import { LetterPageWorkspace } from "./letter-page-workspace";
 
@@ -346,6 +347,7 @@ function ReadyExport({
     Math.max(0, pages.length - 1),
   );
   const selectedPage = pages[safeSelectedPageIndex] ?? pages[0];
+  const pageTheme = getLetterPageTheme(pages);
 
   useEffect(() => {
     thumbnailRefs.current[safeSelectedPageIndex]?.scrollIntoView({
@@ -377,6 +379,7 @@ function ReadyExport({
           page={selectedPage}
           exportUuid={letterExport.uuid}
           canvas={letterExport.canvas}
+          pageTheme={pageTheme}
         />
       </div>
 
@@ -451,6 +454,7 @@ function ReadyExport({
             <LetterPageThumbnail
               page={page}
               canvas={letterExport.canvas}
+              pageTheme={pageTheme}
               selected={index === safeSelectedPageIndex}
             />
             <span className="h-4 truncate px-1 text-center text-[0.6875rem] leading-4 font-medium text-muted-foreground">

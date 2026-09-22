@@ -1,7 +1,11 @@
 import { parseNoteDocument } from "@/components/ui/note-editor-document";
 import type { NoteEditorSelection } from "@/components/ui/note-rich-text-editor-client";
 import { LETTER_EXPORT_FORMATS } from "./letter-export-formats";
-import { createLetterCover, normalizeLetterPageCover } from "./letter-cover";
+import {
+  createLetterCover,
+  getLetterPageTheme,
+  normalizeLetterPageCover,
+} from "./letter-cover";
 import {
   LETTER_PAGE_AUTO_FIT_SCALE_MIN,
   LETTER_PAGE_TEXT_SCALE_MIN,
@@ -65,7 +69,12 @@ export async function flowLetterPages(source: LetterPage[], canvas: LetterCanvas
     const after = spans(empty.blocks, empty.uuid);
     return { pages: [empty], selectionMap: { before, after } };
   }
-  const renderer = createLetterPageRenderer(canvas, exportUuid, signal);
+  const renderer = createLetterPageRenderer(
+    canvas,
+    exportUuid,
+    signal,
+    getLetterPageTheme(pages),
+  );
   const fits = async (page: LetterPage) => letterPageFits(await renderer.render(page));
   const output: LetterPage[] = [];
 

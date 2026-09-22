@@ -89,6 +89,7 @@ import { LETTER_EXPORT_FORMATS } from "../letter-export-formats";
 import {
   LETTER_COVER_SECTION_LABELS,
   LETTER_COVER_HERO_ASPECT_RATIO,
+  getLetterPageTheme,
   normalizeLetterCover,
   normalizeLetterCoverHeroAspectRatio,
 } from "../letter-cover";
@@ -272,6 +273,7 @@ export function LetterPageWorkspace({
   );
   const format = LETTER_EXPORT_FORMATS[letterExport.format];
   const selectedPage = pages.find((page) => page.uuid === selectedUuid) ?? pages[0];
+  const pageTheme = getLetterPageTheme(pages);
   const selectedIndex = selectedPage
     ? pages.findIndex((page) => page.uuid === selectedPage.uuid)
     : 0;
@@ -828,6 +830,7 @@ export function LetterPageWorkspace({
                     key={page.uuid}
                     page={page}
                     canvas={letterExport.canvas}
+                    pageTheme={pageTheme}
                     selected={page.uuid === selectedPage.uuid}
                     onSelect={() => selectPage(page.uuid)}
                   />
@@ -847,6 +850,7 @@ export function LetterPageWorkspace({
                 page={selectedPage}
                 canvas={letterExport.canvas}
                 exportUuid={letterExport.uuid}
+                pageTheme={pageTheme}
                 textScale={selectedTextScale}
                 editable={!selectedIsCoverContinuation}
                 onTitleChange={(title) => {
@@ -1116,7 +1120,7 @@ function CoverControls({
   return (
     <div className="flex flex-col gap-5">
       <label className="flex flex-col gap-1.5 text-sm font-medium">
-        Background
+        Page background
         <Select
           value={cover.theme}
           onValueChange={(value) =>
@@ -1355,11 +1359,13 @@ function SortableCoverSection({ section }: { section: LetterCoverSection }) {
 function SortablePage({
   page,
   canvas,
+  pageTheme,
   selected,
   onSelect,
 }: {
   page: LetterPage;
   canvas: LetterExport["canvas"];
+  pageTheme: LetterCover["theme"];
   selected: boolean;
   onSelect: () => void;
 }) {
@@ -1381,7 +1387,12 @@ function SortablePage({
         aria-current={selected ? "page" : undefined}
         onClick={onSelect}
       >
-        <LetterPageThumbnail page={page} canvas={canvas} selected={selected} />
+        <LetterPageThumbnail
+          page={page}
+          canvas={canvas}
+          pageTheme={pageTheme}
+          selected={selected}
+        />
       </button>
       {page.layout !== "cover" && page.content_source !== "cover_entry" ? (
         <button

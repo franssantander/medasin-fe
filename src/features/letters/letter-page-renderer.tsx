@@ -1,6 +1,6 @@
 import { createRoot } from "react-dom/client";
 import { LetterPageCanvas } from "./components/letter-page-preview";
-import type { LetterCanvas, LetterPage } from "./type";
+import type { LetterCanvas, LetterCover, LetterPage } from "./type";
 
 export type LetterPageMeasurement = {
   availableHeight: number;
@@ -69,7 +69,12 @@ export function letterPageFits(canvas: HTMLElement): boolean {
   return measureLetterPage(canvas)?.fits ?? false;
 }
 
-export function createLetterPageRenderer(canvas: LetterCanvas, exportUuid: string, signal?: AbortSignal) {
+export function createLetterPageRenderer(
+  canvas: LetterCanvas,
+  exportUuid: string,
+  signal?: AbortSignal,
+  pageTheme: LetterCover["theme"] = "light",
+) {
   const host = document.createElement("div");
   host.className = "letter-page-measuring";
   host.setAttribute("aria-hidden", "true");
@@ -88,6 +93,7 @@ export function createLetterPageRenderer(canvas: LetterCanvas, exportUuid: strin
       root.render(
         <LetterPageCanvas
           page={{ ...page, uuid: "measurement" }} canvas={canvas} exportUuid={exportUuid}
+          pageTheme={pageTheme}
           onContentApplied={() => { applied = true; }}
         />,
       );

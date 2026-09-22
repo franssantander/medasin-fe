@@ -33,6 +33,7 @@ import {
 } from "../letter-page-text-scale";
 import type {
   LetterCanvas,
+  LetterCover,
   LetterCoverTextAlignment,
   LetterPage,
 } from "../type";
@@ -59,6 +60,7 @@ type LetterPageCanvasProps = {
   page: LetterPage;
   canvas: LetterCanvas;
   exportUuid: string;
+  pageTheme?: LetterCover["theme"];
   textScale?: number;
   editable?: boolean;
   className?: string;
@@ -81,6 +83,7 @@ export const LetterPageCanvas = forwardRef<
     page,
     canvas,
     exportUuid,
+    pageTheme,
     textScale: textScaleOverride,
     editable = false,
     className,
@@ -111,7 +114,9 @@ export const LetterPageCanvas = forwardRef<
       : cover.description_blocks,
   );
   const coverDescriptionText = getNoteDocumentPreview(coverDescription);
-  const coverIsDark = cover.theme === "dark";
+  const resolvedTheme =
+    pageTheme ?? (layout === "cover" ? cover.theme : "light");
+  const pageIsDark = resolvedTheme === "dark";
   const coverTextAlignmentClass =
     COVER_TEXT_ALIGNMENT_CLASS[cover.text_alignment];
   const coverTextJustificationClass =
@@ -149,7 +154,7 @@ export const LetterPageCanvas = forwardRef<
       ref={ref}
       className={cn(
         "letter-page-canvas relative overflow-hidden",
-        layout === "cover" && coverIsDark
+        pageIsDark
           ? "bg-zinc-950 text-zinc-50"
           : "bg-white text-zinc-900",
         className,
@@ -157,6 +162,7 @@ export const LetterPageCanvas = forwardRef<
       style={{ width: canvas.width, height: canvas.height }}
       data-page-canvas
       data-page-layout={layout}
+      data-page-theme={resolvedTheme}
       role={editable ? "group" : "img"}
       aria-label={`${editable ? "Editable social page" : "Preview"} ${page.number}`}
     >
@@ -185,7 +191,7 @@ export const LetterPageCanvas = forwardRef<
                     <p
                       className={cn(
                         "text-[1.5cqw] font-medium uppercase tracking-[0.18em]",
-                        coverIsDark ? "text-zinc-300" : "text-zinc-500",
+                        pageIsDark ? "text-zinc-300" : "text-zinc-500",
                       )}
                       style={{ fontSize: letterPageTextSize(1.5, textScale) }}
                     >
@@ -233,7 +239,7 @@ export const LetterPageCanvas = forwardRef<
                     className={cn(
                       "letter-cover-description mx-auto w-full max-w-[92%] shrink-0 overflow-hidden",
                       coverTextAlignmentClass,
-                      coverIsDark ? "text-zinc-300" : "text-zinc-600",
+                      pageIsDark ? "text-zinc-300" : "text-zinc-600",
                     )}
                     style={{
                       "--letter-cover-description-font-size":
@@ -242,6 +248,7 @@ export const LetterPageCanvas = forwardRef<
                   >
                     <NoteRichTextEditor
                       mode="resource"
+                      theme={resolvedTheme}
                       editorChrome={editable ? "full" : "none"}
                       slashMenuPortalToBody={editable}
                       documentId={`letter-cover-description-${exportUuid}-${pageUuid}`}
@@ -323,7 +330,7 @@ export const LetterPageCanvas = forwardRef<
                     <p
                       className="truncate font-medium"
                       style={{
-                        fontSize: letterPageTextSize(1.65, textScale),
+                        fontSize: letterPageTextSize(1.75, textScale),
                       }}
                     >
                       {cover.author_name}
@@ -332,10 +339,10 @@ export const LetterPageCanvas = forwardRef<
                   {cover.date_label ? (
                     <p
                       className={
-                        coverIsDark ? "text-zinc-400" : "text-zinc-500"
+                        pageIsDark ? "text-zinc-400" : "text-zinc-500"
                       }
                       style={{
-                        fontSize: letterPageTextSize(1.25, textScale),
+                        fontSize: letterPageTextSize(1.35, textScale),
                       }}
                     >
                       {cover.date_label}
@@ -351,7 +358,7 @@ export const LetterPageCanvas = forwardRef<
                   height={96}
                   className={cn(
                     "size-[7cqw] shrink-0 object-contain object-right",
-                    coverIsDark && "brightness-0 invert",
+                    pageIsDark && "invert",
                   )}
                   priority={!editable}
                 />
@@ -366,16 +373,25 @@ export const LetterPageCanvas = forwardRef<
             alt=""
             width={72}
             height={72}
-            className="size-[6cqw] object-contain object-left"
+            className={cn(
+              "size-[6cqw] object-contain object-left",
+              pageIsDark && "invert",
+            )}
             priority={!editable}
           />
           <div
-            className="letter-page-quote-document relative m-auto h-[72%] w-[84%] overflow-hidden"
+            className={cn(
+              "letter-page-quote-document relative m-auto h-[72%] w-[84%] overflow-hidden",
+              pageIsDark ? "text-zinc-100" : "text-zinc-900",
+            )}
             style={editorStyle}
             data-page-content
           >
             <span
-              className="pointer-events-none absolute top-0 left-0 font-spectral text-[5cqw] leading-none text-zinc-300"
+              className={cn(
+                "pointer-events-none absolute top-0 left-0 font-spectral text-[5cqw] leading-none",
+                pageIsDark ? "text-zinc-700" : "text-zinc-300",
+              )}
               aria-hidden="true"
             >
               “
@@ -383,6 +399,7 @@ export const LetterPageCanvas = forwardRef<
             <NoteRichTextEditor
               key={`${exportUuid}-${pageUuid}-${editable ? "edit" : "view"}`}
               mode={editable ? "letter" : "resource"}
+              theme={resolvedTheme}
               editorChrome={editable ? "full" : "none"}
               documentId={`letter-page-quote-${exportUuid}-${pageUuid}-${editable ? "edit" : "view"}`}
               content={serializedBlocks}
@@ -402,19 +419,39 @@ export const LetterPageCanvas = forwardRef<
               onBlur={onBlur}
             />
             <span
-              className="pointer-events-none absolute right-0 bottom-0 font-spectral text-[5cqw] leading-none text-zinc-300"
+              className={cn(
+                "pointer-events-none absolute right-0 bottom-0 font-spectral text-[5cqw] leading-none",
+                pageIsDark ? "text-zinc-700" : "text-zinc-300",
+              )}
               aria-hidden="true"
             >
               ”
             </span>
           </div>
           {page.signature ? (
-            <div className="text-center text-[1.4cqw] text-zinc-500">
-              <p className="font-medium text-zinc-700">{page.signature.name}</p>
+            <div
+              className={cn(
+                "text-center text-[1.4cqw]",
+                pageIsDark ? "text-zinc-400" : "text-zinc-500",
+              )}
+            >
+              <p
+                className={cn(
+                  "font-medium",
+                  pageIsDark ? "text-zinc-200" : "text-zinc-700",
+                )}
+              >
+                {page.signature.name}
+              </p>
               <p>{page.signature.handle}</p>
             </div>
           ) : (
-            <p className="text-center text-[1.2cqw] uppercase tracking-[0.16em] text-zinc-400">
+            <p
+              className={cn(
+                "text-center text-[1.2cqw] uppercase tracking-[0.16em]",
+                pageIsDark ? "text-zinc-500" : "text-zinc-400",
+              )}
+            >
               Medasin
             </p>
           )}
@@ -422,13 +459,17 @@ export const LetterPageCanvas = forwardRef<
       ) : (
         <div className="flex h-full flex-col p-[8cqw]">
           <div
-            className="letter-page-document min-h-0 flex-1 overflow-hidden"
+            className={cn(
+              "letter-page-document min-h-0 flex-1 overflow-hidden",
+              pageIsDark ? "text-zinc-100" : "text-zinc-900",
+            )}
             style={editorStyle}
             data-page-content
           >
             <NoteRichTextEditor
               key={`${exportUuid}-${pageUuid}-${editable ? "edit" : "view"}`}
               mode={editable ? "letter" : "resource"}
+              theme={resolvedTheme}
               editorChrome={editable ? "full" : "none"}
               documentId={`letter-page-body-${exportUuid}-${pageUuid}-${editable ? "edit" : "view"}`}
               content={serializedBlocks}
@@ -449,15 +490,30 @@ export const LetterPageCanvas = forwardRef<
             />
           </div>
           {page.signature ? (
-            <div className="mt-[5cqw] shrink-0 border-t border-zinc-200 pt-[3cqw]">
+            <div
+              className={cn(
+                "mt-[5cqw] shrink-0 border-t pt-[3cqw]",
+                pageIsDark ? "border-zinc-800" : "border-zinc-200",
+              )}
+            >
               <p className="font-spectral text-[2.2cqw]">{page.signature.name}</p>
-              <p className="mt-[0.6cqw] text-[1.3cqw] text-zinc-500">
+              <p
+                className={cn(
+                  "mt-[0.6cqw] text-[1.3cqw]",
+                  pageIsDark ? "text-zinc-400" : "text-zinc-500",
+                )}
+              >
                 {page.signature.handle}
               </p>
             </div>
           ) : null}
           {page.continuation_label ? (
-            <p className="mt-[3cqw] shrink-0 text-[1.2cqw] uppercase tracking-[0.12em] text-zinc-400">
+            <p
+              className={cn(
+                "mt-[3cqw] shrink-0 text-[1.2cqw] uppercase tracking-[0.12em]",
+                pageIsDark ? "text-zinc-500" : "text-zinc-400",
+              )}
+            >
               {page.continuation_label}
             </p>
           ) : null}
@@ -522,10 +578,11 @@ export function LetterPageViewport({
   );
 }
 
-export function LetterPagePreview({ page, exportUuid, canvas }: {
+export function LetterPagePreview({ page, exportUuid, canvas, pageTheme }: {
   page: LetterPage;
   exportUuid: string;
   canvas: LetterCanvas;
+  pageTheme?: LetterCover["theme"];
 }) {
   return (
     <div
@@ -541,15 +598,22 @@ export function LetterPagePreview({ page, exportUuid, canvas }: {
           page={page}
           exportUuid={exportUuid}
           canvas={canvas}
+          pageTheme={pageTheme}
         />
       </LetterPageViewport>
     </div>
   );
 }
 
-export function LetterPageThumbnail({ page, canvas, selected = false }: {
+export function LetterPageThumbnail({
+  page,
+  canvas,
+  pageTheme = "light",
+  selected = false,
+}: {
   page: LetterPage;
   canvas: LetterCanvas;
+  pageTheme?: LetterCover["theme"];
   selected?: boolean;
 }) {
   const bodyPreview = getNoteDocumentPreview(serializeNoteDocument(page.blocks));
@@ -558,13 +622,26 @@ export function LetterPageThumbnail({ page, canvas, selected = false }: {
   return (
     <div
       className={cn(
-        "overflow-hidden rounded-md border bg-white text-left text-zinc-900 transition-colors",
-        selected ? "border-foreground ring-2 ring-ring/30" : "border-zinc-200",
+        "overflow-hidden rounded-md border text-left transition-colors",
+        pageTheme === "dark"
+          ? "bg-zinc-950 text-zinc-50"
+          : "bg-white text-zinc-900",
+        selected
+          ? "border-foreground ring-2 ring-ring/30"
+          : pageTheme === "dark"
+            ? "border-zinc-800"
+            : "border-zinc-200",
       )}
       style={{ aspectRatio: `${canvas.width} / ${canvas.height}` }}
+      data-page-theme={pageTheme}
     >
       <div className="flex h-full flex-col p-[12%]">
-        <p className="mb-[8%] text-[0.45rem] font-medium uppercase tracking-[0.13em] text-zinc-400">
+        <p
+          className={cn(
+            "mb-[8%] text-[0.45rem] font-medium uppercase tracking-[0.13em]",
+            pageTheme === "dark" ? "text-zinc-500" : "text-zinc-400",
+          )}
+        >
           {layout === "cover" ? "Cover" : layout === "quote" ? "Quote" : `Page ${page.number}`}
         </p>
         {layout === "cover" ? (
@@ -573,12 +650,20 @@ export function LetterPageThumbnail({ page, canvas, selected = false }: {
               {page.title || "Untitled letter"}
             </p>
             {page.subtitle ? (
-              <p className="mt-1 line-clamp-2 text-[0.55rem] leading-tight text-zinc-500">{page.subtitle}</p>
+              <p
+                className={cn(
+                  "mt-1 line-clamp-2 text-[0.55rem] leading-tight",
+                  pageTheme === "dark" ? "text-zinc-400" : "text-zinc-500",
+                )}
+              >
+                {page.subtitle}
+              </p>
             ) : null}
           </>
         ) : (
           <p className={cn(
-            "line-clamp-8 text-[clamp(0.55rem,1.5vw,0.78rem)] text-zinc-700",
+            "line-clamp-8 text-[clamp(0.55rem,1.5vw,0.78rem)]",
+            pageTheme === "dark" ? "text-zinc-300" : "text-zinc-700",
             layout === "quote" ? "my-auto text-center font-spectral leading-tight" : "leading-[1.35]",
           )}>
             {bodyPreview || "No text on this page."}

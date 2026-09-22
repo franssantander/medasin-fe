@@ -406,6 +406,7 @@ type ImageCropSession = CropImageRequest & {
 
 export type NoteRichTextEditorClientProps = {
   mode?: "note" | "task" | "resource" | "letter";
+  theme?: "light" | "dark";
   editorChrome?: "full" | "formatting-only" | "none";
   formattingToolbarMode?: "floating" | "persistent";
   formattingToolbarContainer?: HTMLElement | null;
@@ -449,6 +450,7 @@ export type NoteEditorHistoryState = {
 
 export function NoteRichTextEditorClient({
   mode = "note",
+  theme = "light",
   editorChrome = "full",
   formattingToolbarMode = "floating",
   formattingToolbarContainer,
@@ -973,7 +975,7 @@ export function NoteRichTextEditorClient({
           sideMenu={false}
           slashMenu={false}
           emojiPicker={mode !== "letter"}
-          theme="light"
+          theme={theme}
           onChange={handleEditorChange}
         >
           {editable && editorChrome !== "none" && (

@@ -397,6 +397,82 @@ test("body text survives autosave, page changes, and an immediate close", async 
     .toContain("A page draft that must survive autosave. Final words.");
 });
 
+test("dark background applies to cover, body, rich text, logos, and thumbnails", async ({
+  page,
+}) => {
+  await fixture(page, document(2));
+  await expect(
+    page.getByRole("button", { name: "Customize pages", exact: true }),
+  ).toBeVisible({ timeout: 60_000 });
+  await page
+    .getByRole("button", { name: "Customize pages", exact: true })
+    .click();
+
+  const dialog = page.getByRole("dialog");
+  await dialog.getByRole("combobox", { name: "Page background" }).click();
+  await page.getByRole("option", { name: "Dark", exact: true }).click();
+
+  const coverCanvas = dialog.locator('main [data-page-layout="cover"]');
+  const coverEditor = coverCanvas.locator(".letter-cover-description");
+  await expect(coverCanvas).toHaveAttribute("data-page-theme", "dark");
+  await expect(coverEditor.locator(".bn-root")).toHaveAttribute(
+    "data-color-scheme",
+    "dark",
+  );
+  await expect(coverEditor.locator(".bn-editor")).toHaveCSS(
+    "background-color",
+    "rgba(0, 0, 0, 0)",
+  );
+  await expect(coverCanvas.getByAltText("Medasin")).toHaveCSS(
+    "filter",
+    "invert(1)",
+  );
+
+  const coverBackground = await coverCanvas.evaluate(
+    (element) => getComputedStyle(element).backgroundColor,
+  );
+  const bodyThumbnail = dialog
+    .getByRole("button", { name: "Edit page 2" })
+    .locator('[data-page-theme="dark"]');
+  await expect(bodyThumbnail).toBeVisible();
+  await dialog.getByRole("button", { name: "Edit page 2" }).click();
+
+  const bodyCanvas = dialog.locator('main [data-page-layout="body"]');
+  await expect(bodyCanvas).toHaveAttribute("data-page-theme", "dark");
+  await expect(bodyCanvas.locator(".bn-root")).toHaveAttribute(
+    "data-color-scheme",
+    "dark",
+  );
+  await expect(bodyCanvas.locator(".bn-editor")).toHaveCSS(
+    "background-color",
+    "rgba(0, 0, 0, 0)",
+  );
+  const darkEditorColor = await bodyCanvas
+    .locator(".bn-editor")
+    .evaluate((element) => getComputedStyle(element).color);
+  expect(darkEditorColor).not.toBe(coverBackground);
+  await expect
+    .poll(() =>
+      bodyCanvas.evaluate((element) => getComputedStyle(element).backgroundColor),
+    )
+    .toBe(coverBackground);
+
+  await dialog.getByRole("button", { name: "Edit page 1" }).click();
+  await dialog.getByRole("combobox", { name: "Page background" }).click();
+  await page.getByRole("option", { name: "White", exact: true }).click();
+  await dialog.getByRole("button", { name: "Edit page 2" }).click();
+
+  await expect(bodyCanvas).toHaveAttribute("data-page-theme", "light");
+  await expect(bodyCanvas.locator(".bn-root")).toHaveAttribute(
+    "data-color-scheme",
+    "light",
+  );
+  const lightEditorColor = await bodyCanvas
+    .locator(".bn-editor")
+    .evaluate((element) => getComputedStyle(element).color);
+  expect(lightEditorColor).not.toBe(darkEditorColor);
+});
+
 test("cover controls persist styling, metadata, and image removal", async ({ page }) => {
   const state = await fixture(page, document(2), "portrait", {
     initialHeroImageUrl: "http://localhost/storage/existing-cover.png",
