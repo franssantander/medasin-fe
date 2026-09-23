@@ -69,6 +69,7 @@ export function LetterEditor({
     onCreated,
     onSaved,
   });
+  const { content: savedContent, updateContent } = autosave;
   const exportMutation = useCreateLetterExportMutation();
   const contentPreview = useMemo(
     () => getNoteDocumentPreview(autosave.content),
@@ -76,7 +77,16 @@ export function LetterEditor({
   );
   const wordCount = countWords(contentPreview);
   const readTimeMinutes = Math.max(1, Math.ceil(wordCount / 200));
-  const openPreview = useCallback(() => setExportOpen(true), []);
+  const syncEditorContent = useCallback(() => {
+    const currentContent = editorControls?.getContent();
+    if (currentContent !== undefined && currentContent !== savedContent) {
+      updateContent(currentContent);
+    }
+  }, [editorControls, savedContent, updateContent]);
+  const openPreview = useCallback(() => {
+    syncEditorContent();
+    setExportOpen(true);
+  }, [syncEditorContent]);
 
   const handlePagesSaved = useCallback(
     (savedLetter: Letter) => {
@@ -100,6 +110,7 @@ export function LetterEditor({
   }, [onRegisterPreviewOpen, openPreview]);
 
   const handleExport = async (format: LetterExportFormat) => {
+    syncEditorContent();
     const savedLetter = await autosave.flush(true);
     const uuid = savedLetter?.uuid ?? autosave.activeUuid ?? letter?.uuid;
 

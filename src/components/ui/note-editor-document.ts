@@ -61,18 +61,23 @@ function extractBlockText(value: unknown): string {
   return "";
 }
 
-function extractRichText(value: unknown): string {
+function extractRichText(value: unknown, separator = ""): string {
   if (typeof value === "string") return value;
   if (Array.isArray(value)) {
-    return value.map(extractRichText).filter(Boolean).join(" ");
+    // Inline runs are adjacent characters; formatting does not add a space.
+    return value.map((item) => extractRichText(item)).filter(Boolean).join(separator);
   }
   if (!value || typeof value !== "object") return "";
 
   const item = value as Record<string, unknown>;
   if (typeof item.text === "string") return item.text;
 
-  return [item.content, item.children, item.rows, item.cells]
-    .map(extractRichText)
+  return [
+    extractRichText(item.content),
+    extractRichText(item.children, " "),
+    extractRichText(item.rows, " "),
+    extractRichText(item.cells, " "),
+  ]
     .filter(Boolean)
     .join(" ");
 }

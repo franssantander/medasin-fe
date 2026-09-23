@@ -205,5 +205,9 @@ function toPageInput(page: LetterPage): LetterExportPageInput {
     input.cover = page.cover;
   }
 
+  if (page.kind === "final" && page.signature) {
+    input.signature = page.signature;
+  }
+
   return input;
 }

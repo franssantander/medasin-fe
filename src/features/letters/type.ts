@@ -155,7 +155,9 @@ export type LetterExportPageInput = Pick<
   | "cover"
   | "content_source"
   | "blocks"
->;
+> & {
+  signature?: LetterSignature;
+};
 
 export type LetterExportUpdateInput = {
   pages: LetterExportPageInput[];

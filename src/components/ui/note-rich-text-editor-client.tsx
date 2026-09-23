@@ -2,6 +2,7 @@
 
 import {
   BlockNoteSchema,
+  createExtension,
   defaultBlockSpecs,
   type PartialBlock,
 } from "@blocknote/core";
@@ -31,7 +32,8 @@ import {
   type SuggestionMenuProps,
 } from "@blocknote/react";
 import { BlockNoteView } from "@blocknote/shadcn";
-import { TextSelection } from "@tiptap/pm/state";
+import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
+import { Plugin, TextSelection } from "@tiptap/pm/state";
 import "@blocknote/shadcn/style.css";
 import {
   BellRing,
@@ -322,6 +324,76 @@ const noteEditorSchema = BlockNoteSchema.create({
   },
 });
 
+function hasInlineMarksAt(doc: ProseMirrorNode, pos: number) {
+  const resolved = doc.resolve(pos);
+  return Boolean(
+    resolved.marks().length ||
+      (resolved.nodeBefore?.isText && resolved.nodeBefore.marks.length) ||
+      (resolved.nodeAfter?.isText && resolved.nodeAfter.marks.length),
+  );
+}
+
+const letterPageEditingExtension = createExtension({
+  key: "letterPageEditing",
+  prosemirrorPlugins: [
+    new Plugin({
+      props: {
+        handleTextInput(view, from, to, text, defaultTransaction) {
+          if (text !== " ") return false;
+
+          const { state } = view;
+          let selectionContainsMarks = false;
+          if (from < to) {
+            state.doc.nodesBetween(from, to, (node) => {
+              if (node.isText && node.marks.length > 0) {
+                selectionContainsMarks = true;
+                return false;
+              }
+              return undefined;
+            });
+          }
+
+          const hasFormattedContext =
+            Boolean(state.storedMarks?.length) ||
+            hasInlineMarksAt(state.doc, from) ||
+            hasInlineMarksAt(state.doc, to) ||
+            selectionContainsMarks;
+          if (!hasFormattedContext) return false;
+
+          view.dispatch(defaultTransaction());
+          return true;
+        },
+        handleClick(view, pos, event) {
+          if (!view.editable || event.button !== 0 || event.detail !== 1) {
+            return false;
+          }
+
+          const { state } = view;
+          const resolved = state.doc.resolve(pos);
+          if (!resolved.parent.inlineContent || !hasInlineMarksAt(state.doc, pos)) {
+            return false;
+          }
+
+          if (
+            state.selection instanceof TextSelection &&
+            state.selection.empty &&
+            state.selection.from === pos
+          ) {
+            return false;
+          }
+
+          view.dispatch(
+            state.tr
+              .setSelection(TextSelection.create(state.doc, pos))
+              .setMeta("addToHistory", false),
+          );
+          return true;
+        },
+      },
+    }),
+  ],
+});
+
 function NoteSlashMenu({
   items,
   loadingState,
@@ -414,6 +486,7 @@ export type NoteRichTextEditorClientProps = {
   documentId: string;
   content: string;
   syncContent?: boolean;
+  pageEditor?: boolean;
   onContentApplied?: () => void;
   editable: boolean;
   noteOptions: NoteLinkTarget[];
@@ -458,6 +531,7 @@ export function NoteRichTextEditorClient({
   documentId,
   content,
   syncContent = false,
+  pageEditor = false,
   onContentApplied,
   editable,
   noteOptions,
@@ -524,8 +598,9 @@ export function NoteRichTextEditorClient({
       schema: noteEditorSchema,
       initialContent: initialContent.length ? initialContent : [{ type: "paragraph", content: "" }],
       uploadFile: (file) => onUploadFileRef.current(file),
+      extensions: mode === "letter" || pageEditor ? [letterPageEditingExtension] : [],
     },
-    [documentId],
+    [documentId, mode, pageEditor],
   );
   const prepareImageCrop = useCallback(async (request: CropImageRequest) => {
     let source: string | undefined;

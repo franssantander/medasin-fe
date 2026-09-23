@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 import type { Letter, LetterExport, LetterPage, LetterExportFormat } from "./type";
 import { LETTER_EXPORT_FORMATS } from "./letter-export-formats";
 
@@ -12,6 +12,8 @@ async function fixture(
     updateDelayMs?: number;
     initialHeroImageUrl?: string;
     initialHeroAspectRatio?: number;
+    initialCoverDescriptionBlocks?: unknown[];
+    invalidateExportOnLetterUpdate?: boolean;
   },
 ) {
   let letter: Letter = {
@@ -33,12 +35,32 @@ async function fixture(
     if (path === "/auth/me") data = { first_name: "Test", last_name: "Author", username: "author", roles: [] };
     else if (path === "/letters" && method === "GET") data = { current_page: 1, data: [letter], last_page: 1, per_page: 15, total: 1 };
     else if (path === "/letters/letter-test") {
-      if (method === "PATCH") letter = { ...letter, ...route.request().postDataJSON() };
+      if (method === "PATCH") {
+        const previousContent = letter.content;
+        letter = { ...letter, ...route.request().postDataJSON() };
+        if (
+          metadata?.invalidateExportOnLetterUpdate &&
+          exported &&
+          previousContent !== letter.content
+        ) {
+          exported = { ...exported, is_current: false };
+          letter = { ...letter, latest_export: exported };
+        }
+      }
       data = letter;
     } else if (path === "/letters/letter-test/exports" && method === "POST") {
       const input = route.request().postDataJSON();
       const canvas = LETTER_EXPORT_FORMATS[input.format as LetterExportFormat];
       const pages = normalize(input.pages);
+      if (metadata?.initialCoverDescriptionBlocks && pages[0]?.cover) {
+        pages[0] = {
+          ...pages[0],
+          cover: {
+            ...pages[0].cover,
+            description_blocks: metadata.initialCoverDescriptionBlocks,
+          },
+        };
+      }
       if (metadata?.initialHeroImageUrl && pages[0]?.cover) {
         pages[0] = {
           ...pages[0],
@@ -198,7 +220,7 @@ test("long cover text crops the image height without resizing the typography", a
 });
 
 function normalize(pages: LetterPage[]): LetterPage[] {
-  return pages.map((page, index) => ({ ...page, number: index + 1, kind: index === 0 ? "cover" : index === pages.length - 1 ? "final" : "body", signature: index === pages.length - 1 ? { name: "Test Author", handle: "@author" } : null, truncated: false, continuation_label: null }));
+  return pages.map((page, index) => ({ ...page, number: index + 1, kind: index === 0 ? "cover" : index === pages.length - 1 ? "final" : "body", signature: index === pages.length - 1 ? page.signature ?? { name: "Test Author", handle: "@author" } : null, truncated: false, continuation_label: null }));
 }
 function text(value: unknown): string {
   if (typeof value === "string") return value;
@@ -209,6 +231,488 @@ function text(value: unknown): string {
 }
 const sentence = "A thoughtful letter fills each page and preserves every word. ";
 const document = (repeat: number) => JSON.stringify({ version: 1, blocks: [{ id: "paragraph", type: "paragraph", content: [{ type: "text", text: sentence.repeat(repeat), styles: { bold: true } }] }] });
+const mixedFormattingDocument = JSON.stringify({ version: 1, blocks: [{ id: "paragraph", type: "paragraph", content: [
+  { type: "text", text: "Lorem Ipsum", styles: { bold: true } },
+  { type: "text", text: "is", styles: {} },
+] }] });
+const boldOnlyDocument = JSON.stringify({ version: 1, blocks: [{ id: "paragraph", type: "paragraph", content: [
+  { type: "text", text: "Lorem Ipsumis", styles: { bold: true } },
+] }] });
+const unformattedDocument = JSON.stringify({ version: 1, blocks: [{ id: "paragraph", type: "paragraph", content: "Lorem Ipsumis" }] });
+
+async function typeSpaceAfterBold(page: Page, editor: ReturnType<Page["locator"]>) {
+  await editor.focus();
+  await editor.locator("strong").first().evaluate((bold) => {
+    const lastText = bold.lastChild;
+    if (!lastText || lastText.nodeType !== Node.TEXT_NODE) {
+      throw new Error("Expected bold text at the formatting boundary");
+    }
+    const range = window.document.createRange();
+    range.setStart(lastText, lastText.textContent?.length ?? 0);
+    range.collapse(true);
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+  });
+  await page.keyboard.press("Space");
+}
+
+async function selectPageEditorText(
+  editor: ReturnType<Page["locator"]>,
+  start: number,
+  end: number,
+) {
+  await editor.locator(".bn-block-content").first().evaluate(
+    (block, rangeOffsets) => {
+      const walker = window.document.createTreeWalker(block, NodeFilter.SHOW_TEXT);
+      const textNodes: Text[] = [];
+      while (walker.nextNode()) textNodes.push(walker.currentNode as Text);
+
+      const locate = (offset: number) => {
+        let remaining = offset;
+        for (const node of textNodes) {
+          const length = node.textContent?.length ?? 0;
+          if (remaining <= length) return { node, offset: remaining };
+          remaining -= length;
+        }
+        const last = textNodes.at(-1);
+        if (!last) throw new Error("Expected page editor text");
+        return { node: last, offset: last.textContent?.length ?? 0 };
+      };
+
+      const from = locate(rangeOffsets.start);
+      const to = locate(rangeOffsets.end);
+      const range = window.document.createRange();
+      range.setStart(from.node, from.offset);
+      range.setEnd(to.node, to.offset);
+      const selection = window.getSelection();
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+    },
+    { start, end },
+  );
+}
+
+async function preparePageEditor(page: Page, content: string) {
+  const state = await fixture(page, content);
+  await page.getByRole("button", { name: "Preview pages" }).click();
+  await expect(page.getByRole("button", { name: "Customize pages", exact: true })).toBeVisible({ timeout: 60_000 });
+  await page.getByRole("button", { name: "Customize pages", exact: true }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByRole("button", { name: "Edit page 2", exact: true }).click();
+  const editor = dialog.locator('main [data-page-canvas] .bn-editor[contenteditable="true"]');
+  await expect(editor).toBeVisible();
+  return { state, dialog, editor };
+}
+
+async function formatPrefixAndInsertSpace(
+  page: Page,
+  dialog: Locator,
+  editor: Locator,
+  style: string,
+  markSelector: string,
+) {
+  await selectPageEditorText(editor, 0, "Lorem Ipsum".length);
+  const toolbarButton = dialog.locator(`.bn-toolbar [data-test="${style}"]`);
+  await expect(toolbarButton).toBeVisible();
+  await toolbarButton.click();
+
+  const markedText = editor.locator(markSelector).first();
+  await expect(markedText).toContainText("Lorem Ipsum");
+  const boundary = await markedText.evaluate((element) => {
+    const range = window.document.createRange();
+    const walker = window.document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+    let textNode = walker.nextNode();
+    while (textNode && walker.nextNode()) textNode = walker.currentNode;
+    if (!textNode) throw new Error("Expected formatted text");
+    range.setStart(textNode, textNode.textContent?.length ?? 0);
+    range.collapse(true);
+    const rect = range.getBoundingClientRect();
+    return { x: rect.x, y: rect.y + rect.height / 2 };
+  });
+
+  await page.mouse.click(boundary.x, boundary.y);
+  await page.keyboard.press("Space");
+  await expect(editor).toContainText("Lorem Ipsum is");
+}
+
+test("letter editor keeps spaces typed between bold and plain text", async ({ page }) => {
+  const state = await fixture(page, mixedFormattingDocument);
+  const editor = page.locator('.letter-composer-document [contenteditable="true"]');
+  await expect(editor).toBeVisible({ timeout: 60_000 });
+  await typeSpaceAfterBold(page, editor);
+  await expect(editor).toContainText("Lorem Ipsum is");
+  await expect.poll(() => text(JSON.parse(state.letter().content).blocks), { timeout: 60_000 }).toBe("Lorem Ipsum is");
+});
+
+test("letter preview follows the latest formatted editor text", async ({ page }) => {
+  const state = await fixture(page, mixedFormattingDocument, "portrait", {
+    invalidateExportOnLetterUpdate: true,
+  });
+  await page.getByRole("button", { name: "Preview pages" }).click();
+  await expect(
+    page.getByRole("button", { name: "Customize pages", exact: true }),
+  ).toBeVisible({ timeout: 60_000 });
+  await page
+    .getByRole("dialog", { name: "Preview letter pages" })
+    .getByRole("button", { name: "Close", exact: true })
+    .click();
+
+  const editor = page.locator('.letter-composer-document [contenteditable="true"]');
+  await typeSpaceAfterBold(page, editor);
+  await page.getByRole("button", { name: "Preview pages" }).click();
+  await expect
+    .poll(() => text(state.exported().pages?.slice(1).flatMap((item) => item.blocks)), {
+      timeout: 60_000,
+    })
+    .toBe("Lorem Ipsum is");
+  await page.getByRole("button", { name: "View page 2" }).click();
+
+  const preview = page.locator(
+    '[aria-label="Letter export preview"] [data-page-canvas]',
+  );
+  await expect(preview).toContainText("Lorem Ipsum is");
+  await expect(preview.locator("strong")).toContainText("Lorem Ipsum");
+});
+
+test("page editor keeps formatted-boundary spaces after reflow and save", async ({ page }) => {
+  const state = await fixture(page, mixedFormattingDocument);
+  await page.getByRole("button", { name: "Preview pages" }).click();
+  await expect(page.getByRole("button", { name: "Customize pages", exact: true })).toBeVisible({ timeout: 60_000 });
+  await page.getByRole("button", { name: "Customize pages", exact: true }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByRole("button", { name: "Edit page 2", exact: true }).click();
+  const editor = dialog.locator('main [data-page-canvas] .bn-editor[contenteditable="true"]');
+  await expect(editor).toBeVisible();
+  await typeSpaceAfterBold(page, editor);
+  await expect(editor).toContainText("Lorem Ipsum is");
+  await expect.poll(() => text(state.exported().pages?.slice(1).flatMap((item) => item.blocks)), { timeout: 60_000 }).toBe("Lorem Ipsum is");
+  await expect(editor).toContainText("Lorem Ipsum is");
+  await page.keyboard.type("again");
+  await expect(editor).toContainText("Lorem Ipsum againis");
+  await expect.poll(() => text(state.exported().pages?.slice(1).flatMap((item) => item.blocks)), { timeout: 60_000 }).toBe("Lorem Ipsum againis");
+});
+
+test("page preview matches formatted text entered in the page editor", async ({ page }) => {
+  const { state, dialog, editor } = await preparePageEditor(
+    page,
+    unformattedDocument,
+  );
+  await formatPrefixAndInsertSpace(page, dialog, editor, "bold", "strong");
+  await expect
+    .poll(
+      () => text(state.exported().pages?.slice(1).flatMap((item) => item.blocks)),
+      { timeout: 60_000 },
+    )
+    .toBe("Lorem Ipsum is");
+
+  await dialog.getByRole("button", { name: "Close", exact: true }).click();
+  await expect(
+    page.getByRole("dialog", { name: "Prepare social pages" }),
+  ).toBeHidden();
+  await page.getByRole("button", { name: "View page 2" }).click();
+
+  const preview = page.locator(
+    '[aria-label="Letter export preview"] [data-page-canvas]',
+  );
+  await expect(preview).toContainText("Lorem Ipsum is");
+  await expect(preview.locator("strong")).toContainText("Lorem Ipsum");
+});
+
+test("cover editor keeps a space between bold and plain text", async ({ page }) => {
+  const state = await fixture(page, document(2), "portrait", {
+    initialCoverDescriptionBlocks: JSON.parse(mixedFormattingDocument).blocks,
+  });
+  await page.getByRole("button", { name: "Preview pages" }).click();
+  await expect(page.getByRole("button", { name: "Customize pages", exact: true })).toBeVisible({ timeout: 60_000 });
+  await page.getByRole("button", { name: "Customize pages", exact: true }).click();
+  const editor = page.getByRole("dialog").locator('main .letter-cover-description .bn-editor[contenteditable="true"]');
+  await expect(editor).toBeVisible();
+  await typeSpaceAfterBold(page, editor);
+  await expect(editor).toContainText("Lorem Ipsum is");
+  await expect.poll(() => text(state.exported().pages?.[0].cover?.description_blocks), { timeout: 60_000 }).toBe("Lorem Ipsum is");
+});
+
+test("clicking beside bold page text allows inserting a space", async ({ page }) => {
+  const state = await fixture(page, mixedFormattingDocument);
+  await page.getByRole("button", { name: "Preview pages" }).click();
+  await expect(page.getByRole("button", { name: "Customize pages", exact: true })).toBeVisible({ timeout: 60_000 });
+  await page.getByRole("button", { name: "Customize pages", exact: true }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByRole("button", { name: "Edit page 2", exact: true }).click();
+  const editor = dialog.locator('main [data-page-canvas] .bn-editor[contenteditable="true"]');
+  const boundary = await editor.locator("strong").first().evaluate((bold) => {
+    const text = bold.lastChild;
+    if (!text) throw new Error("Expected bold text");
+    const range = window.document.createRange();
+    range.setStart(text, text.textContent?.length ?? 0);
+    range.collapse(true);
+    const rect = range.getBoundingClientRect();
+    return { x: rect.x, y: rect.y + rect.height / 2 };
+  });
+  const plainTextX = () => editor.locator("strong").first().evaluate((bold) => {
+    const plainText = bold.nextSibling;
+    if (!plainText || plainText.nodeType !== Node.TEXT_NODE) throw new Error("Expected plain text after bold text");
+    const range = window.document.createRange();
+    range.setStart(plainText, 0);
+    range.setEnd(plainText, 1);
+    return range.getBoundingClientRect().x;
+  });
+  const beforeX = await plainTextX();
+  await page.mouse.click(boundary.x, boundary.y);
+  await page.keyboard.press("Space");
+  await expect(editor).toContainText("Lorem Ipsum is");
+  expect(await plainTextX()).toBeGreaterThan(beforeX + 1);
+  await expect.poll(() => text(state.exported().pages?.slice(1).flatMap((item) => item.blocks)), { timeout: 60_000 }).toBe("Lorem Ipsum is");
+});
+
+for (const { label, style, mark } of [
+  { label: "bold", style: "bold", mark: "strong" },
+  { label: "italic", style: "italic", mark: "em" },
+  { label: "underline", style: "underline", mark: "u" },
+  { label: "strikethrough", style: "strike", mark: "s" },
+]) {
+  test(`page toolbar ${label} keeps spaces between formatted text`, async ({ page }) => {
+    const { state, dialog, editor } = await preparePageEditor(
+      page,
+      unformattedDocument,
+    );
+    await formatPrefixAndInsertSpace(page, dialog, editor, style, mark);
+    await expect
+      .poll(
+        () => text(state.exported().pages?.slice(1).flatMap((item) => item.blocks)),
+        { timeout: 60_000 },
+      )
+      .toBe("Lorem Ipsum is");
+    await expect(editor.locator(mark)).toContainText("Lorem Ipsum");
+  });
+}
+
+test("page toolbar combined styles keep spaces in formatted text", async ({ page }) => {
+  const { state, dialog, editor } = await preparePageEditor(
+    page,
+    unformattedDocument,
+  );
+  await selectPageEditorText(editor, 0, "Lorem Ipsum".length);
+  await expect(dialog.locator('.bn-toolbar [data-test="bold"]')).toBeVisible();
+  await dialog.locator('.bn-toolbar [data-test="bold"]').click();
+  await selectPageEditorText(editor, 0, "Lorem Ipsum".length);
+  await expect(dialog.locator('.bn-toolbar [data-test="underline"]')).toBeVisible();
+  await dialog.locator('.bn-toolbar [data-test="underline"]').click();
+
+  const markedText = editor.locator("strong").first();
+  await expect(markedText.locator("u")).toContainText("Lorem Ipsum");
+  const boundary = await markedText.evaluate((element) => {
+    const range = window.document.createRange();
+    const walker = window.document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+    let textNode = walker.nextNode();
+    while (textNode && walker.nextNode()) textNode = walker.currentNode;
+    if (!textNode) throw new Error("Expected formatted text");
+    range.setStart(textNode, textNode.textContent?.length ?? 0);
+    range.collapse(true);
+    const rect = range.getBoundingClientRect();
+    return { x: rect.x, y: rect.y + rect.height / 2 };
+  });
+  await page.mouse.click(boundary.x, boundary.y);
+  await page.keyboard.press("Space");
+
+  await expect(editor).toContainText("Lorem Ipsum is");
+  await expect.poll(
+    () => text(state.exported().pages?.slice(1).flatMap((item) => item.blocks)),
+    { timeout: 60_000 },
+  ).toBe("Lorem Ipsum is");
+  await expect(markedText.locator("u")).toContainText("Lorem Ipsum");
+});
+
+test("cover toolbar formatting keeps spaces in cover text", async ({ page }) => {
+  const state = await fixture(page, document(2), "portrait", {
+    initialCoverDescriptionBlocks: JSON.parse(unformattedDocument).blocks,
+  });
+  await page.getByRole("button", { name: "Preview pages" }).click();
+  await expect(page.getByRole("button", { name: "Customize pages", exact: true })).toBeVisible({ timeout: 60_000 });
+  await page.getByRole("button", { name: "Customize pages", exact: true }).click();
+  const dialog = page.getByRole("dialog");
+  const editor = dialog.locator('main .letter-cover-description .bn-editor[contenteditable="true"]');
+  await expect(editor).toBeVisible();
+  await formatPrefixAndInsertSpace(page, dialog, editor, "underline", "u");
+  await expect.poll(
+    () => text(state.exported().pages?.[0].cover?.description_blocks),
+    { timeout: 60_000 },
+  ).toBe("Lorem Ipsum is");
+});
+
+test("quote page toolbar formatting keeps spaces in quote text", async ({ page }) => {
+  const { state, dialog } = await preparePageEditor(page, unformattedDocument);
+  const canvas = dialog.locator("main [data-page-canvas]");
+  await dialog.getByRole("combobox", { name: "Page layout" }).click();
+  await page.getByRole("option", { name: "Featured quote", exact: true }).click();
+  await expect(canvas).toHaveAttribute("data-page-layout", "quote");
+  const editor = canvas.locator('.letter-page-quote-document .bn-editor[contenteditable="true"]');
+  await expect(editor).toBeVisible();
+  await formatPrefixAndInsertSpace(page, dialog, editor, "italic", "em");
+  await expect.poll(
+    () => text(state.exported().pages?.[1].blocks),
+    { timeout: 60_000 },
+  ).toBe("Lorem Ipsum is");
+});
+
+test("auto-sized quote keeps a space inserted after bold text", async ({ page }) => {
+  const content = `Lorem Ipsumis ${"word ".repeat(95)}`;
+  const { state, dialog } = await preparePageEditor(
+    page,
+    JSON.stringify({
+      version: 1,
+      blocks: [{ id: "paragraph", type: "paragraph", content }],
+    }),
+  );
+  const canvas = dialog.locator("main [data-page-canvas]");
+  const textSize = dialog.getByRole("slider", { name: "Text size" });
+  const bodySize = await textSize.getAttribute("aria-valuetext");
+  await dialog.getByRole("combobox", { name: "Page layout" }).click();
+  await page.getByRole("option", { name: "Featured quote", exact: true }).click();
+  const editor = canvas.locator('.letter-page-quote-document .bn-editor[contenteditable="true"]');
+  await expect(editor).toBeVisible();
+  await expect.poll(() => textSize.getAttribute("aria-valuetext")).not.toBe(bodySize);
+
+  await selectPageEditorText(editor, 0, "Lorem Ipsum".length);
+  await dialog.locator('.bn-toolbar [data-test="bold"]').click();
+  await expect.poll(
+    () => JSON.stringify(state.exported().pages?.[1].blocks),
+    { timeout: 60_000 },
+  ).toContain('"bold":true');
+
+  await typeSpaceAfterBold(page, editor);
+  await expect(editor).toContainText("Lorem Ipsum is");
+  await expect.poll(
+    () => text(state.exported().pages?.[1].blocks),
+    { timeout: 60_000 },
+  ).toContain("Lorem Ipsum is");
+});
+
+test("bold page text accepts a trailing space before more typing", async ({ page }) => {
+  const state = await fixture(page, boldOnlyDocument);
+  await page.getByRole("button", { name: "Preview pages" }).click();
+  await expect(page.getByRole("button", { name: "Customize pages", exact: true })).toBeVisible({ timeout: 60_000 });
+  await page.getByRole("button", { name: "Customize pages", exact: true }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByRole("button", { name: "Edit page 2", exact: true }).click();
+  const editor = dialog.locator('main [data-page-canvas] .bn-editor[contenteditable="true"]');
+  await editor.focus();
+  await editor.locator("strong").first().evaluate((bold) => {
+    const node = bold.lastChild;
+    if (!node || node.nodeType !== Node.TEXT_NODE) throw new Error("Expected bold text");
+    const range = window.document.createRange();
+    range.setStart(node, node.textContent?.length ?? 0);
+    range.collapse(true);
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+  });
+  await page.keyboard.press("Space");
+  await page.keyboard.type("again");
+  await expect(editor).toContainText("Lorem Ipsumis again");
+  await expect.poll(() => text(state.exported().pages?.slice(1).flatMap((item) => item.blocks)), { timeout: 60_000 }).toBe("Lorem Ipsumis again");
+});
+
+test("bold page text accepts a space inserted inside the bold run", async ({ page }) => {
+  const state = await fixture(page, boldOnlyDocument);
+  await page.getByRole("button", { name: "Preview pages" }).click();
+  await expect(page.getByRole("button", { name: "Customize pages", exact: true })).toBeVisible({ timeout: 60_000 });
+  await page.getByRole("button", { name: "Customize pages", exact: true }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByRole("button", { name: "Edit page 2", exact: true }).click();
+  const editor = dialog.locator('main [data-page-canvas] .bn-editor[contenteditable="true"]');
+  await editor.focus();
+  await editor.locator("strong").first().evaluate((bold) => {
+    const node = bold.firstChild;
+    if (!node || node.nodeType !== Node.TEXT_NODE) throw new Error("Expected bold text");
+    const range = window.document.createRange();
+    range.setStart(node, "Lorem Ipsum".length);
+    range.collapse(true);
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+  });
+  await page.keyboard.press("Space");
+  await expect(editor).toContainText("Lorem Ipsum is");
+  await expect.poll(() => text(state.exported().pages?.slice(1).flatMap((item) => item.blocks)), { timeout: 60_000 }).toBe("Lorem Ipsum is");
+});
+
+test("a split bold paragraph keeps spaces typed at a page boundary", async ({ page }) => {
+  const content = "Lorem Ipsumis ".repeat(500);
+  const state = await fixture(page, JSON.stringify({ version: 1, blocks: [{ id: "paragraph", type: "paragraph", content: [
+    { type: "text", text: content, styles: { bold: true } },
+  ] }] }));
+  await page.getByRole("button", { name: "Preview pages" }).click();
+  await expect(page.getByRole("button", { name: "Customize pages", exact: true })).toBeVisible({ timeout: 60_000 });
+  expect(state.exported().pages?.length).toBeGreaterThan(2);
+  const before = text(state.exported().pages?.slice(1).flatMap((item) => item.blocks));
+  await page.getByRole("button", { name: "Customize pages", exact: true }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByRole("button", { name: "Edit page 2", exact: true }).click();
+  const editor = dialog.locator('main [data-page-canvas] .bn-editor[contenteditable="true"]');
+  await editor.focus();
+  await editor.press("End");
+  await page.keyboard.press("Space");
+  await page.keyboard.type("X");
+  await expect.poll(() => text(state.exported().pages?.slice(1).flatMap((item) => item.blocks)), { timeout: 60_000 }).toContain(" X");
+  const after = text(state.exported().pages?.slice(1).flatMap((item) => item.blocks));
+  expect(after.length).toBe(before.length + 2);
+});
+
+test("paginated body keeps a space inserted after toolbar formatting", async ({ page }) => {
+  const content = `Lorem Ipsumis ${sentence.repeat(85)}`;
+  const { state, dialog, editor } = await preparePageEditor(
+    page,
+    JSON.stringify({
+      version: 1,
+      blocks: [{ id: "paragraph", type: "paragraph", content }],
+    }),
+  );
+  expect(state.exported().pages?.length).toBeGreaterThan(2);
+
+  await selectPageEditorText(editor, 0, "Lorem Ipsum".length);
+  await dialog.locator('.bn-toolbar [data-test="bold"]').click();
+  await expect.poll(
+    () => JSON.stringify(state.exported().pages?.[1].blocks),
+    { timeout: 60_000 },
+  ).toContain('"bold":true');
+
+  await typeSpaceAfterBold(page, editor);
+  await expect(editor).toContainText("Lorem Ipsum is");
+  await expect.poll(
+    () => text(state.exported().pages?.slice(1).flatMap((item) => item.blocks)),
+    { timeout: 60_000 },
+  ).toContain("Lorem Ipsum is");
+});
+
+test("narrow page editor accepts a space beside bold text", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const { state, dialog, editor } = await preparePageEditor(
+    page,
+    unformattedDocument,
+  );
+  await formatPrefixAndInsertSpace(page, dialog, editor, "bold", "strong");
+  await expect.poll(
+    () => text(state.exported().pages?.slice(1).flatMap((item) => item.blocks)),
+    { timeout: 60_000 },
+  ).toBe("Lorem Ipsum is");
+  const gap = await editor.locator("strong").first().evaluate((bold) => {
+    const plain = bold.nextSibling;
+    const markedText = bold.lastChild;
+    if (!plain || !markedText || plain.nodeType !== Node.TEXT_NODE) {
+      throw new Error("Expected plain text after the bold run");
+    }
+    const boldEnd = window.document.createRange();
+    boldEnd.setStart(markedText, markedText.textContent?.length ?? 0);
+    boldEnd.collapse(true);
+    const plainStart = window.document.createRange();
+    plainStart.setStart(plain, 1);
+    plainStart.setEnd(plain, 2);
+    return plainStart.getBoundingClientRect().x - boldEnd.getBoundingClientRect().x;
+  });
+  expect(gap).toBeGreaterThan(1);
+});
 
 test("letter text accepts a space immediately after a colon", async ({ page }) => {
   const state = await fixture(page, document(1));
@@ -335,6 +839,82 @@ test("long letters create every page they need without blocking preparation", as
   expect(text(state.exported().pages?.slice(1).flatMap((p) => p.blocks))).toBe(
     text(JSON.parse(original).blocks),
   );
+});
+
+test("page numbers exclude the cover and remain visible across page layouts", async ({
+  page,
+}) => {
+  await fixture(page, document(100));
+  await expect(
+    page.getByRole("button", { name: "Customize pages", exact: true }),
+  ).toBeVisible({ timeout: 60_000 });
+  await page
+    .getByRole("button", { name: "Customize pages", exact: true })
+    .click();
+
+  const dialog = page.getByRole("dialog");
+  const canvas = dialog.locator("main [data-page-canvas]");
+  await expect(canvas).toHaveAttribute("data-page-layout", "cover");
+  await expect(canvas.locator("[data-page-number]")).toHaveCount(0);
+  await expect(canvas).toHaveAttribute("aria-label", "Editable social cover");
+
+  await dialog.getByRole("button", { name: "Edit page 2", exact: true }).click();
+  await expect(canvas.locator("[data-page-number]")).toHaveText("1");
+  await expect(canvas).toHaveAttribute("aria-label", "Editable social page 1");
+
+  await dialog.getByRole("combobox", { name: "Page layout" }).click();
+  await page.getByRole("option", { name: "Featured quote", exact: true }).click();
+  await expect(canvas).toHaveAttribute("data-page-layout", "quote");
+  await expect(canvas.locator("[data-page-number]")).toHaveText("1");
+
+  await dialog.getByRole("button", { name: "Edit page 3", exact: true }).click();
+  await expect(canvas.locator("[data-page-number]")).toHaveText("2");
+  await expect(canvas).toHaveAttribute("aria-label", "Editable social page 2");
+});
+
+test("last-page author details save independently and blank lines stay hidden", async ({ page }) => {
+  const state = await fixture(page, document(2));
+  await expect(page.getByRole("button", { name: "Customize pages", exact: true })).toBeVisible({ timeout: 60_000 });
+  await page.getByRole("button", { name: "Customize pages", exact: true }).click();
+
+  const dialog = page.getByRole("dialog");
+  await dialog.getByRole("button", { name: "Edit page 2", exact: true }).click();
+  const canvas = dialog.locator("main [data-page-canvas]");
+  const authorName = dialog.getByRole("textbox", { name: "Author name" });
+  const username = dialog.getByRole("textbox", { name: "Username" });
+  await expect(authorName).toHaveValue("Test Author");
+  await expect(username).toHaveValue("@author");
+
+  await authorName.fill("Guest Writer");
+  await username.fill("");
+  await expect(canvas).toContainText("Guest Writer");
+  await expect(canvas).not.toContainText("@author");
+  await expect.poll(() => state.exported().pages?.at(-1)?.signature).toEqual({ name: "Guest Writer", handle: "" });
+  expect(state.exported().pages?.[0].cover?.author_name).toBe("Test Author");
+
+  await authorName.fill("");
+  await username.fill("guest.writer");
+  await expect(canvas).toContainText("guest.writer");
+  await expect(canvas).not.toContainText("Guest Writer");
+  await expect.poll(() => state.exported().pages?.at(-1)?.signature).toEqual({ name: "", handle: "guest.writer" });
+
+  await authorName.fill("");
+  await username.fill("");
+  await expect(canvas.locator(".letter-page-signature")).toHaveCount(0);
+  await expect.poll(() => state.exported().pages?.at(-1)?.signature).toEqual({ name: "", handle: "" });
+
+  await dialog.getByRole("combobox", { name: "Page layout" }).click();
+  await page.getByRole("option", { name: "Featured quote", exact: true }).click();
+  await expect(canvas).toHaveAttribute("data-page-layout", "quote");
+  await expect(canvas.locator(".letter-page-signature")).toHaveCount(0);
+  await expect(canvas).not.toContainText("Medasin");
+
+  await dialog.getByRole("button", { name: "Close", exact: true }).click();
+  await expect(dialog).toBeHidden();
+  await page.getByRole("button", { name: "Customize pages", exact: true }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Edit page 2", exact: true }).click();
+  await expect(page.getByRole("dialog").getByRole("textbox", { name: "Author name" })).toHaveValue("");
+  await expect(page.getByRole("dialog").getByRole("textbox", { name: "Username" })).toHaveValue("");
 });
 
 test("the page workspace closes while pending edits save", async ({ page }) => {

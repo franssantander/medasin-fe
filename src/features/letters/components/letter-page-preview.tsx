@@ -101,6 +101,9 @@ export const LetterPageCanvas = forwardRef<
 ) {
   const pageUuid = page.uuid || `${exportUuid}-${page.number}`;
   const layout = page.layout || (page.kind === "cover" ? "cover" : "body");
+  const displayPageNumber = page.number - 1;
+  const showPageNumber =
+    layout !== "cover" && !(page.kind === "final" && page.number === 2);
   const serializedBlocks = serializeNoteDocument(page.blocks);
   const textScale = normalizeLetterPageTextScale(
     textScaleOverride ?? page.text_scale,
@@ -164,7 +167,11 @@ export const LetterPageCanvas = forwardRef<
       data-page-layout={layout}
       data-page-theme={resolvedTheme}
       role={editable ? "group" : "img"}
-      aria-label={`${editable ? "Editable social page" : "Preview"} ${page.number}`}
+      aria-label={
+        layout === "cover"
+          ? `${editable ? "Editable social" : "Preview"} cover`
+          : `${editable ? "Editable social page" : "Preview page"} ${displayPageNumber}`
+      }
     >
       {layout === "cover" ? (
         <div
@@ -172,7 +179,7 @@ export const LetterPageCanvas = forwardRef<
           data-page-content
         >
           <div
-            className="flex min-h-0 flex-1 flex-col gap-[3cqh] overflow-hidden"
+            className="flex min-h-0 flex-1 flex-col gap-[1cqh] overflow-hidden"
             data-cover-main
           >
             {coverSections.map((section) => {
@@ -190,7 +197,7 @@ export const LetterPageCanvas = forwardRef<
                   >
                     <p
                       className={cn(
-                        "text-[1.5cqw] font-medium uppercase tracking-[0.18em]",
+                        "text-[5cqw] font-medium uppercase tracking-[0.18em]",
                         pageIsDark ? "text-zinc-300" : "text-zinc-500",
                       )}
                       style={{ fontSize: letterPageTextSize(1.5, textScale) }}
@@ -254,6 +261,7 @@ export const LetterPageCanvas = forwardRef<
                       documentId={`letter-cover-description-${exportUuid}-${pageUuid}`}
                       content={coverDescription}
                       syncContent
+                      pageEditor
                       onContentApplied={onContentApplied}
                       editable={editable}
                       noteOptions={[]}
@@ -330,7 +338,7 @@ export const LetterPageCanvas = forwardRef<
                     <p
                       className="truncate font-medium"
                       style={{
-                        fontSize: letterPageTextSize(1.75, textScale),
+                        fontSize: letterPageTextSize(1.80, textScale),
                       }}
                     >
                       {cover.author_name}
@@ -342,7 +350,7 @@ export const LetterPageCanvas = forwardRef<
                         pageIsDark ? "text-zinc-400" : "text-zinc-500"
                       }
                       style={{
-                        fontSize: letterPageTextSize(1.35, textScale),
+                        fontSize: letterPageTextSize(1.40, textScale),
                       }}
                     >
                       {cover.date_label}
@@ -404,6 +412,7 @@ export const LetterPageCanvas = forwardRef<
               documentId={`letter-page-quote-${exportUuid}-${pageUuid}-${editable ? "edit" : "view"}`}
               content={serializedBlocks}
               syncContent
+              pageEditor
               onContentApplied={onContentApplied}
               editable={editable}
               noteOptions={[]}
@@ -428,24 +437,28 @@ export const LetterPageCanvas = forwardRef<
               ”
             </span>
           </div>
-          {page.signature ? (
+          {page.signature?.name.trim() || page.signature?.handle.trim() ? (
             <div
               className={cn(
-                "text-center text-[1.4cqw]",
+                "letter-page-signature text-center text-[1.4cqw]",
                 pageIsDark ? "text-zinc-400" : "text-zinc-500",
               )}
             >
-              <p
-                className={cn(
-                  "font-medium",
-                  pageIsDark ? "text-zinc-200" : "text-zinc-700",
-                )}
-              >
-                {page.signature.name}
-              </p>
-              <p>{page.signature.handle}</p>
+              {page.signature?.name.trim() ? (
+                <p
+                  className={cn(
+                    "font-medium [overflow-wrap:anywhere]",
+                    pageIsDark ? "text-zinc-200" : "text-zinc-700",
+                  )}
+                >
+                  {page.signature.name}
+                </p>
+              ) : null}
+              {page.signature?.handle.trim() ? (
+                <p className="[overflow-wrap:anywhere]">{page.signature.handle}</p>
+              ) : null}
             </div>
-          ) : (
+          ) : !page.signature ? (
             <p
               className={cn(
                 "text-center text-[1.2cqw] uppercase tracking-[0.16em]",
@@ -454,7 +467,7 @@ export const LetterPageCanvas = forwardRef<
             >
               Medasin
             </p>
-          )}
+          ) : null}
         </div>
       ) : (
         <div className="flex h-full flex-col p-[8cqw]">
@@ -474,6 +487,7 @@ export const LetterPageCanvas = forwardRef<
               documentId={`letter-page-body-${exportUuid}-${pageUuid}-${editable ? "edit" : "view"}`}
               content={serializedBlocks}
               syncContent
+              pageEditor
               onContentApplied={onContentApplied}
               editable={editable}
               noteOptions={[]}
@@ -489,22 +503,27 @@ export const LetterPageCanvas = forwardRef<
               onBlur={onBlur}
             />
           </div>
-          {page.signature ? (
+          {page.signature?.name.trim() || page.signature?.handle.trim() ? (
             <div
               className={cn(
-                "mt-[5cqw] shrink-0 border-t pt-[3cqw]",
+                "letter-page-signature mt-[5cqw] shrink-0 border-t pt-[3cqw]",
                 pageIsDark ? "border-zinc-800" : "border-zinc-200",
               )}
             >
-              <p className="font-spectral text-[2.2cqw]">{page.signature.name}</p>
-              <p
-                className={cn(
-                  "mt-[0.6cqw] text-[1.3cqw]",
-                  pageIsDark ? "text-zinc-400" : "text-zinc-500",
-                )}
-              >
-                {page.signature.handle}
-              </p>
+              {page.signature?.name.trim() ? (
+                <p className="font-spectral text-[2.2cqw] [overflow-wrap:anywhere]">{page.signature.name}</p>
+              ) : null}
+              {page.signature?.handle.trim() ? (
+                <p
+                  className={cn(
+                    page.signature.name.trim() && "mt-[0.6cqw]",
+                    "text-[1.34qw] [overflow-wrap:anywhere]",
+                    pageIsDark ? "text-zinc-400" : "text-zinc-500",
+                  )}
+                >
+                  {page.signature.handle}
+                </p>
+              ) : null}
             </div>
           ) : null}
           {page.continuation_label ? (
@@ -519,6 +538,18 @@ export const LetterPageCanvas = forwardRef<
           ) : null}
         </div>
       )}
+      {showPageNumber ? (
+        <span
+          aria-hidden="true"
+          className={cn(
+            "pointer-events-none absolute bottom-[3cqw] left-1/2 -translate-x-1/2 text-[2.4cqw] leading-none tabular-nums",
+            pageIsDark ? "text-zinc-500" : "text-zinc-400",
+          )}
+          data-page-number
+        >
+          {displayPageNumber}
+        </span>
+      ) : null}
     </div>
   );
 });
@@ -528,11 +559,13 @@ export function LetterPageViewport({
   children,
   className,
   frameClassName,
+  minScale = 0,
 }: {
   canvas: LetterCanvas;
   children: ReactNode;
   className?: string;
   frameClassName?: string;
+  minScale?: number;
 }) {
   const viewportRef = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(0);
@@ -546,33 +579,47 @@ export function LetterPageViewport({
         viewport.clientWidth / canvas.width,
         viewport.clientHeight / canvas.height,
       );
-      setScale(Number.isFinite(nextScale) ? Math.max(0, nextScale) : 0);
+      setScale(
+        Number.isFinite(nextScale) ? Math.max(minScale, nextScale) : 0,
+      );
     };
     const observer = new ResizeObserver(resize);
     observer.observe(viewport);
     resize();
 
     return () => observer.disconnect();
-  }, [canvas.height, canvas.width]);
+  }, [canvas.height, canvas.width, minScale]);
 
   return (
     <div
       ref={viewportRef}
-      className={cn("relative min-h-0 min-w-0 overflow-hidden", className)}
+      className={cn(
+        "relative min-h-0 min-w-0",
+        minScale > 0 ? "overflow-auto" : "overflow-hidden",
+        className,
+      )}
     >
       <div
-        className={cn(
-          "absolute top-1/2 left-1/2 origin-center overflow-hidden rounded-xl bg-white shadow-lg ring-1 ring-border",
-          frameClassName,
-        )}
+        className="relative min-h-full min-w-full"
         style={{
-          width: canvas.width,
-          height: canvas.height,
-          opacity: scale > 0 ? 1 : 0,
-          transform: `translate(-50%, -50%) scale(${scale})`,
+          width: canvas.width * scale,
+          height: canvas.height * scale,
         }}
       >
-        {children}
+        <div
+          className={cn(
+            "absolute top-1/2 left-1/2 origin-center overflow-hidden rounded-xl bg-white shadow-lg ring-1 ring-border",
+            frameClassName,
+          )}
+          style={{
+            width: canvas.width,
+            height: canvas.height,
+            opacity: scale > 0 ? 1 : 0,
+            transform: `translate(-50%, -50%) scale(${scale})`,
+          }}
+        >
+          {children}
+        </div>
       </div>
     </div>
   );

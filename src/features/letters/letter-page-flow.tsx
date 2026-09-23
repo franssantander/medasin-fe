@@ -291,7 +291,7 @@ async function paginateBodyBlocks(
   const pages: LetterPage[] = [];
   const blocks = remainingBlocks.slice();
   let slot = 0;
-  let signaturePending = terminal && Boolean(signature);
+  let signaturePending = terminal && Boolean(signature?.name.trim() || signature?.handle.trim());
 
   while (blocks.length || signaturePending || !pages.length) {
     signal?.throwIfAborted();
@@ -331,7 +331,7 @@ async function paginateBodyBlocks(
       // put the signature on the next page instead of splitting needlessly.
       if (isLastBlock && await fits({ ...candidate, signature: null })) {
         page.blocks.push(blocks.shift()!);
-        signaturePending = Boolean(signature);
+        signaturePending = Boolean(signature?.name.trim() || signature?.handle.trim());
         continue;
       }
 
@@ -341,7 +341,7 @@ async function paginateBodyBlocks(
         blocks[0] = split[1];
       } else if (!page.blocks.length) {
         page.blocks.push(blocks.shift()!);
-        if (isLastBlock) signaturePending = Boolean(signature);
+        if (isLastBlock) signaturePending = Boolean(signature?.name.trim() || signature?.handle.trim());
         const fitted = await shrinkBodyPageToFit(page, fits, signal);
         page.text_scale = fitted.text_scale;
         page.text_scale_mode = fitted.text_scale_mode;

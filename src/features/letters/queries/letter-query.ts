@@ -149,9 +149,12 @@ export function useCreateLetterExportMutation() {
       pages?: LetterExportPageInput[];
       silent?: boolean;
     }) => letterService.createExport(letterUuid, { format, pages }),
-    onSuccess: (response, variables) => {
+    onSuccess: async (response, variables) => {
       const letterUuid = response.data.letter_uuid ?? variables.letterUuid;
-      void Promise.all([
+      const exportKey = letterKeys.export(letterUuid, response.data.uuid);
+      await queryClient.cancelQueries({ queryKey: exportKey });
+      queryClient.setQueryData(exportKey, response);
+      await Promise.all([
         queryClient.invalidateQueries({
           queryKey: letterKeys.detail(letterUuid),
         }),

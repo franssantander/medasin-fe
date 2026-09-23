@@ -171,11 +171,20 @@ export function LetterPageWorkspace({
   const onLayout = useCallback((result: LetterPageFlowResult) => {
     const selection = controlsRef.current?.getSelection();
     const mapped = selection?.focused ? mapFlowSelection(selection, result) : null;
+    // Restoring an unchanged selection after every reflow can shift the caret
+    // across adjacent formatting runs while the user continues typing.
+    const selectionMoved = mapped && (
+      mapped.pageUuid !== selectedUuidRef.current ||
+      mapped.selection.anchor.blockId !== selection?.anchor.blockId ||
+      mapped.selection.anchor.offset !== selection?.anchor.offset ||
+      mapped.selection.head.blockId !== selection?.head.blockId ||
+      mapped.selection.head.offset !== selection?.head.offset
+    );
     const next = mapped
       ? result.pages.find((page) => page.uuid === mapped.pageUuid)
       : result.pages.find((page) => page.uuid === selectedUuidRef.current) ??
         result.pages[Math.min(selectedPageNumberRef.current - 1, result.pages.length - 1)];
-    if (mapped) pendingSelectionRef.current = mapped.selection;
+    pendingSelectionRef.current = selectionMoved ? mapped.selection : null;
     if (next) {
       selectedUuidRef.current = next.uuid;
       selectedPageNumberRef.current = next.number;
@@ -384,25 +393,39 @@ export function LetterPageWorkspace({
     editorDraftRef.current = { pageUuid, content };
     const blocks = parseNoteDocument(content).blocks;
     const plainText = getNoteDocumentPreview(content);
+    const currentPage = getPages().find((page) => page.uuid === pageUuid);
+    if (!currentPage) return;
+
+    const blocksMatch = serializeNoteDocument(currentPage.blocks) === content;
+    if (currentPage.layout !== "cover" && blocksMatch) return;
+
+    const subtitle = plainText.slice(0, 240) || null;
+    if (currentPage.layout === "cover") {
+      const cover = normalizeLetterCover(currentPage.cover);
+      if (
+        blocksMatch &&
+        serializeNoteDocument(cover.description_blocks) === content &&
+        currentPage.subtitle === subtitle
+      ) return;
+    }
+
     updatePages((current) =>
       current.map((page) => {
         if (page.uuid !== pageUuid) return page;
         if (page.layout !== "cover") {
-          return serializeNoteDocument(page.blocks) === content
-            ? page
-            : { ...page, blocks };
+          return { ...page, blocks };
         }
 
         const cover = normalizeLetterCover(page.cover);
         return {
           ...page,
           blocks,
-          subtitle: plainText.slice(0, 240) || null,
+          subtitle,
           cover: { ...cover, description_blocks: blocks },
         };
       }),
     );
-  }, [updatePages]);
+  }, [getPages, updatePages]);
 
   const uploadImage = useCallback(
     async (file: File) => {
@@ -843,6 +866,7 @@ export function LetterPageWorkspace({
             <LetterPageViewport
               canvas={letterExport.canvas}
               className="size-full"
+              minScale={selectedIsCoverContinuation ? 0 : 0.5}
             >
               <LetterPageCanvas
                 key={selectedPage.uuid}
@@ -870,7 +894,10 @@ export function LetterPageWorkspace({
                 onEditorReady={handleEditorReady}
                 onContentApplied={restorePendingSelection}
                 onHistoryStateChange={setHistoryState}
-                onBlur={() => void flush().catch(() => undefined)}
+                onBlur={() => {
+                  commitActiveEditor();
+                  void flush().catch(() => undefined);
+                }}
               />
             </LetterPageViewport>
           </main>
@@ -986,6 +1013,40 @@ export function LetterPageWorkspace({
                     <SelectContent><SelectGroup><SelectItem value="body">Body text</SelectItem><SelectItem value="quote">Featured quote</SelectItem></SelectGroup></SelectContent>
                   </Select>
                 </label>
+                {selectedIndex === pages.length - 1 ? (
+                  <fieldset className="flex flex-col gap-3 rounded-lg border p-4">
+                    <legend className="px-1 text-sm font-medium">Last-page author details</legend>
+                    <label className="flex flex-col gap-1.5 text-sm font-medium">
+                      Author name
+                      <Input
+                        value={selectedPage.signature?.name ?? ""}
+                        maxLength={120}
+                        onChange={(event) => updateSelected({
+                          signature: {
+                            name: event.target.value,
+                            handle: selectedPage.signature?.handle ?? "",
+                          },
+                        })}
+                      />
+                    </label>
+                    <label className="flex flex-col gap-1.5 text-sm font-medium">
+                      Username
+                      <Input
+                        value={selectedPage.signature?.handle ?? ""}
+                        maxLength={80}
+                        onChange={(event) => updateSelected({
+                          signature: {
+                            name: selectedPage.signature?.name ?? "",
+                            handle: event.target.value,
+                          },
+                        })}
+                      />
+                    </label>
+                    <p className="text-xs text-muted-foreground">
+                      Leave either field blank to hide it. The username appears exactly as entered.
+                    </p>
+                  </fieldset>
+                ) : null}
                 <div className="flex items-center gap-1">
                   <Button
                     type="button"
