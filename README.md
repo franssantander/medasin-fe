@@ -28,6 +28,15 @@ modify real letters. They exercise the actual page renderer, text-size reflow,
 content preservation, and the ten-page limit. Run `npm run lint` and
 `npm run build` for static checks.
 
+## Plan reminder updates
+
+Set the public Reverb variables in `.env.example` for the browser's reachable
+Reverb endpoint. `NEXT_PUBLIC_REVERB_APP_KEY` must match the Laravel
+`REVERB_APP_KEY`; keep `REVERB_APP_SECRET` on the backend. Laravel must run its
+scheduler, queue worker, and Reverb server to deliver live reminders. The
+notification list also refreshes over HTTP every minute if the socket is
+unavailable.
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:

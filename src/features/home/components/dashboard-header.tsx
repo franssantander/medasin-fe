@@ -2,7 +2,6 @@
 
 import { useRouter } from "next/navigation";
 import {
-  Bell,
   LoaderCircle,
   LogOut,
   Menu,
@@ -27,6 +26,7 @@ import {
 import { Kbd } from "@/components/ui/kbd";
 import { toast } from "@/components/ui/toast";
 import { useLogoutMutation } from "@/features/auth/queries/auth-query";
+import { PlanNotifications } from "@/features/plans/notifications/plan-notifications";
 import type { CurrentUser } from "@/features/auth/type";
 
 type DashboardHeaderProps = {
@@ -138,9 +138,7 @@ export function DashboardHeader({
         </div>
       </div>
       <div className="flex shrink-0 items-center gap-3">
-        <Button size="icon-sm" variant="outline" aria-label="Notifications">
-          <Bell />
-        </Button>
+        <PlanNotifications userId={currentUser?.id} />
         <ProfileMenu user={currentUser} />
       </div>
     </header>

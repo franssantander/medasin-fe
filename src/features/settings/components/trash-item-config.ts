@@ -1,5 +1,6 @@
 import {
   BookHeart,
+  CalendarDays,
   CheckSquare2,
   CirclePile,
   FileText,
@@ -48,6 +49,12 @@ export const trashTypeOptions: TrashTypeOption[] = [
     label: "Journal",
     singularLabel: "Journal entry",
     icon: BookHeart,
+  },
+  {
+    value: "calendar_plan",
+    label: "Plans",
+    singularLabel: "Plan",
+    icon: CalendarDays,
   },
   {
     value: "board_label",
