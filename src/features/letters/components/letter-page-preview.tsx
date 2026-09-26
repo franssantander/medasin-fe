@@ -137,6 +137,8 @@ export const LetterPageCanvas = forwardRef<
   );
   const coverHeroAspectRatio =
     cover.hero_image_aspect_ratio ?? LETTER_COVER_HERO_ASPECT_RATIO;
+  const heroCaption = cover.hero_image_caption.trim();
+  const captionBelowImage = cover.hero_image_caption_placement === "below";
   const editorStyle = {
     "--letter-page-editor-font-size": letterPageTextSize(
       layout === "quote" ? 4.3 : 1.72,
@@ -169,7 +171,7 @@ export const LetterPageCanvas = forwardRef<
       role={editable ? "group" : "img"}
       aria-label={
         layout === "cover"
-          ? `${editable ? "Editable social" : "Preview"} cover`
+          ? `${editable ? "Editable social" : "Preview"} cover${!editable && heroCaption ? `, image caption: ${heroCaption}` : ""}`
           : `${editable ? "Editable social page" : "Preview page"} ${displayPageNumber}`
       }
     >
@@ -286,27 +288,65 @@ export const LetterPageCanvas = forwardRef<
 
               if (section === "hero" && cover.hero_image_url) {
                 return (
-                  <div
+                  <figure
                     key={section}
                     data-cover-section="hero"
-                    className="mx-auto min-h-[12cqh] max-h-[42cqh] shrink overflow-hidden rounded-[2cqw]"
-                    style={{
+                    data-caption-placement={cover.hero_image_caption_placement}
+                    className={cn(
+                      "mx-auto",
+                      captionBelowImage
+                        ? "flex w-[92%] shrink-0 flex-col items-center gap-[1cqh]"
+                        : "relative min-h-[12cqh] max-h-[42cqh] shrink overflow-hidden rounded-[2cqw]",
+                    )}
+                    style={captionBelowImage ? undefined : {
                       aspectRatio: `${coverHeroAspectRatio}`,
                       width: `min(92%, ${42 * coverHeroAspectRatio}cqh)`,
                     }}
                   >
-                    <Image
-                      unoptimized
-                      src={imageFetchSource(cover.hero_image_url)}
-                      alt="Letter cover"
-                      width={1600}
-                      height={Math.max(
-                        1,
-                        Math.round(1600 / coverHeroAspectRatio),
+                    <div
+                      data-cover-hero-image
+                      className={cn(
+                        "relative overflow-hidden rounded-[2cqw]",
+                        captionBelowImage ? "shrink-0" : "size-full",
                       )}
-                      className="size-full object-cover object-center"
-                    />
-                  </div>
+                      style={captionBelowImage ? {
+                        aspectRatio: `${coverHeroAspectRatio}`,
+                        width: `min(100%, ${32 * coverHeroAspectRatio}cqh)`,
+                      } : undefined}
+                    >
+                      <Image
+                        unoptimized
+                        src={imageFetchSource(cover.hero_image_url)}
+                        alt="Letter cover"
+                        width={1600}
+                        height={Math.max(
+                          1,
+                          Math.round(1600 / coverHeroAspectRatio),
+                        )}
+                        className="size-full object-cover object-center"
+                      />
+                    </div>
+                    {heroCaption ? (
+                      <figcaption
+                        data-cover-hero-caption
+                        data-caption-alignment={cover.hero_image_caption_alignment}
+                        data-caption-placement={cover.hero_image_caption_placement}
+                        className={cn(
+                          "break-words px-[2.5cqw] font-medium leading-[1.3]",
+                          captionBelowImage
+                            ? cn(
+                                "w-full py-[0.5cqh]",
+                                pageIsDark ? "text-zinc-300" : "text-zinc-600",
+                              )
+                            : "absolute inset-x-0 bottom-0 max-h-full overflow-hidden bg-black/75 py-[1.5cqw] text-white",
+                          COVER_TEXT_ALIGNMENT_CLASS[cover.hero_image_caption_alignment],
+                        )}
+                        style={{ fontSize: letterPageTextSize(1.8, textScale) }}
+                      >
+                        {heroCaption}
+                      </figcaption>
+                    ) : null}
+                  </figure>
                 );
               }
 

@@ -18,6 +18,10 @@ export type ImageCropArea = {
   height: number;
 };
 
+export type CropImageOptions = {
+  maxBytes?: number;
+};
+
 function loadImage(source: string) {
   return new Promise<HTMLImageElement>((resolve, reject) => {
     const image = new Image();
@@ -121,11 +125,12 @@ export async function cropImage(
   source: string,
   file: File,
   crop: ImageCropArea,
+  options: CropImageOptions = {},
 ) {
   const image = await loadImage(source);
   const scale = Math.min(1, MAX_CROPPED_IMAGE_WIDTH / crop.width);
-  const width = Math.max(1, Math.round(crop.width * scale));
-  const height = Math.max(1, Math.round(crop.height * scale));
+  let width = Math.max(1, Math.round(crop.width * scale));
+  let height = Math.max(1, Math.round(crop.height * scale));
   const canvas = document.createElement("canvas");
   const context = canvas.getContext("2d");
 
@@ -133,33 +138,76 @@ export async function cropImage(
     throw new Error("Image cropping is not supported in this browser.");
   }
 
-  canvas.width = width;
-  canvas.height = height;
-  context.imageSmoothingEnabled = true;
-  context.imageSmoothingQuality = "high";
-  context.drawImage(
-    image,
-    crop.x,
-    crop.y,
-    crop.width,
-    crop.height,
-    0,
-    0,
-    width,
-    height,
-  );
+  const draw = () => {
+    canvas.width = width;
+    canvas.height = height;
+    context.imageSmoothingEnabled = true;
+    context.imageSmoothingQuality = "high";
+    context.drawImage(
+      image,
+      crop.x,
+      crop.y,
+      crop.width,
+      crop.height,
+      0,
+      0,
+      width,
+      height,
+    );
+  };
+
+  const encode = (type: string, quality: number) =>
+    new Promise<Blob>((resolve, reject) => {
+      canvas.toBlob(
+        (result) => {
+          if (result) resolve(result);
+          else reject(new Error("The cropped image could not be created."));
+        },
+        type,
+        quality,
+      );
+    });
+
+  draw();
 
   const type = croppedImageType(file);
-  const blob = await new Promise<Blob>((resolve, reject) => {
-    canvas.toBlob(
-      (result) => {
-        if (result) resolve(result);
-        else reject(new Error("The cropped image could not be created."));
-      },
-      type,
-      0.9,
-    );
-  });
+  let blob = await encode(type, 0.9);
+
+  if (options.maxBytes && blob.size > options.maxBytes) {
+    // A valid source can grow beyond the upload limit when converted to PNG.
+    // WebP preserves transparency, so prefer it before reducing dimensions.
+    const originalWidth = width;
+    const originalHeight = height;
+    for (let attempt = 0; attempt < 9; attempt += 1) {
+      if (attempt > 0) {
+        const nextScale = 0.8 ** attempt;
+        width = Math.max(1, Math.round(originalWidth * nextScale));
+        height = Math.max(1, Math.round(originalHeight * nextScale));
+        draw();
+      }
+
+      for (const quality of [0.85, 0.7, 0.55]) {
+        const candidate = await encode("image/webp", quality);
+        if (candidate.type !== "image/webp") break;
+        if (candidate.size <= options.maxBytes) {
+          blob = candidate;
+          break;
+        }
+      }
+      if (blob.size <= options.maxBytes) break;
+
+      // Browsers without WebP encoding can still submit a smaller PNG/JPEG.
+      const fallback = await encode(type, 0.9);
+      if (fallback.size <= options.maxBytes) {
+        blob = fallback;
+        break;
+      }
+    }
+
+    if (blob.size > options.maxBytes) {
+      throw new Error("The cropped image is too large. Choose a smaller crop or image.");
+    }
+  }
 
   return {
     file: new File([blob], croppedFileName(file, blob.type || type), {

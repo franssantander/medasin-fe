@@ -89,6 +89,7 @@ import { LETTER_EXPORT_FORMATS } from "../letter-export-formats";
 import {
   LETTER_COVER_SECTION_LABELS,
   LETTER_COVER_HERO_ASPECT_RATIO,
+  LETTER_COVER_HERO_CAPTION_MAX_LENGTH,
   getLetterPageTheme,
   normalizeLetterCover,
   normalizeLetterCoverHeroAspectRatio,
@@ -109,6 +110,7 @@ import {
 import type {
   Letter,
   LetterCover,
+  LetterCoverCaptionPlacement,
   LetterCoverSection,
   LetterCoverTextAlignment,
   LetterExport,
@@ -122,6 +124,7 @@ import {
 } from "./letter-page-preview";
 
 const MAX_LETTER_IMAGE_REQUEST_BYTES = 8 * 1024 * 1024;
+const MAX_CROPPED_LETTER_IMAGE_BYTES = 7.5 * 1024 * 1024;
 const LETTER_IMAGE_TYPES = new Set([
   "image/jpeg",
   "image/png",
@@ -428,7 +431,7 @@ export function LetterPageWorkspace({
   }, [getPages, updatePages]);
 
   const uploadImage = useCallback(
-    async (file: File) => {
+    async (file: File, { toastOnError = true }: { toastOnError?: boolean } = {}) => {
       try {
         validateLetterImage(file);
 
@@ -440,11 +443,13 @@ export function LetterPageWorkspace({
         return response.data.url;
       } catch (error) {
         const uploadError = parseApiError(error);
-        const description = uploadError.message.includes("POST Content-Length")
-          ? "Images must be smaller than 8 MB."
-          : uploadError.message;
-        toast.add({ type: "error", description });
-        throw uploadError;
+        const description = uploadError.validationErrors?.file?.[0] ?? (
+          uploadError.message.includes("POST Content-Length")
+            ? "Images must be smaller than 8 MB."
+            : uploadError.message
+        );
+        if (toastOnError) toast.add({ type: "error", description });
+        throw new Error(description);
       }
     },
     [letterUuid],
@@ -508,7 +513,7 @@ export function LetterPageWorkspace({
 
       setUploadingCoverImage(kind);
       try {
-        const url = await uploadImage(file);
+        const url = await uploadImage(file, { toastOnError: false });
         updateCover(
           kind === "avatar" ? { avatar_url: url } : { hero_image_url: url },
         );
@@ -580,6 +585,9 @@ export function LetterPageWorkspace({
     updateCover({
       hero_image_url: null,
       hero_image_aspect_ratio: null,
+      hero_image_caption: "",
+      hero_image_caption_alignment: "center",
+      hero_image_caption_placement: "overlay",
     });
   }, [closeCoverCrop, updateCover]);
 
@@ -588,7 +596,7 @@ export function LetterPageWorkspace({
       const revision = coverHeroRevisionRef.current;
       setUploadingCoverImage("hero");
       try {
-        const url = await uploadImage(file);
+        const url = await uploadImage(file, { toastOnError: false });
         if (revision !== coverHeroRevisionRef.current) return;
         updateCover({
           hero_image_url: url,
@@ -1103,6 +1111,7 @@ export function LetterPageWorkspace({
         source={coverCrop.source}
         file={coverCrop.file}
         aspect={coverCrop.initialAspect}
+        maxBytes={MAX_CROPPED_LETTER_IMAGE_BYTES}
         title="Crop cover image"
         description="Choose the area that should appear in the cover image section."
         aspectOptions={
@@ -1297,6 +1306,88 @@ function CoverControls({
         onCrop={onCropCoverImage}
         onRemove={onRemoveCoverImage}
       />
+      {cover.hero_image_url ? (
+        <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-1.5">
+            <label
+              htmlFor={`cover-image-caption-${page.uuid}`}
+              className="text-sm font-medium"
+            >
+              Cover image caption
+            </label>
+            <Input
+              id={`cover-image-caption-${page.uuid}`}
+              value={cover.hero_image_caption}
+              maxLength={LETTER_COVER_HERO_CAPTION_MAX_LENGTH}
+              placeholder="Add an optional caption"
+              onChange={(event) =>
+                onCoverChange({ hero_image_caption: event.target.value })
+              }
+            />
+            <p className="text-xs text-muted-foreground">
+              Optional · Add a caption to your cover image.
+            </p>
+          </div>
+          <div className="flex flex-col gap-2">
+            <p
+              id={`cover-caption-placement-${page.uuid}`}
+              className="text-sm font-medium"
+            >
+              Caption placement
+            </p>
+            <ToggleGroup
+              aria-labelledby={`cover-caption-placement-${page.uuid}`}
+              className="w-full"
+              value={[cover.hero_image_caption_placement]}
+              variant="outline"
+              spacing={0}
+              onValueChange={(value) => {
+                const placement = value[0] as LetterCoverCaptionPlacement | undefined;
+                if (placement) onCoverChange({ hero_image_caption_placement: placement });
+              }}
+            >
+              <ToggleGroupItem className="min-h-11 flex-1" value="overlay">
+                On image
+              </ToggleGroupItem>
+              <ToggleGroupItem className="min-h-11 flex-1" value="below">
+                Below image
+              </ToggleGroupItem>
+            </ToggleGroup>
+          </div>
+          <div className="flex flex-col gap-2">
+            <p
+              id={`cover-caption-alignment-${page.uuid}`}
+              className="text-sm font-medium"
+            >
+              Caption alignment
+            </p>
+            <ToggleGroup
+              aria-labelledby={`cover-caption-alignment-${page.uuid}`}
+              className="w-full"
+              value={[cover.hero_image_caption_alignment]}
+              variant="outline"
+              spacing={0}
+              onValueChange={(value) => {
+                const alignment = value[0] as LetterCoverTextAlignment | undefined;
+                if (alignment) onCoverChange({ hero_image_caption_alignment: alignment });
+              }}
+            >
+              <ToggleGroupItem className="min-h-11 flex-1" value="left">
+                <AlignLeft aria-hidden="true" />
+                Left
+              </ToggleGroupItem>
+              <ToggleGroupItem className="min-h-11 flex-1" value="center">
+                <AlignCenter aria-hidden="true" />
+                Center
+              </ToggleGroupItem>
+              <ToggleGroupItem className="min-h-11 flex-1" value="right">
+                <AlignRight aria-hidden="true" />
+                Right
+              </ToggleGroupItem>
+            </ToggleGroup>
+          </div>
+        </div>
+      ) : null}
 
       <div className="flex flex-col gap-2">
         <p className="text-sm font-medium">Content order</p>

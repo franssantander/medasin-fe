@@ -20,6 +20,7 @@ export const LETTER_COVER_SECTIONS: LetterCoverSection[] = [
 
 /** The fallback crop used by new and legacy cover images. */
 export const LETTER_COVER_HERO_ASPECT_RATIO = 16 / 9;
+export const LETTER_COVER_HERO_CAPTION_MAX_LENGTH = 120;
 const LETTER_COVER_HERO_ASPECT_RATIO_MIN = 0.1;
 const LETTER_COVER_HERO_ASPECT_RATIO_MAX = 10;
 
@@ -43,6 +44,9 @@ export function createLetterCover(letter?: Letter): LetterCover {
     avatar_url: null,
     hero_image_url: null,
     hero_image_aspect_ratio: null,
+    hero_image_caption: "",
+    hero_image_caption_alignment: "center",
+    hero_image_caption_placement: "overlay",
     section_order: [...LETTER_COVER_SECTIONS],
   };
 }
@@ -96,6 +100,19 @@ export function normalizeLetterCover(
     hero_image_aspect_ratio: heroImageUrl
       ? normalizeLetterCoverHeroAspectRatio(source.hero_image_aspect_ratio)
       : null,
+    hero_image_caption:
+      heroImageUrl && typeof source.hero_image_caption === "string"
+        ? source.hero_image_caption.slice(0, LETTER_COVER_HERO_CAPTION_MAX_LENGTH)
+        : "",
+    hero_image_caption_alignment:
+      heroImageUrl && (source.hero_image_caption_alignment === "left" ||
+      source.hero_image_caption_alignment === "right")
+        ? source.hero_image_caption_alignment
+        : "center",
+    hero_image_caption_placement:
+      heroImageUrl && source.hero_image_caption_placement === "below"
+        ? "below"
+        : "overlay",
     section_order: sectionOrder,
   };
 }

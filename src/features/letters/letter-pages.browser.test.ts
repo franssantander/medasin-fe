@@ -14,6 +14,8 @@ async function fixture(
     initialHeroAspectRatio?: number;
     initialCoverDescriptionBlocks?: unknown[];
     invalidateExportOnLetterUpdate?: boolean;
+    rejectMediaUploadNumber?: number;
+    legacyCaptionPlacement?: boolean;
   },
 ) {
   let letter: Letter = {
@@ -27,6 +29,10 @@ async function fixture(
   };
   let exported: LetterExport | null = null;
   const updates: LetterPage[][] = [];
+  let mediaUploads = 0;
+  await page.route(/\/storage\/(?:existing-cover|uploaded-cover-\d+)\.png$/, async (route) => {
+    await route.fulfill({ body: testCoverPng, contentType: "image/png" });
+  });
   await page.route("**/api-test/v1/**", async (route) => {
     const url = new URL(route.request().url());
     const path = url.pathname.replace("/api-test/v1", "");
@@ -72,11 +78,27 @@ async function fixture(
           },
         };
       }
+      if (metadata?.legacyCaptionPlacement && pages[0]?.cover) {
+        pages[0].cover.hero_image_caption = "An older image caption";
+        Reflect.deleteProperty(pages[0].cover, "hero_image_caption_placement");
+      }
       exported = { uuid: "export-test", letter_uuid: letter.uuid, format: input.format, canvas, status: "ready", is_current: true, pages, page_count: pages.length, error: null, created_at: null, updated_at: null, started_at: null, completed_at: null };
       letter = { ...letter, latest_export: exported };
       data = exported;
     } else if (path === "/letters/letter-test/media" && method === "POST") {
-      data = { url: "/storage/uploaded-cover.png" };
+      mediaUploads += 1;
+      if (mediaUploads === metadata?.rejectMediaUploadNumber) {
+        await route.fulfill({
+          status: 422,
+          json: {
+            message:
+              "The submitted information contains errors. Please review the highlighted fields and try again.",
+            errors: { file: ["The replacement image could not be saved."] },
+          },
+        });
+        return;
+      }
+      data = { url: `/storage/uploaded-cover-${mediaUploads}.png` };
     } else if (path === "/letters/letter-test/exports/export-test") {
       if (method === "PATCH") {
         if (metadata?.updateDelayMs) {
@@ -87,7 +109,7 @@ async function fixture(
         const input = route.request().postDataJSON();
         updates.push(input.pages);
         exported = { ...exported!, pages: normalize(input.pages), page_count: input.pages.length };
-        letter = { ...letter, title: input.pages[0].title, content: JSON.stringify({ version: 1, blocks: input.pages.slice(1).flatMap((p: LetterPage) => p.blocks) }), latest_export: exported };
+        letter = { ...letter, title: input.pages[0].title, subtitle: input.pages[0].subtitle, content: JSON.stringify({ version: 1, blocks: input.pages.slice(1).flatMap((p: LetterPage) => p.blocks) }), latest_export: exported };
         data = { export: exported, letter };
       } else data = exported;
     } else data = [];
@@ -100,7 +122,12 @@ async function fixture(
     await formatSelect.click();
     await page.getByRole("option", { name: new RegExp(LETTER_EXPORT_FORMATS[format].shortLabel) }).click();
   }
-  return { letter: () => letter, exported: () => exported!, updates };
+  return {
+    letter: () => letter,
+    exported: () => exported!,
+    mediaUploads: () => mediaUploads,
+    updates,
+  };
 }
 
 test("long cover text auto-fits before the export is created", async ({ page }) => {
@@ -141,10 +168,11 @@ test("long cover text crops the image height without resizing the typography", a
     name: "Customize pages",
     exact: true,
   });
+  await page.getByRole("button", { name: "Preview pages" }).click();
   await expect(customizePages).toBeVisible({ timeout: 60_000 });
   await customizePages.click();
 
-  const dialog = page.getByRole("dialog");
+  const dialog = page.getByRole("dialog", { name: "Prepare social pages" });
   const coverCanvas = dialog.locator('main [data-page-layout="cover"]');
   const coverHero = coverCanvas.locator('[data-cover-section="hero"]');
   const coverBody = dialog.locator(
@@ -1058,11 +1086,12 @@ test("cover controls persist styling, metadata, and image removal", async ({ pag
     initialHeroImageUrl: "http://localhost/storage/existing-cover.png",
     initialHeroAspectRatio: 1.25,
   });
+  await page.getByRole("button", { name: "Preview pages" }).click();
   await expect(
     page.getByRole("button", { name: "Customize pages", exact: true }),
   ).toBeVisible({ timeout: 60_000 });
   await page.getByRole("button", { name: "Customize pages", exact: true }).click();
-  const dialog = page.getByRole("dialog");
+  const dialog = page.getByRole("dialog", { name: "Prepare social pages" });
 
   await dialog.getByRole("combobox", { name: "Background" }).click();
   await page.getByRole("option", { name: "Dark", exact: true }).click();
@@ -1128,9 +1157,10 @@ test("cover controls persist styling, metadata, and image removal", async ({ pag
       return (canvasBounds.bottom - footerBounds.bottom) / canvasBounds.height;
     }),
   ).toBeCloseTo(0.056, 1);
-  await dialog.getByRole("button", { name: "Left", exact: true }).click();
+  const coverTextAlignment = dialog.getByRole("group", { name: "Text alignment" });
+  await coverTextAlignment.getByRole("button", { name: "Left", exact: true }).click();
   await expect(
-    dialog.getByRole("button", { name: "Left", exact: true }),
+    coverTextAlignment.getByRole("button", { name: "Left", exact: true }),
   ).toHaveAttribute("aria-pressed", "true");
   await expect(coverSubheader).toHaveCSS("text-align", "left");
   await expect(coverTitle).toHaveCSS("text-align", "left");
@@ -1147,8 +1177,10 @@ test("cover controls persist styling, metadata, and image removal", async ({ pag
   await expect(slashMenu).toBeVisible();
   await expect(slashMenu.getByText("Image", { exact: true })).toHaveCount(0);
   await expect(slashMenu.getByText("Video", { exact: true })).toHaveCount(0);
-  await page.keyboard.press("Escape");
-  await coverBody.press("Backspace");
+  await coverBody.fill("A formatted cover description");
+  await expect(slashMenu).toBeHidden();
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByText("Saved", { exact: true })).toBeVisible({ timeout: 60_000 });
 
   const heroControl = dialog
     .getByText("Landscape cover image", { exact: true })
@@ -1199,3 +1231,188 @@ test("cover controls persist styling, metadata, and image removal", async ({ pag
     })
     .toBeCloseTo(4 / 5, 2);
 });
+
+test("cover image replacement retains the caption, placement, and alignment", async ({ page }) => {
+  const state = await fixture(page, document(2));
+  await page.getByRole("button", { name: "Preview pages" }).click();
+  await expect(page.getByRole("button", { name: "Customize pages", exact: true })).toBeVisible({ timeout: 60_000 });
+  await page.getByRole("button", { name: "Customize pages", exact: true }).click();
+
+  const dialog = page.getByRole("dialog", { name: "Prepare social pages" });
+  const heroControl = dialog.getByText("Landscape cover image", { exact: true }).locator("..");
+  const captionInput = dialog.getByRole("textbox", { name: "Cover image caption" });
+  await expect(captionInput).toBeHidden();
+
+  let cropDialog = await chooseCoverImage(page, heroControl, "first-cover.png");
+  await cropDialog.getByRole("button", { name: "Apply crop" }).click();
+  await expect(cropDialog).toBeHidden();
+  await expect.poll(() => state.exported().pages?.[0].cover?.hero_image_url, { timeout: 60_000 }).toBe("/storage/uploaded-cover-1.png");
+
+  await expect(captionInput).toBeVisible();
+  await expect(captionInput).toHaveAttribute("maxlength", "120");
+  await captionInput.fill("A quiet view of the city");
+  const alignment = dialog.getByRole("group", { name: "Caption alignment" });
+  const placement = dialog.getByRole("group", { name: "Caption placement" });
+  const hero = dialog.locator('main [data-cover-section="hero"]');
+  await expect(placement.getByRole("button", { name: "On image" })).toHaveAttribute("aria-pressed", "true");
+  await expect(hero).toHaveAttribute("data-caption-placement", "overlay");
+  await alignment.getByRole("button", { name: "Right", exact: true }).click();
+  await placement.getByRole("button", { name: "Below image" }).click();
+  await expect.poll(() => state.exported().pages?.[0].cover?.hero_image_caption, { timeout: 60_000 }).toBe("A quiet view of the city");
+  await expect.poll(() => state.exported().pages?.[0].cover?.hero_image_caption_alignment, { timeout: 60_000 }).toBe("right");
+  await expect.poll(() => state.exported().pages?.[0].cover?.hero_image_caption_placement, { timeout: 60_000 }).toBe("below");
+
+  cropDialog = await chooseCoverImage(page, heroControl, "second-cover.png");
+  expect(state.exported().pages?.[0].cover?.hero_image_url).toBe("/storage/uploaded-cover-1.png");
+  await cropDialog.getByRole("button", { name: "Apply crop" }).click();
+  await expect(cropDialog).toBeHidden();
+  await expect.poll(() => state.exported().pages?.[0].cover?.hero_image_url, { timeout: 60_000 }).toBe("/storage/uploaded-cover-2.png");
+  expect(state.mediaUploads()).toBe(2);
+  expect(state.exported().pages?.[0].cover?.hero_image_caption).toBe("A quiet view of the city");
+  expect(state.exported().pages?.[0].cover?.hero_image_caption_alignment).toBe("right");
+  expect(state.exported().pages?.[0].cover?.hero_image_caption_placement).toBe("below");
+
+  const caption = hero.locator("[data-cover-hero-caption]");
+  await expect(caption).toBeVisible();
+  await expect(caption).toHaveCSS("text-align", "right");
+  await expect(caption).toHaveAttribute("data-caption-placement", "below");
+  const belowGeometry = await hero.evaluate((element) => {
+    const image = element.querySelector("[data-cover-hero-image]")?.getBoundingClientRect();
+    const captionBounds = element.querySelector("[data-cover-hero-caption]")?.getBoundingClientRect();
+    if (!image || !captionBounds) throw new Error("Cover image or caption is missing");
+    return { imageBottom: image.bottom, captionTop: captionBounds.top };
+  });
+  expect(belowGeometry.captionTop).toBeGreaterThanOrEqual(belowGeometry.imageBottom);
+  await dialog.getByRole("button", { name: "Close", exact: true }).click();
+  await expect(dialog).toBeHidden();
+  const previewHero = page.locator('[aria-label="Letter export preview"] [data-cover-section="hero"]');
+  await expect(previewHero).toContainText("A quiet view of the city");
+  await expect(previewHero).toHaveAttribute("data-caption-placement", "below");
+
+  await page.getByRole("button", { name: "Customize pages", exact: true }).click();
+  await expect(captionInput).toHaveValue("A quiet view of the city");
+  await expect(alignment.getByRole("button", { name: "Right", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await expect(placement.getByRole("button", { name: "Below image" })).toHaveAttribute("aria-pressed", "true");
+
+  await placement.getByRole("button", { name: "On image" }).click();
+  await expect(hero).toHaveAttribute("data-caption-placement", "overlay");
+  await expect(caption).toHaveCSS("color", "rgb(255, 255, 255)");
+  await placement.getByRole("button", { name: "Below image" }).click();
+  await expect(hero).toHaveAttribute("data-caption-placement", "below");
+
+  await heroControl.getByRole("button", { name: "Remove", exact: true }).click();
+  await expect.poll(() => state.exported().pages?.[0].cover?.hero_image_url, { timeout: 60_000 }).toBeNull();
+  expect(state.exported().pages?.[0].cover?.hero_image_caption).toBe("");
+  expect(state.exported().pages?.[0].cover?.hero_image_caption_alignment).toBe("center");
+  expect(state.exported().pages?.[0].cover?.hero_image_caption_placement).toBe("overlay");
+  await expect(captionInput).toBeHidden();
+  await expect(dialog.locator('main [data-cover-section="hero"]')).toHaveCount(0);
+});
+
+test("legacy image captions stay on the image", async ({ page }) => {
+  await fixture(page, document(2), "portrait", {
+    initialHeroImageUrl: "http://localhost/storage/existing-cover.png",
+    legacyCaptionPlacement: true,
+  });
+  await page.getByRole("button", { name: "Preview pages" }).click();
+  await expect(page.getByRole("button", { name: "Customize pages", exact: true })).toBeVisible({ timeout: 60_000 });
+  await page.getByRole("button", { name: "Customize pages", exact: true }).click();
+
+  const dialog = page.getByRole("dialog", { name: "Prepare social pages" });
+  await expect(dialog.getByRole("group", { name: "Caption placement" }).getByRole("button", { name: "On image" })).toHaveAttribute("aria-pressed", "true");
+  const caption = dialog.locator('main [data-cover-hero-caption]');
+  await expect(caption).toHaveText("An older image caption");
+  await expect(caption).toHaveAttribute("data-caption-placement", "overlay");
+});
+
+for (const format of ["portrait", "square", "story", "landscape"] as const) {
+  test(`a long caption fits below the image in ${format} format`, async ({ page }) => {
+    if (format === "story") {
+      await page.setViewportSize({ width: 390, height: 844 });
+    }
+    const aspectRatio = format === "story" ? 9 / 16 : 16 / 9;
+    const state = await fixture(page, document(2), "portrait", {
+      initialHeroImageUrl: "http://localhost/storage/existing-cover.png",
+      initialHeroAspectRatio: aspectRatio,
+    });
+    await page.getByRole("button", { name: "Preview pages" }).click();
+    if (format !== "portrait") {
+      const formatSelect = page.getByRole("combobox", { name: "Export format" });
+      await expect(formatSelect).toBeEnabled({ timeout: 60_000 });
+      await formatSelect.click();
+      await page.getByRole("option", { name: new RegExp(LETTER_EXPORT_FORMATS[format].shortLabel) }).click();
+      await expect.poll(() => state.exported().format, { timeout: 60_000 }).toBe(format);
+    }
+    await expect(page.getByRole("button", { name: "Customize pages", exact: true })).toBeVisible({ timeout: 60_000 });
+    await page.getByRole("button", { name: "Customize pages", exact: true }).click();
+
+    const dialog = page.getByRole("dialog", { name: "Prepare social pages" });
+    const longCaption = "A city view with layers of quiet detail and people finding their way through an ordinary afternoon. ".repeat(2).slice(0, 120);
+    await dialog.getByRole("textbox", { name: "Cover image caption" }).fill(longCaption);
+    await dialog.getByRole("group", { name: "Caption placement" }).getByRole("button", { name: "Below image" }).click();
+    await expect.poll(() => state.exported().pages?.[0].cover?.hero_image_caption_placement, { timeout: 60_000 }).toBe("below");
+    await expect.poll(() => state.exported().pages?.[0].cover?.hero_image_caption, { timeout: 60_000 }).toBe(longCaption);
+
+    const hero = dialog.locator('main [data-cover-section="hero"]');
+    await expect(hero.locator("[data-cover-hero-caption]")).toHaveText(longCaption);
+    const geometry = await hero.evaluate((element) => {
+      const canvas = element.closest("[data-page-canvas]")?.getBoundingClientRect();
+      const main = element.closest("[data-cover-main]")?.getBoundingClientRect();
+      const image = element.querySelector("[data-cover-hero-image]")?.getBoundingClientRect();
+      const caption = element.querySelector("[data-cover-hero-caption]")?.getBoundingClientRect();
+      if (!canvas || !main || !image || !caption) throw new Error("Cover layout is missing");
+      return {
+        imageAspectRatio: image.width / image.height,
+        imageHeightFraction: image.height / canvas.height,
+        imageBottom: image.bottom,
+        captionTop: caption.top,
+        captionBottom: caption.bottom,
+        mainBottom: main.bottom,
+      };
+    });
+    expect(geometry.imageAspectRatio).toBeCloseTo(aspectRatio, 2);
+    expect(geometry.imageHeightFraction).toBeLessThanOrEqual(0.33);
+    expect(geometry.captionTop).toBeGreaterThanOrEqual(geometry.imageBottom);
+    expect(geometry.captionBottom).toBeLessThanOrEqual(geometry.mainBottom + 1);
+  });
+}
+
+test("failed cover replacement shows the image validation error and keeps the current image", async ({ page }) => {
+  const state = await fixture(page, document(2), "portrait", { rejectMediaUploadNumber: 2 });
+  await page.getByRole("button", { name: "Preview pages" }).click();
+  await expect(page.getByRole("button", { name: "Customize pages", exact: true })).toBeVisible({ timeout: 60_000 });
+  await page.getByRole("button", { name: "Customize pages", exact: true }).click();
+
+  const dialog = page.getByRole("dialog", { name: "Prepare social pages" });
+  const heroControl = dialog.getByText("Landscape cover image", { exact: true }).locator("..");
+  let cropDialog = await chooseCoverImage(page, heroControl, "first-cover.png");
+  await cropDialog.getByRole("button", { name: "Apply crop" }).click();
+  await expect(cropDialog).toBeHidden();
+  await expect.poll(() => state.exported().pages?.[0].cover?.hero_image_url, { timeout: 60_000 }).toBe("/storage/uploaded-cover-1.png");
+
+  cropDialog = await chooseCoverImage(page, heroControl, "invalid-replacement.png");
+  await cropDialog.getByRole("button", { name: "Apply crop" }).click();
+  await expect(cropDialog.getByRole("alert")).toContainText("The replacement image could not be saved.");
+  expect(state.exported().pages?.[0].cover?.hero_image_url).toBe("/storage/uploaded-cover-1.png");
+  await expect(dialog.locator('main [data-cover-section="hero"] img')).toHaveAttribute("src", /uploaded-cover-1\.png/);
+
+  await cropDialog.getByRole("button", { name: "Apply crop" }).click();
+  await expect(cropDialog).toBeHidden();
+  await expect.poll(() => state.exported().pages?.[0].cover?.hero_image_url, { timeout: 60_000 }).toBe("/storage/uploaded-cover-3.png");
+});
+
+async function chooseCoverImage(page: Page, control: Locator, name: string) {
+  await control.locator('input[type="file"]').setInputFiles({
+    name,
+    mimeType: "image/png",
+    buffer: testCoverPng,
+  });
+  const cropDialog = page.getByRole("dialog", { name: "Crop cover image" });
+  await expect(cropDialog).toBeVisible();
+  return cropDialog;
+}
+
+const testCoverPng = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAGQAAABkCAYAAABw4pVUAAAA/UlEQVR4nO3RMQ0AMAzAsPIn3d5DsBw2gkiZJWV+B/AyJMaQGENiDIkxJMaQGENiDIkxJMaQGENiDIkxJMaQGENiDIkxJMaQGENiDIkxJMaQGENiDIkxJMaQGENiDIkxJMaQGENiDIkxJMaQGENiDIkxJMaQGENiDIkxJMaQGENiDIkxJMaQGENiDIkxJMaQGENiDIkxJMaQGENiDIkxJMaQGENiDIkxJMaQGENiDIkxJMaQGENiDIkxJMaQGENiDIkxJMaQGENiDIkxJMaQGENiDIkxJMaQGENiDIkxJMaQGENiDIkxJMaQGENiDIkxJMaQmAP4K6zWNUjE4wAAAABJRU5ErkJggg==",
+  "base64",
+);

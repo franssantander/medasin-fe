@@ -7,6 +7,7 @@ import {
   type QueryClient,
 } from "@tanstack/react-query";
 import { toast } from "@/components/ui/toast";
+import { parseApiError } from "@/lib/axios";
 import { letterService } from "../services/letter-service";
 import type {
   Letter,
@@ -209,7 +210,14 @@ export function useUpdateLetterExportMutation() {
       upsertLetterCache(queryClient, response.data.letter);
     },
     onError: (error) => {
-      toast.add({ type: "error", description: error.message });
+      const apiError = parseApiError(error);
+      const fieldMessage = Object.values(apiError.validationErrors ?? {})
+        .flat()
+        .find(Boolean);
+      toast.add({
+        type: "error",
+        description: fieldMessage ? `Page save failed: ${fieldMessage}` : apiError.message,
+      });
     },
   });
 }

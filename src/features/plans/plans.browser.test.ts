@@ -30,8 +30,8 @@ function makePlan(overrides: Partial<CalendarPlan> = {}): CalendarPlan {
   };
 }
 
-async function fixture(page: Page, options?: { rejectCreate?: boolean }) {
-  let plan = makePlan();
+async function fixture(page: Page, options?: { rejectCreate?: boolean; plan?: Partial<CalendarPlan> }) {
+  let plan = makePlan(options?.plan);
   let deleted = false;
   let noticeRead = false;
   const writes: { method: string; path: string; input?: PlanInput }[] = [];
@@ -128,6 +128,7 @@ test("create form sends all-day and custom reminder data without a time", async 
   await page.getByRole("button", { name: "New plan" }).click();
   await page.getByPlaceholder("What are you planning?").fill("Conference");
   await page.getByRole("switch", { name: "All-day plan" }).click();
+  await expect(page.getByRole("combobox", { name: "Time" })).toHaveCount(0);
   await page.getByRole("combobox", { name: "Reminder" }).click();
   await page.getByRole("option", { name: "Custom" }).click();
   await page.getByRole("spinbutton", { name: "Custom reminder amount" }).fill("2");
@@ -142,6 +143,52 @@ test("create form sends all-day and custom reminder data without a time", async 
     reminder_offset_minutes: 2880,
   });
   expect(state.writes[0].input).not.toHaveProperty("time");
+});
+
+test("create form saves a calendar date and a selected quarter-hour time", async ({ page }) => {
+  const state = await fixture(page);
+  const today = new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Manila" });
+  const selectedDate = `${today.slice(0, 8)}${today.endsWith("-15") ? "16" : "15"}`;
+  const calendarDay = new Date(`${selectedDate}T12:00:00+08:00`).toLocaleDateString("en-US", {
+    timeZone: "Asia/Manila",
+  });
+  await page.getByRole("button", { name: "New plan" }).click();
+  await page.getByPlaceholder("What are you planning?").fill("Team check-in");
+  await page.getByRole("button", { name: /^Date\b/ }).click();
+  const datePopover = page.locator('[data-slot="popover-content"]');
+  await expect(datePopover).toBeVisible();
+  await datePopover.locator(`[data-slot="calendar"] button[data-day="${calendarDay}"]`).click();
+  await expect(datePopover).not.toBeVisible();
+  await page.getByRole("combobox", { name: "Time" }).click();
+  await page.getByRole("option", { name: "10:15 AM", exact: true }).click();
+  await page.getByRole("button", { name: "Create plan" }).click();
+
+  await expect.poll(() => state.writes.length).toBe(1);
+  expect(state.writes[0].input).toMatchObject({
+    title: "Team check-in",
+    date: selectedDate,
+    time: "10:15",
+    is_all_day: false,
+  });
+});
+
+test("edit form preserves a stored time outside the quarter-hour choices", async ({ page }) => {
+  const state = await fixture(page, {
+    plan: {
+      time: "14:37",
+      starts_at: new Date(`${nextDate}T14:37:00+08:00`).toISOString(),
+    },
+  });
+  await page.getByRole("region", { name: "Plans calendar" }).getByText("Meet the team").click();
+  await page.getByRole("button", { name: "Edit" }).click();
+  const timeSelect = page.getByRole("combobox", { name: "Time" });
+  await expect(timeSelect).toContainText("2:37 PM");
+  await timeSelect.click();
+  await page.getByRole("option", { name: "2:37 PM", exact: true }).click();
+  await page.getByRole("button", { name: "Save changes" }).click();
+
+  await expect.poll(() => state.writes.length).toBe(1);
+  expect(state.writes[0]).toMatchObject({ method: "PUT", input: { time: "14:37" } });
 });
 
 test("plan details edit the stored timezone and delete to Trash", async ({ page }) => {
@@ -178,6 +225,16 @@ test("the calendar and upcoming list fit a narrow dark screen", async ({ page })
   await expect(page.getByRole("region", { name: "Plans calendar" })).toBeVisible();
   await expect(page.getByText("Upcoming")).toBeVisible();
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.getByRole("button", { name: "New plan" }).click();
+  const dialog = page.getByRole("dialog", { name: "New plan" });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Create plan" })).toBeInViewport();
+  await expect.poll(() => dialog.evaluate((element) => {
+    const bounds = element.getBoundingClientRect();
+    return bounds.left >= 0 && bounds.right <= window.innerWidth;
+  })).toBe(true);
+  await page.keyboard.press("Escape");
+  await expect(dialog).not.toBeVisible();
 });
 
 test("a backend time validation error stays beside the form field", async ({ page }) => {

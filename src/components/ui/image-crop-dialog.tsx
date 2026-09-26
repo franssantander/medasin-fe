@@ -65,6 +65,7 @@ export function ImageCropDialog({
   file,
   aspect,
   aspectOptions,
+  maxBytes,
   title = "Crop image",
   description = "Drag and resize the selection until the crop looks right.",
   onOpenChange,
@@ -75,6 +76,7 @@ export function ImageCropDialog({
   file: File;
   aspect: number;
   aspectOptions?: ImageCropAspectOption[];
+  maxBytes?: number;
   title?: string;
   description?: string;
   onOpenChange: (open: boolean) => void;
@@ -114,12 +116,17 @@ export function ImageCropDialog({
     setError(null);
 
     try {
-      const croppedImage = await cropImage(source, file, {
-        x: croppedArea.x * scaleX,
-        y: croppedArea.y * scaleY,
-        width: croppedArea.width * scaleX,
-        height: croppedArea.height * scaleY,
-      });
+      const croppedImage = await cropImage(
+        source,
+        file,
+        {
+          x: croppedArea.x * scaleX,
+          y: croppedArea.y * scaleY,
+          width: croppedArea.width * scaleX,
+          height: croppedArea.height * scaleY,
+        },
+        { maxBytes },
+      );
       await onCrop(croppedImage.file, {
         aspectRatio: croppedImage.width / croppedImage.height,
       });

@@ -20,6 +20,8 @@ export type LetterPageContentSource = "cover_entry" | "letter_body";
 
 export type LetterCoverTextAlignment = "left" | "center" | "right";
 
+export type LetterCoverCaptionPlacement = "overlay" | "below";
+
 export type LetterExportStatus =
   | "queued"
   | "processing"
@@ -59,6 +61,9 @@ export type LetterCover = {
   avatar_url: string | null;
   hero_image_url: string | null;
   hero_image_aspect_ratio: number | null;
+  hero_image_caption: string;
+  hero_image_caption_alignment: LetterCoverTextAlignment;
+  hero_image_caption_placement: LetterCoverCaptionPlacement;
   section_order: LetterCoverSection[];
 };
 
