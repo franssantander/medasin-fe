@@ -23,7 +23,9 @@ export function NoteRichTextEditor(props: NoteRichTextEditorClientProps) {
       className={
         props.mode === "task"
           ? "note-rich-text flex h-full min-h-0 w-full min-w-0 flex-1 overflow-hidden rounded-lg border bg-white"
-          : "note-rich-text flex min-h-0 w-full min-w-0 flex-1 overflow-hidden"
+          : props.mode === "letter" && !props.pageEditor
+            ? "note-rich-text flex min-h-0 w-full min-w-0 flex-1 overflow-visible"
+            : "note-rich-text flex min-h-0 w-full min-w-0 flex-1 overflow-hidden"
       }
     >
       <NoteRichTextEditorClient {...props} />

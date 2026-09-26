@@ -34,14 +34,14 @@ const unavailableChild = async (): Promise<never> => {
 
 export function LetterEditor({
   letter,
-  draftKey,
+  editorSessionId,
   onCreated,
   onSaved,
   onRegisterDeleteFlush,
   onRegisterPreviewOpen,
 }: {
   letter?: Letter;
-  draftKey: number;
+  editorSessionId: string;
   onCreated: (letter: Letter) => void;
   onSaved: (letter: Letter, created: boolean) => void;
   onRegisterDeleteFlush: (
@@ -282,12 +282,12 @@ export function LetterEditor({
             />
           </div>
 
-          <div className="letter-composer-document mt-8 flex min-h-[32rem] min-w-0 flex-1 overflow-hidden bg-white sm:mt-10">
+          <div className="letter-composer-document mt-8 flex min-h-[32rem] min-w-0 flex-1 overflow-visible bg-white sm:mt-10">
             <NoteRichTextEditor
               mode="letter"
               formattingToolbarMode="persistent"
               formattingToolbarContainer={formattingToolbarContainer}
-              documentId={`${letter?.uuid ?? `letter-draft-${draftKey}`}-${editorRevision}`}
+              documentId={`${editorSessionId}-${editorRevision}`}
               content={autosave.content}
               editable
               noteOptions={[]}

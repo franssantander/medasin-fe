@@ -317,9 +317,31 @@
 /* Keep page-rendering rules outside Tailwind's layers so they can override
    BlockNote's unlayered default editor styles. */
 .letter-composer-document .note-rich-text .bn-editor {
+  height: auto;
+  overflow: visible;
   padding-inline: 0;
   font-size: 1rem;
-  line-height: 1.65;
+  line-height: 1.5;
+}
+
+.letter-composer-document .note-rich-text .bn-container {
+  height: auto;
+  overflow: visible;
+}
+
+.letter-composer-document .bn-block-outer {
+  line-height: 1.5;
+}
+
+.letter-composer-document
+  .bn-block-content:is(
+    [data-content-type="paragraph"],
+    [data-content-type="bulletListItem"],
+    [data-content-type="numberedListItem"],
+    [data-content-type="checkListItem"],
+    [data-content-type="quote"]
+  ) {
+  padding-block: 4px;
 }
 
 .letter-formatting-toolbar {

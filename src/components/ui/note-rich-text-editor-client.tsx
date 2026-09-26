@@ -4,6 +4,7 @@ import {
   BlockNoteSchema,
   createExtension,
   defaultBlockSpecs,
+  selectedFragmentToHTML,
   type PartialBlock,
 } from "@blocknote/core";
 import {
@@ -32,8 +33,11 @@ import {
   type SuggestionMenuProps,
 } from "@blocknote/react";
 import { BlockNoteView } from "@blocknote/shadcn";
-import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
-import { Plugin, TextSelection } from "@tiptap/pm/state";
+import type {
+  Fragment as ProseMirrorFragment,
+  Node as ProseMirrorNode,
+} from "@tiptap/pm/model";
+import { AllSelection, Plugin, TextSelection } from "@tiptap/pm/state";
 import "@blocknote/shadcn/style.css";
 import {
   BellRing,
@@ -55,6 +59,7 @@ import {
   useState,
   useEffect,
   useLayoutEffect,
+  type ClipboardEvent as ReactClipboardEvent,
   type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
 import { createPortal } from "react-dom";
@@ -333,6 +338,21 @@ function hasInlineMarksAt(doc: ProseMirrorNode, pos: number) {
   );
 }
 
+function selectionContainsOnlyText(fragment: ProseMirrorFragment) {
+  let onlyText = true;
+  fragment.descendants((node) => {
+    if (
+      (node.type.isInGroup("blockContent") && !node.isTextblock) ||
+      (node.isLeaf && !node.isText && node.type.name !== "hardBreak")
+    ) {
+      onlyText = false;
+      return false;
+    }
+    return undefined;
+  });
+  return onlyText;
+}
+
 const letterPageEditingExtension = createExtension({
   key: "letterPageEditing",
   prosemirrorPlugins: [
@@ -543,6 +563,7 @@ export function NoteRichTextEditorClient({
   onHistoryStateChange,
   onBlur,
 }: NoteRichTextEditorClientProps) {
+  const isLetterComposer = mode === "letter" && !pageEditor;
   const onChangeRef = useRef(onChange);
   const applyingContentRef = useRef(false);
   const appliedContentRef = useRef(content);
@@ -599,6 +620,7 @@ export function NoteRichTextEditorClient({
       initialContent: initialContent.length ? initialContent : [{ type: "paragraph", content: "" }],
       uploadFile: (file) => onUploadFileRef.current(file),
       extensions: mode === "letter" || pageEditor ? [letterPageEditingExtension] : [],
+      tabBehavior: isLetterComposer ? "prefer-indent" : "prefer-navigate-ui",
     },
     [documentId, mode, pageEditor],
   );
@@ -817,6 +839,48 @@ export function NoteRichTextEditorClient({
     });
   }, [clearSelectedBlock, editor, emitHistoryState]);
 
+  const handleLetterClipboard = useCallback(
+    (event: ReactClipboardEvent<HTMLDivElement>) => {
+      if (
+        !isLetterComposer ||
+        !(event.target instanceof Node) ||
+        !editor.domElement?.contains(event.target)
+      ) {
+        return;
+      }
+
+      const { selection } = editor.prosemirrorState;
+      if (
+        !(selection instanceof TextSelection || selection instanceof AllSelection) ||
+        selection.empty ||
+        !selectionContainsOnlyText(selection.content().content)
+      ) {
+        return;
+      }
+
+      const { externalHTML } = selectedFragmentToHTML(editor.prosemirrorView, editor);
+      const plainText = editor.prosemirrorState.doc
+        .textBetween(selection.from, selection.to, "\n\n", (node) =>
+          node.type.name === "hardBreak" ? "\n" : "",
+        )
+        .replaceAll("\uFFFC", "")
+        .replaceAll("\u00A0", " ");
+
+      event.preventDefault();
+      event.stopPropagation();
+      event.clipboardData.clearData();
+      event.clipboardData.setData("text/html", externalHTML);
+      event.clipboardData.setData("text/plain", plainText);
+
+      if (event.type === "cut" && editor.isEditable) {
+        editor.prosemirrorView.dispatch(
+          editor.prosemirrorState.tr.deleteSelection(),
+        );
+      }
+    },
+    [editor, isLetterComposer],
+  );
+
   useEffect(() => {
     const handleDocumentPointerDown = (event: PointerEvent) => {
       if (
@@ -1023,8 +1087,12 @@ export function NoteRichTextEditorClient({
         className={
           mode === "task"
             ? "flex h-full min-h-0 w-full min-w-0 flex-1 overflow-hidden bg-white"
-            : "flex min-h-0 w-full min-w-0 flex-1 overflow-hidden bg-white"
+            : isLetterComposer
+              ? "flex min-h-0 w-full min-w-0 flex-1 overflow-visible bg-white"
+              : "flex min-h-0 w-full min-w-0 flex-1 overflow-hidden bg-white"
         }
+        onCopyCapture={handleLetterClipboard}
+        onCutCapture={handleLetterClipboard}
         onBlurCapture={(event) => {
           if (!event.currentTarget.contains(event.relatedTarget)) {
             onBlurRef.current?.();

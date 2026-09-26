@@ -26,7 +26,7 @@ import { LetterEditor } from "./letter-editor";
 import { LetterList } from "./letter-list";
 
 type LetterSelection =
-  | { kind: "letter"; uuid: string }
+  | { kind: "letter"; uuid: string; draftKey?: number }
   | { kind: "draft"; key: number };
 
 export function LetterWorkspace({
@@ -80,8 +80,8 @@ export function LetterWorkspace({
   const detailQuery = useLetterQuery(selectedUuid);
 
   const openLetter = useCallback(
-    (uuid: string) => {
-      setSelection({ kind: "letter", uuid });
+    (uuid: string, draftKey?: number) => {
+      setSelection({ kind: "letter", uuid, draftKey });
       router.replace(`/letters?letter=${encodeURIComponent(uuid)}`, {
         scroll: false,
       });
@@ -97,9 +97,9 @@ export function LetterWorkspace({
   }, [draftKey, router]);
 
   const handleCreated = useCallback(
-    (letter: Letter) => {
+    (letter: Letter, sourceDraftKey: number) => {
       upsertLetterCache(queryClient, letter, true);
-      openLetter(letter.uuid);
+      openLetter(letter.uuid, sourceDraftKey);
     },
     [openLetter, queryClient],
   );
@@ -259,8 +259,8 @@ export function LetterWorkspace({
           {derivedSelection.kind === "draft" ? (
             <LetterEditor
               key={`draft-${derivedSelection.key}`}
-              draftKey={derivedSelection.key}
-              onCreated={handleCreated}
+              editorSessionId={`draft-${derivedSelection.key}`}
+              onCreated={(letter) => handleCreated(letter, derivedSelection.key)}
               onSaved={handleSaved}
               onRegisterDeleteFlush={registerDeleteFlush}
               onRegisterPreviewOpen={registerPreviewOpen}
@@ -292,10 +292,18 @@ export function LetterWorkspace({
             </div>
           ) : (
             <LetterEditor
-              key={selectedLetter.uuid}
+              key={
+                derivedSelection.draftKey === undefined
+                  ? selectedLetter.uuid
+                  : `draft-${derivedSelection.draftKey}`
+              }
               letter={selectedLetter}
-              draftKey={draftKey}
-              onCreated={handleCreated}
+              editorSessionId={
+                derivedSelection.draftKey === undefined
+                  ? selectedLetter.uuid
+                  : `draft-${derivedSelection.draftKey}`
+              }
+              onCreated={(letter) => handleCreated(letter, draftKey)}
               onSaved={handleSaved}
               onRegisterDeleteFlush={registerDeleteFlush}
               onRegisterPreviewOpen={registerPreviewOpen}

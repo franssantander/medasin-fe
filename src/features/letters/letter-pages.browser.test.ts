@@ -451,6 +451,98 @@ test("letter editor keeps spaces typed between bold and plain text", async ({ pa
   await expect.poll(() => text(JSON.parse(state.letter().content).blocks), { timeout: 60_000 }).toBe("Lorem Ipsum is");
 });
 
+test("a new letter keeps its editor and caret through the first autosave", async ({
+  page,
+}) => {
+  let savedLetter: Letter | undefined;
+  await page.route("**/api-test/v1/**", async (route) => {
+    const path = new URL(route.request().url()).pathname.replace(
+      "/api-test/v1",
+      "",
+    );
+    const method = route.request().method();
+    let data: unknown = [];
+
+    if (path === "/auth/me") {
+      data = {
+        first_name: "Test",
+        last_name: "Author",
+        username: "author",
+        roles: [],
+      };
+    } else if (path === "/letters" && method === "GET") {
+      data = {
+        current_page: 1,
+        data: savedLetter ? [savedLetter] : [],
+        last_page: 1,
+        per_page: 15,
+        total: savedLetter ? 1 : 0,
+      };
+    } else if (path === "/letters" && method === "POST") {
+      const input = route.request().postDataJSON();
+      savedLetter = {
+        ...input,
+        uuid: "created-letter",
+        content_preview: "Opening thought",
+        word_count: 2,
+        read_time_minutes: 1,
+        status: "draft",
+        exported_at: null,
+        created_at: null,
+        updated_at: null,
+        author: { name: "Test Author", handle: "@author" },
+        latest_export: null,
+      };
+      data = savedLetter;
+    } else if (path === "/letters/created-letter") {
+      if (method === "PATCH") {
+        savedLetter = { ...savedLetter!, ...route.request().postDataJSON() };
+      }
+      data = savedLetter;
+    }
+
+    await route.fulfill({ json: { data, status: 200, message: "Saved" } });
+  });
+
+  await page.goto("/letters");
+  const editor = page.locator(
+    '.letter-composer-document .bn-editor[contenteditable="true"]',
+  );
+  await expect(editor).toBeVisible({ timeout: 60_000 });
+  await editor.click();
+  await page.keyboard.type("Opening thought");
+  await expect(editor).toContainText("Opening thought");
+  await editor.evaluate((node) =>
+    Reflect.set(window, "letterEditorBeforeFirstSave", node),
+  );
+
+  await expect(page).toHaveURL(/\/letters\?letter=created-letter$/, {
+    timeout: 60_000,
+  });
+  await expect(page.getByText("Saved", { exact: true })).toBeVisible();
+  expect(
+    await editor.evaluate(
+      (node) => Reflect.get(window, "letterEditorBeforeFirstSave") === node,
+    ),
+  ).toBe(true);
+  expect(await editor.evaluate((node) => node.contains(window.document.activeElement))).toBe(
+    true,
+  );
+
+  await page.keyboard.type(" after save");
+  await expect(editor).toContainText("Opening thought after save");
+  await expect
+    .poll(() => text(JSON.parse(savedLetter?.content ?? "{}").blocks), {
+      timeout: 60_000,
+    })
+    .toContain("Opening thought after save");
+
+  await page.getByRole("button", { name: "Letters" }).click();
+  await expect(page.locator('button[aria-current="page"]')).toContainText(
+    "Untitled letter",
+  );
+});
+
 test("letter preview follows the latest formatted editor text", async ({ page }) => {
   const state = await fixture(page, mixedFormattingDocument, "portrait", {
     invalidateExportOnLetterUpdate: true,
@@ -891,6 +983,101 @@ test("letters use a persistent CMS toolbar and editorial typography", async ({
   expect(
     await page.evaluate(() => window.document.documentElement.scrollWidth),
   ).toBeLessThanOrEqual(375);
+});
+
+test("letter paragraphs align with the title and scroll in one canvas", async ({
+  page,
+}) => {
+  const content = JSON.stringify({
+    version: 1,
+    blocks: Array.from({ length: 48 }, (_, index) => ({
+      id: `paragraph-${index}`,
+      type: "paragraph",
+      content: [{ type: "text", text: `Paragraph ${index + 1}`, styles: {} }],
+    })),
+  });
+  await fixture(page, content);
+
+  const title = page.getByRole("textbox", { name: "Letter title" });
+  const editor = page.locator(".letter-composer-document .bn-editor");
+  const paragraph = editor.locator('[data-content-type="paragraph"]').first();
+  await expect(paragraph).toBeVisible({ timeout: 60_000 });
+  await expect(paragraph).toHaveCSS("padding-top", "4px");
+  await expect(paragraph).toHaveCSS("padding-bottom", "4px");
+  await expect(editor.locator(".bn-block-outer").first()).toHaveCSS(
+    "line-height",
+    "24px",
+  );
+  await expect(editor).toHaveCSS("overflow-y", "visible");
+
+  for (const width of [1440, 375]) {
+    await page.setViewportSize({ width, height: 812 });
+    const titleBounds = await title.boundingBox();
+    const paragraphBounds = await paragraph.boundingBox();
+    expect(titleBounds).not.toBeNull();
+    expect(paragraphBounds).not.toBeNull();
+    expect(Math.abs(titleBounds!.x - paragraphBounds!.x)).toBeLessThanOrEqual(1);
+  }
+
+  const scroll = await editor.evaluate((node) => {
+    const canvas = node.closest(".letter-composer-document")?.parentElement
+      ?.parentElement;
+    if (!(canvas instanceof HTMLElement)) {
+      throw new Error("Letter canvas is missing");
+    }
+    canvas.scrollTop = 180;
+    return {
+      canvasScrollTop: canvas.scrollTop,
+      canvasScrollHeight: canvas.scrollHeight,
+      canvasClientHeight: canvas.clientHeight,
+      editorScrollTop: node.scrollTop,
+    };
+  });
+  expect(scroll.canvasScrollHeight).toBeGreaterThan(scroll.canvasClientHeight);
+  expect(scroll.canvasScrollTop).toBeGreaterThan(0);
+  expect(scroll.editorScrollTop).toBe(0);
+});
+
+test("letter body shortcuts nest blocks and distinguish soft from new lines", async ({
+  page,
+}) => {
+  const state = await fixture(
+    page,
+    JSON.stringify({
+      version: 1,
+      blocks: [
+        { id: "first", type: "paragraph", content: "First" },
+        { id: "second", type: "paragraph", content: "Second" },
+      ],
+    }),
+  );
+  const editor = page.locator(".letter-composer-document .bn-editor");
+  const second = editor.locator('[data-content-type="paragraph"]').nth(1);
+  await expect(second).toBeVisible({ timeout: 60_000 });
+  await second.click();
+  await page.keyboard.press("Tab");
+  await expect
+    .poll(() => text(JSON.parse(state.letter().content).blocks[0].children), {
+      timeout: 60_000,
+    })
+    .toContain("Second");
+
+  await page.keyboard.press("Shift+Tab");
+  await expect
+    .poll(() => JSON.parse(state.letter().content).blocks.length, {
+      timeout: 60_000,
+    })
+    .toBe(2);
+
+  await page.keyboard.press("End");
+  await page.keyboard.press("Shift+Enter");
+  await page.keyboard.type("Same block");
+  await expect(editor.locator(".bn-block-outer")).toHaveCount(2);
+
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("Third block");
+  await expect(editor.locator(".bn-block-outer")).toHaveCount(3);
+  await expect(editor).toContainText("Third block");
 });
 
 for (const format of ["portrait", "square", "story", "landscape"] as const) {
