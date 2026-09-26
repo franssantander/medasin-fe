@@ -1010,8 +1010,11 @@ test("letter paragraphs align with the title and scroll in one canvas", async ({
   );
   await expect(editor).toHaveCSS("overflow-y", "visible");
 
-  for (const width of [1440, 375]) {
-    await page.setViewportSize({ width, height: 812 });
+  for (const viewport of [
+    { width: 1440, height: 812 },
+    { width: 375, height: 667 },
+  ]) {
+    await page.setViewportSize(viewport);
     const titleBounds = await title.boundingBox();
     const paragraphBounds = await paragraph.boundingBox();
     expect(titleBounds).not.toBeNull();
@@ -1036,6 +1039,165 @@ test("letter paragraphs align with the title and scroll in one canvas", async ({
   expect(scroll.canvasScrollHeight).toBeGreaterThan(scroll.canvasClientHeight);
   expect(scroll.canvasScrollTop).toBeGreaterThan(0);
   expect(scroll.editorScrollTop).toBe(0);
+});
+
+test("short letter body does not create empty scrolling space", async ({ page }) => {
+  await fixture(page, document(1));
+  const body = page.locator(".letter-composer-document");
+  const editor = body.locator(".bn-editor");
+  await expect(editor.locator(".bn-block-outer").first()).toBeVisible({
+    timeout: 60_000,
+  });
+
+  for (const viewport of [
+    { width: 1440, height: 812 },
+    { width: 375, height: 667 },
+  ]) {
+    await page.setViewportSize(viewport);
+    const sizes = await body.evaluate((node) => {
+      const canvas = node.parentElement?.parentElement;
+      if (!(canvas instanceof HTMLElement)) {
+        throw new Error("Letter canvas is missing");
+      }
+      return {
+        bodyHeight: node.getBoundingClientRect().height,
+        canvasClientHeight: canvas.clientHeight,
+        canvasScrollHeight: canvas.scrollHeight,
+      };
+    });
+    expect(sizes.bodyHeight).toBeLessThan(512);
+    expect(sizes.canvasScrollHeight).toBeLessThanOrEqual(
+      sizes.canvasClientHeight + 1,
+    );
+  }
+
+  const input = body.locator('[contenteditable="true"]');
+  await input.fill("Content ".repeat(200));
+  await expect
+    .poll(() =>
+      body.evaluate((node) => {
+        const canvas = node.parentElement?.parentElement;
+        return canvas instanceof HTMLElement && canvas.scrollHeight > canvas.clientHeight;
+      }),
+    )
+    .toBe(true);
+
+  await input.fill("Short");
+  await expect
+    .poll(() =>
+      body.evaluate((node) => {
+        const canvas = node.parentElement?.parentElement;
+        return canvas instanceof HTMLElement && canvas.scrollHeight <= canvas.clientHeight + 1;
+      }),
+    )
+    .toBe(true);
+});
+
+test("long letter scroll ends near its final block and shrinks after deleting text", async ({
+  page,
+}) => {
+  const content = JSON.stringify({
+    version: 1,
+    blocks: Array.from({ length: 48 }, (_, index) => ({
+      id: `scroll-paragraph-${index}`,
+      type: "paragraph",
+      content: `Paragraph ${index + 1} has enough text to remain readable.`,
+    })),
+  });
+  const state = await fixture(page, content);
+  const body = page.locator(".letter-composer-document");
+  const editor = body.locator('.bn-editor[contenteditable="true"]');
+  await expect(editor.locator(".bn-block-outer")).toHaveCount(48, {
+    timeout: 60_000,
+  });
+
+  for (const viewport of [
+    { width: 1440, height: 812 },
+    { width: 375, height: 667 },
+  ]) {
+    await page.setViewportSize(viewport);
+    const geometry = await body.evaluate((node) => {
+      const canvas = node.parentElement?.parentElement;
+      const lastBlock = Array.from(node.querySelectorAll(".bn-block-outer")).at(-1);
+      if (!(canvas instanceof HTMLElement) || !(lastBlock instanceof HTMLElement)) {
+        throw new Error("Letter canvas or final block is missing");
+      }
+      canvas.scrollTop = canvas.scrollHeight;
+      return {
+        scrollTop: canvas.scrollTop,
+        bottomGap:
+          canvas.getBoundingClientRect().bottom -
+          lastBlock.getBoundingClientRect().bottom,
+      };
+    });
+    expect(geometry.scrollTop).toBeGreaterThan(0);
+    expect(geometry.bottomGap).toBeGreaterThanOrEqual(0);
+    expect(geometry.bottomGap).toBeLessThanOrEqual(96);
+  }
+
+  await editor.click();
+  await page.keyboard.press("ControlOrMeta+A");
+  await page.keyboard.type("Short");
+  await expect(editor.locator(".bn-block-outer")).toHaveCount(1);
+  await expect
+    .poll(() =>
+      body.evaluate((node) => {
+        const canvas = node.parentElement?.parentElement;
+        return canvas instanceof HTMLElement && canvas.scrollHeight <= canvas.clientHeight + 1;
+      }),
+    )
+    .toBe(true);
+  await expect
+    .poll(() => text(JSON.parse(state.letter().content).blocks), {
+      timeout: 60_000,
+    })
+    .toBe("Short");
+});
+
+test("trailing blank letter blocks collapse while the caret stays editable", async ({
+  page,
+}) => {
+  const state = await fixture(
+    page,
+    JSON.stringify({
+      version: 1,
+      blocks: [
+        { id: "opening", type: "paragraph", content: "Opening" },
+        { id: "intentional-gap", type: "paragraph", content: [] },
+        { id: "closing", type: "paragraph", content: "Closing" },
+        ...Array.from({ length: 12 }, (_, index) => ({
+          id: `trailing-empty-${index}`,
+          type: "paragraph",
+          content: [],
+        })),
+      ],
+    }),
+  );
+  const editor = page.locator('.letter-composer-document .bn-editor[contenteditable="true"]');
+  const blocks = editor.locator(".bn-block-outer");
+  await expect(blocks).toHaveCount(4, { timeout: 60_000 });
+  await expect
+    .poll(() => JSON.parse(state.letter().content).blocks.length, {
+      timeout: 60_000,
+    })
+    .toBe(4);
+  expect(JSON.parse(state.letter().content).blocks[1].content).toEqual([]);
+
+  await blocks.last().click();
+  await page.keyboard.press("Enter");
+  await page.keyboard.press("Enter");
+  await expect(blocks).toHaveCount(4);
+  await page.keyboard.type("Typed after Enter");
+  await expect(editor).toContainText("Typed after Enter");
+  await page.keyboard.press("ControlOrMeta+Z");
+  await expect(editor).not.toContainText("Typed after Enter");
+  await page.keyboard.press("ControlOrMeta+Shift+Z");
+  await expect(editor).toContainText("Typed after Enter");
+  await expect
+    .poll(() => text(JSON.parse(state.letter().content).blocks), {
+      timeout: 60_000,
+    })
+    .toContain("Typed after Enter");
 });
 
 test("letter body shortcuts nest blocks and distinguish soft from new lines", async ({

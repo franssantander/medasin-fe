@@ -541,6 +541,46 @@ export type NoteEditorHistoryState = {
   canRedo: boolean;
 };
 
+type TrailingParagraphBlock = {
+  id: string;
+  type: string;
+  content: unknown;
+  children?: readonly unknown[];
+};
+
+function isEmptyTrailingParagraph(block: TrailingParagraphBlock) {
+  if (block.type !== "paragraph" || block.children?.length) return false;
+  if (typeof block.content === "string") return !block.content.trim();
+  if (!Array.isArray(block.content)) return false;
+
+  return block.content.every(
+    (item) =>
+      item !== null &&
+      typeof item === "object" &&
+      "text" in item &&
+      typeof item.text === "string" &&
+      !item.text.trim(),
+  );
+}
+
+function redundantTrailingParagraphIds(
+  blocks: readonly TrailingParagraphBlock[],
+  activeBlockId?: string,
+) {
+  let tailStart = blocks.length;
+  while (tailStart > 0 && isEmptyTrailingParagraph(blocks[tailStart - 1])) {
+    tailStart -= 1;
+  }
+
+  const trailing = blocks.slice(tailStart);
+  if (trailing.length <= 1) return [];
+
+  const keptId = trailing.some((block) => block.id === activeBlockId)
+    ? activeBlockId
+    : trailing[trailing.length - 1].id;
+  return trailing.filter((block) => block.id !== keptId).map((block) => block.id);
+}
+
 export function NoteRichTextEditorClient({
   mode = "note",
   theme = "light",
@@ -817,27 +857,68 @@ export function NoteRichTextEditorClient({
   );
   const handleEditorChange = useCallback(() => {
     if (applyingContentRef.current) return;
-    const serializedDocument = serializeNoteDocument(editor.document);
-    if (externallyAppliedContentRef.current === serializedDocument) {
+    const publish = (serializedDocument: string) => {
+      if (externallyAppliedContentRef.current === serializedDocument) {
+        externallyAppliedContentRef.current = null;
+        appliedContentRef.current = serializedDocument;
+        return;
+      }
       externallyAppliedContentRef.current = null;
+      if (isLetterComposer && appliedContentRef.current === serializedDocument) return;
       appliedContentRef.current = serializedDocument;
+
+      // BlockNote emits changes while ProseMirror is still reconciling node-view
+      // positions. Defer parent state updates so undo/redo can finish that cycle.
+      queueMicrotask(() => {
+        const selectedBlockId = selectedBlockIdRef.current;
+        if (selectedBlockId && !editor.getBlock(selectedBlockId)) {
+          clearSelectedBlock();
+        }
+        onChangeRef.current(serializedDocument);
+        emitHistoryState();
+      });
+    };
+
+    if (isLetterComposer) {
+      queueMicrotask(() => {
+        if (applyingContentRef.current) return;
+        const blocks = editor.document;
+        const activeBlockId =
+          editor.prosemirrorView.hasFocus() && editor.prosemirrorState.selection.empty
+            ? editor.getTextCursorPosition().block.id
+            : undefined;
+        const redundantIds = redundantTrailingParagraphIds(blocks, activeBlockId);
+        if (redundantIds.length) {
+          editor.transact((transaction) => {
+            transaction.setMeta("addToHistory", false);
+            editor.removeBlocks(redundantIds);
+          });
+          return;
+        }
+        publish(serializeNoteDocument(blocks));
+      });
       return;
     }
-    externallyAppliedContentRef.current = null;
-    appliedContentRef.current = serializedDocument;
 
-    // BlockNote emits changes while ProseMirror is still reconciling node-view
-    // positions. Defer parent state updates so undo/redo can finish that cycle
-    // before React rerenders the editor tree.
-    queueMicrotask(() => {
-      const selectedBlockId = selectedBlockIdRef.current;
-      if (selectedBlockId && !editor.getBlock(selectedBlockId)) {
-        clearSelectedBlock();
-      }
-      onChangeRef.current(serializedDocument);
-      emitHistoryState();
+    publish(serializeNoteDocument(editor.document));
+  }, [clearSelectedBlock, editor, emitHistoryState, isLetterComposer]);
+
+  useLayoutEffect(() => {
+    if (!isLetterComposer) return;
+    const redundantIds = redundantTrailingParagraphIds(editor.document);
+    if (!redundantIds.length) return;
+
+    editor.transact((transaction) => {
+      transaction.setMeta("addToHistory", false);
+      editor.removeBlocks(redundantIds);
     });
-  }, [clearSelectedBlock, editor, emitHistoryState]);
+    queueMicrotask(() => {
+      const normalizedDocument = serializeNoteDocument(editor.document);
+      if (appliedContentRef.current === normalizedDocument) return;
+      appliedContentRef.current = normalizedDocument;
+      onChangeRef.current(normalizedDocument);
+    });
+  }, [editor, isLetterComposer]);
 
   const handleLetterClipboard = useCallback(
     (event: ReactClipboardEvent<HTMLDivElement>) => {
@@ -1109,9 +1190,7 @@ export function NoteRichTextEditorClient({
         }}
       >
         <BlockNoteView
-          className={
-            mode === "task" ? "h-full min-h-0 w-full" : "h-full min-h-0 w-full"
-          }
+          className={isLetterComposer ? "min-h-0 w-full" : "h-full min-h-0 w-full"}
           editor={editor}
           editable={editable}
           formattingToolbar={false}
