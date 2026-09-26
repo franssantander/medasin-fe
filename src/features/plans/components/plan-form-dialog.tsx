@@ -45,7 +45,7 @@ import { ApiError } from "@/lib/axios";
 import { cn } from "@/lib/utils";
 import { localDateKey } from "../plan-time";
 import { planSchema, type PlanFormValues } from "../schemas/plan-schema";
-import type { CalendarPlan, PlanInput } from "../type";
+import type { CalendarPlan, PlanInput, PlanLink } from "../type";
 
 type PlanFormDialogProps = {
   plan?: CalendarPlan;
@@ -59,6 +59,14 @@ type PlanFormDialogProps = {
 };
 
 const timePattern = /^([01]\d|2[0-3]):[0-5]\d$/;
+const NO_LINK_LABEL = "No link";
+const REMINDER_LABELS: Record<PlanFormValues["reminder"], string> = {
+  none: "Don't notify me",
+  at_time: "At the time of the event",
+  three_hours: "3 hours before",
+  one_day: "1 day before",
+  custom: "Custom",
+};
 const timeSlots = Array.from({ length: 96 }, (_, index) => {
   const hour = Math.floor(index / 4);
   const minute = (index % 4) * 15;
@@ -80,6 +88,23 @@ function timeLabel(value: string) {
 function timeChoices(selected: string) {
   if (!timePattern.test(selected) || timeSlots.includes(selected)) return timeSlots;
   return [...timeSlots, selected].sort();
+}
+
+function selectedLinkLabel(value: string, projects: PlanLink[], areas: PlanLink[], plan?: CalendarPlan) {
+  if (value === "none") return NO_LINK_LABEL;
+  if (value.startsWith("project:")) {
+    const uuid = value.slice(8);
+    return projects.find((project) => project.uuid === uuid)?.name
+      ?? (plan?.project?.uuid === uuid ? plan.project.name : undefined)
+      ?? "Link unavailable";
+  }
+  if (value.startsWith("area:")) {
+    const uuid = value.slice(5);
+    return areas.find((area) => area.uuid === uuid)?.name
+      ?? (plan?.area?.uuid === uuid ? plan.area.name : undefined)
+      ?? "Link unavailable";
+  }
+  return "Link unavailable";
 }
 
 function reminderValues(offset: number | null | undefined): Pick<
@@ -363,11 +388,13 @@ export function PlanFormDialog({
                           aria-invalid={Boolean(errors.link)}
                           aria-describedby={errors.link ? "plan-link-error" : undefined}
                         >
-                          <SelectValue />
+                          <SelectValue>
+                            {selectedLinkLabel(field.value, projectsQuery.data?.data ?? [], areasQuery.data?.data ?? [], plan)}
+                          </SelectValue>
                         </SelectTrigger>
                         <SelectContent>
                           <SelectGroup>
-                            <SelectItem value="none">No link</SelectItem>
+                            <SelectItem value="none">{NO_LINK_LABEL}</SelectItem>
                           </SelectGroup>
                           {(projectsQuery.data?.data.length ?? 0) > 0 && (
                             <SelectGroup>
@@ -439,14 +466,16 @@ export function PlanFormDialog({
                     name="reminder"
                     render={({ field }) => (
                       <Select value={field.value} onValueChange={(value) => field.onChange(value ?? "none")}>
-                        <SelectTrigger id="plan-reminder" className="w-full" aria-label="Reminder"><SelectValue /></SelectTrigger>
+                        <SelectTrigger id="plan-reminder" className="w-full" aria-label="Reminder">
+                          <SelectValue>{REMINDER_LABELS[field.value]}</SelectValue>
+                        </SelectTrigger>
                         <SelectContent>
                           <SelectGroup>
-                            <SelectItem value="none">Don&apos;t notify me</SelectItem>
-                            <SelectItem value="at_time">At the time of the event</SelectItem>
-                            <SelectItem value="three_hours">3 hours before</SelectItem>
-                            <SelectItem value="one_day">1 day before</SelectItem>
-                            <SelectItem value="custom">Custom</SelectItem>
+                            <SelectItem value="none">{REMINDER_LABELS.none}</SelectItem>
+                            <SelectItem value="at_time">{REMINDER_LABELS.at_time}</SelectItem>
+                            <SelectItem value="three_hours">{REMINDER_LABELS.three_hours}</SelectItem>
+                            <SelectItem value="one_day">{REMINDER_LABELS.one_day}</SelectItem>
+                            <SelectItem value="custom">{REMINDER_LABELS.custom}</SelectItem>
                           </SelectGroup>
                         </SelectContent>
                       </Select>

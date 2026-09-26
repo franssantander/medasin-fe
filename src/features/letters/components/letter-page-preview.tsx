@@ -55,6 +55,9 @@ const COVER_TEXT_JUSTIFICATION_CLASS: Record<LetterCoverTextAlignment, string> =
   center: "justify-center",
   right: "justify-end",
 };
+const COVER_COLUMN_CLASS = "mx-auto w-full max-w-[92%]";
+// The visible logo stops seven units before the SVG's 135-unit right edge.
+const COVER_LOGO_RIGHT_INSET = "0.363cqw";
 
 type LetterPageCanvasProps = {
   page: LetterPage;
@@ -192,7 +195,8 @@ export const LetterPageCanvas = forwardRef<
                     key={section}
                     data-cover-section="header"
                     className={cn(
-                      "mx-auto flex w-full max-w-[92%] shrink-0 items-center",
+                      COVER_COLUMN_CLASS,
+                      "flex shrink-0 items-center",
                       coverTextJustificationClass,
                       coverTextAlignmentClass,
                     )}
@@ -216,7 +220,8 @@ export const LetterPageCanvas = forwardRef<
                     key={section}
                     data-cover-section="title"
                     className={cn(
-                      "mx-auto w-full max-w-[92%] shrink-0 overflow-hidden",
+                      COVER_COLUMN_CLASS,
+                      "shrink-0 overflow-hidden",
                       coverTextAlignmentClass,
                     )}
                   >
@@ -246,7 +251,8 @@ export const LetterPageCanvas = forwardRef<
                     data-cover-section="entry"
                     data-cover-text-alignment={cover.text_alignment}
                     className={cn(
-                      "letter-cover-description mx-auto w-full max-w-[92%] shrink-0 overflow-hidden",
+                      COVER_COLUMN_CLASS,
+                      "letter-cover-description shrink-0 overflow-hidden",
                       coverTextAlignmentClass,
                       pageIsDark ? "text-zinc-300" : "text-zinc-600",
                     )}
@@ -293,25 +299,25 @@ export const LetterPageCanvas = forwardRef<
                     data-cover-section="hero"
                     data-caption-placement={cover.hero_image_caption_placement}
                     className={cn(
-                      "mx-auto",
+                      COVER_COLUMN_CLASS,
                       captionBelowImage
-                        ? "flex w-[92%] shrink-0 flex-col items-center gap-[1cqh]"
+                        ? "flex min-h-0 shrink flex-col items-center gap-[1cqh]"
                         : "relative min-h-[12cqh] max-h-[42cqh] shrink overflow-hidden rounded-[2cqw]",
                     )}
                     style={captionBelowImage ? undefined : {
                       aspectRatio: `${coverHeroAspectRatio}`,
-                      width: `min(92%, ${42 * coverHeroAspectRatio}cqh)`,
                     }}
                   >
                     <div
                       data-cover-hero-image
                       className={cn(
                         "relative overflow-hidden rounded-[2cqw]",
-                        captionBelowImage ? "shrink-0" : "size-full",
+                        captionBelowImage
+                          ? "min-h-0 w-full max-h-[32cqh] shrink"
+                          : "size-full",
                       )}
                       style={captionBelowImage ? {
                         aspectRatio: `${coverHeroAspectRatio}`,
-                        width: `min(100%, ${32 * coverHeroAspectRatio}cqh)`,
                       } : undefined}
                     >
                       <Image
@@ -323,7 +329,7 @@ export const LetterPageCanvas = forwardRef<
                           1,
                           Math.round(1600 / coverHeroAspectRatio),
                         )}
-                        className="size-full object-cover object-center"
+                        className="absolute inset-0 size-full object-cover object-center"
                       />
                     </div>
                     {heroCaption ? (
@@ -335,7 +341,7 @@ export const LetterPageCanvas = forwardRef<
                           "break-words px-[2.5cqw] font-medium leading-[1.3]",
                           captionBelowImage
                             ? cn(
-                                "w-full py-[0.5cqh]",
+                                "w-full shrink-0 py-[0.5cqh]",
                                 pageIsDark ? "text-zinc-300" : "text-zinc-600",
                               )
                             : "absolute inset-x-0 bottom-0 max-h-full overflow-hidden bg-black/75 py-[1.5cqw] text-white",
@@ -356,7 +362,7 @@ export const LetterPageCanvas = forwardRef<
           {coverHasFooter ? (
             <footer
               data-cover-section="author"
-              className="mx-auto flex w-full max-w-[92%] shrink-0 items-center justify-between gap-[2.5cqw]"
+              className={cn(COVER_COLUMN_CLASS, "flex shrink-0 items-center justify-between gap-[2.5cqw]")}
             >
               <div className="flex min-w-0 items-center gap-[2.5cqw]">
                 {cover.avatar_url ? (
@@ -408,6 +414,7 @@ export const LetterPageCanvas = forwardRef<
                     "size-[7cqw] shrink-0 object-contain object-right",
                     pageIsDark && "invert",
                   )}
+                  style={{ transform: `translateX(${COVER_LOGO_RIGHT_INSET})` }}
                   priority={!editable}
                 />
               ) : null}

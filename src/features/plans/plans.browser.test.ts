@@ -30,7 +30,11 @@ function makePlan(overrides: Partial<CalendarPlan> = {}): CalendarPlan {
   };
 }
 
-async function fixture(page: Page, options?: { rejectCreate?: boolean; plan?: Partial<CalendarPlan> }) {
+async function fixture(page: Page, options?: {
+  rejectCreate?: boolean;
+  hideLinkedProject?: boolean;
+  plan?: Partial<CalendarPlan>;
+}) {
   let plan = makePlan(options?.plan);
   let deleted = false;
   let noticeRead = false;
@@ -75,7 +79,7 @@ async function fixture(page: Page, options?: { rejectCreate?: boolean; plan?: Pa
       writes.push({ method, path });
       deleted = true;
     } else if (path === "/project") {
-      data = [{ uuid: plan.project?.uuid, name: "Launch" }];
+      data = options?.hideLinkedProject ? [] : [{ uuid: plan.project?.uuid, name: "Launch" }];
     } else if (path === "/area") {
       data = [{ uuid: "8e7e4b70-7820-4702-b2cf-9746e02f7dd6", name: "Work" }];
     } else if (path === "/notifications" && method === "GET") {
@@ -145,6 +149,42 @@ test("create form sends all-day and custom reminder data without a time", async 
   expect(state.writes[0].input).not.toHaveProperty("time");
 });
 
+test("create form shows link and reminder labels while sending their stored values", async ({ page }) => {
+  const state = await fixture(page);
+  await page.getByRole("button", { name: "New plan" }).click();
+  const dialog = page.getByRole("dialog", { name: "New plan" });
+  const linkSelect = dialog.locator("#plan-link");
+  const reminderSelect = dialog.locator("#plan-reminder");
+  const linkValue = linkSelect.locator('[data-slot="select-value"]');
+  const reminderValue = reminderSelect.locator('[data-slot="select-value"]');
+
+  await expect(linkValue).toHaveText("No link");
+  await expect(reminderValue).toHaveText("Don't notify me");
+
+  await linkSelect.click();
+  await page.getByRole("option", { name: "Launch" }).click();
+  await expect(linkValue).toHaveText("Launch");
+  await linkSelect.click();
+  await page.getByRole("option", { name: "Work" }).click();
+  await expect(linkValue).toHaveText("Work");
+
+  await reminderSelect.click();
+  await page.getByRole("option", { name: "1 day before" }).click();
+  await expect(reminderValue).toHaveText("1 day before");
+
+  await dialog.getByPlaceholder("What are you planning?").fill("Review the workspace");
+  await dialog.getByRole("button", { name: "Create plan" }).click();
+  await expect.poll(() => state.writes.length).toBe(1);
+  expect(state.writes[0]).toMatchObject({
+    method: "POST",
+    input: {
+      area_uuid: "8e7e4b70-7820-4702-b2cf-9746e02f7dd6",
+      reminder_offset_minutes: 1440,
+    },
+  });
+  expect(state.writes[0].input).not.toHaveProperty("project_uuid");
+});
+
 test("create form saves a calendar date and a selected quarter-hour time", async ({ page }) => {
   const state = await fixture(page);
   const today = new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Manila" });
@@ -189,6 +229,35 @@ test("edit form preserves a stored time outside the quarter-hour choices", async
 
   await expect.poll(() => state.writes.length).toBe(1);
   expect(state.writes[0]).toMatchObject({ method: "PUT", input: { time: "14:37" } });
+});
+
+test("edit form shows labels for a linked project missing from active choices", async ({ page }) => {
+  const state = await fixture(page, { hideLinkedProject: true });
+  await page.getByRole("region", { name: "Plans calendar" }).getByText("Meet the team").click();
+  await page.getByRole("button", { name: "Edit" }).click();
+  const dialog = page.getByRole("dialog", { name: "Edit plan" });
+  const linkSelect = dialog.locator("#plan-link");
+  const reminderSelect = dialog.locator("#plan-reminder");
+  const linkValue = linkSelect.locator('[data-slot="select-value"]');
+  const reminderValue = reminderSelect.locator('[data-slot="select-value"]');
+
+  await expect(linkValue).toHaveText("Launch");
+  await expect(reminderValue).toHaveText("3 hours before");
+  await linkSelect.click();
+  await expect(page.getByRole("option", { name: "Launch" })).toBeVisible();
+  await page.getByRole("option", { name: "Launch" }).click();
+  await expect(linkValue).toHaveText("Launch");
+
+  await dialog.getByRole("button", { name: "Save changes" }).click();
+  await expect.poll(() => state.writes.length).toBe(1);
+  expect(state.writes[0]).toMatchObject({
+    method: "PUT",
+    input: {
+      project_uuid: "28b19e4a-3fea-41bc-a84d-9a2b7812d3d4",
+      reminder_offset_minutes: 180,
+    },
+  });
+  expect(state.writes[0].input).not.toHaveProperty("area_uuid");
 });
 
 test("plan details edit the stored timezone and delete to Trash", async ({ page }) => {

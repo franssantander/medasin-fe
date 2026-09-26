@@ -130,6 +130,84 @@ async function fixture(
   };
 }
 
+async function expectCoverColumnAlignment(
+  canvas: Locator,
+  captionPlacement: "overlay" | "below",
+) {
+  await expect(canvas.locator('[data-cover-section="hero"]')).toHaveAttribute(
+    "data-caption-placement",
+    captionPlacement,
+  );
+  const geometry = await canvas.evaluate((element) => {
+    const bounds = (selector: string) => {
+      const match = element.querySelector(selector);
+      if (!match) throw new Error(`Cover element is missing: ${selector}`);
+      const { left, right, top, bottom, width, height } = match.getBoundingClientRect();
+      return { left, right, top, bottom, width, height };
+    };
+    const logo = bounds('[data-cover-section="author"] img[alt="Medasin"]');
+    const image = element.querySelector<HTMLElement>(
+      "[data-cover-hero-image] img",
+    );
+    if (!image) throw new Error("Cover image is missing");
+
+    return {
+      canvasHeight: element.getBoundingClientRect().height,
+      main: bounds("[data-cover-main]"),
+      header: bounds('[data-cover-section="header"]'),
+      title: bounds('[data-cover-section="title"]'),
+      entry: bounds('[data-cover-section="entry"]'),
+      hero: bounds('[data-cover-section="hero"]'),
+      image: bounds("[data-cover-hero-image]"),
+      imageElement: bounds("[data-cover-hero-image] img"),
+      caption: bounds("[data-cover-hero-caption]"),
+      author: bounds('[data-cover-section="author"]'),
+      authorName: bounds('[data-cover-section="author"] p'),
+      logoVisibleRight: logo.right - (logo.width * 7) / 135,
+      imageObjectFit: getComputedStyle(image).objectFit,
+      imageObjectPosition: getComputedStyle(image).objectPosition,
+    };
+  });
+
+  expect(geometry.header.width / geometry.main.width).toBeCloseTo(0.92, 2);
+  for (const [name, bounds] of Object.entries({
+    title: geometry.title,
+    entry: geometry.entry,
+    hero: geometry.hero,
+    image: geometry.image,
+    caption: geometry.caption,
+    author: geometry.author,
+  })) {
+    expect(Math.abs(bounds.left - geometry.header.left), `${name} left edge`).toBeLessThanOrEqual(1);
+    expect(Math.abs(bounds.right - geometry.header.right), `${name} right edge`).toBeLessThanOrEqual(1);
+  }
+  expect(Math.abs(geometry.authorName.left - geometry.header.left), "author left edge").toBeLessThanOrEqual(1);
+  expect(Math.abs(geometry.logoVisibleRight - geometry.header.right), "visible logo right edge").toBeLessThanOrEqual(1);
+  expect(geometry.imageObjectFit).toBe("cover");
+  expect(geometry.imageObjectPosition).toBe("50% 50%");
+  expect(Math.abs(geometry.imageElement.width - geometry.image.width)).toBeLessThanOrEqual(1);
+  expect(Math.abs(geometry.imageElement.height - geometry.image.height)).toBeLessThanOrEqual(1);
+  expect(geometry.image.height / geometry.canvasHeight).toBeLessThanOrEqual(
+    captionPlacement === "below" ? 0.33 : 0.43,
+  );
+  if (captionPlacement === "below") {
+    expect(geometry.caption.top).toBeGreaterThanOrEqual(geometry.image.bottom);
+    expect(
+      geometry.caption.bottom,
+      `Below-image caption must fit within the cover main: ${JSON.stringify({
+        main: geometry.main,
+        hero: geometry.hero,
+        image: geometry.image,
+        caption: geometry.caption,
+      })}`,
+    ).toBeLessThanOrEqual(geometry.main.bottom + 1);
+  } else {
+    expect(geometry.caption.bottom).toBeLessThanOrEqual(geometry.image.bottom + 1);
+    expect(geometry.caption.top).toBeGreaterThanOrEqual(geometry.image.top - 1);
+  }
+  return geometry;
+}
+
 test("long cover text auto-fits before the export is created", async ({ page }) => {
   const state = await fixture(page, document(2), "portrait", {
     title: "A deliberately long cover title ".repeat(4).trim(),
@@ -1142,12 +1220,17 @@ test("cover controls persist styling, metadata, and image removal", async ({ pag
   expect(Math.max(...sectionWidths) - Math.min(...sectionWidths)).toBeLessThan(
     1,
   );
-  expect(
-    await coverHero.evaluate((element) => {
-      const bounds = element.getBoundingClientRect();
-      return bounds.width / bounds.height;
-    }),
-  ).toBeCloseTo(1.25, 2);
+  const heroFrame = await coverHero.evaluate((element) => {
+    const canvas = element.closest("[data-page-canvas]");
+    if (!canvas) throw new Error("Cover canvas is missing");
+    const bounds = element.getBoundingClientRect();
+    return {
+      aspectRatio: bounds.width / bounds.height,
+      heightFraction: bounds.height / canvas.getBoundingClientRect().height,
+    };
+  });
+  expect(heroFrame.aspectRatio).toBeGreaterThan(1.25);
+  expect(heroFrame.heightFraction).toBeLessThanOrEqual(0.43);
   expect(
     await coverFooter.evaluate((element) => {
       const canvasBounds = element
@@ -1326,12 +1409,13 @@ test("legacy image captions stay on the image", async ({ page }) => {
 });
 
 for (const format of ["portrait", "square", "story", "landscape"] as const) {
-  test(`a long caption fits below the image in ${format} format`, async ({ page }) => {
+  test(`cover columns align with overlay and below captions in ${format} format`, async ({ page }) => {
     if (format === "story") {
       await page.setViewportSize({ width: 390, height: 844 });
     }
     const aspectRatio = format === "story" ? 9 / 16 : 16 / 9;
     const state = await fixture(page, document(2), "portrait", {
+      subtitle: "A short cover entry for checking the shared text column.",
       initialHeroImageUrl: "http://localhost/storage/existing-cover.png",
       initialHeroAspectRatio: aspectRatio,
     });
@@ -1349,31 +1433,26 @@ for (const format of ["portrait", "square", "story", "landscape"] as const) {
     const dialog = page.getByRole("dialog", { name: "Prepare social pages" });
     const longCaption = "A city view with layers of quiet detail and people finding their way through an ordinary afternoon. ".repeat(2).slice(0, 120);
     await dialog.getByRole("textbox", { name: "Cover image caption" }).fill(longCaption);
+    await expect.poll(() => state.exported().pages?.[0].cover?.hero_image_caption, { timeout: 60_000 }).toBe(longCaption);
+    const editorCanvas = dialog.locator('main [data-page-layout="cover"]');
+    const previewCanvas = page.locator('[aria-label="Letter export preview"] [data-page-layout="cover"]').first();
+    await expectCoverColumnAlignment(editorCanvas, "overlay");
+    await dialog.getByRole("button", { name: "Close", exact: true }).click();
+    await expect(dialog).toBeHidden();
+    await expectCoverColumnAlignment(previewCanvas, "overlay");
+
+    await page.getByRole("button", { name: "Customize pages", exact: true }).click();
     await dialog.getByRole("group", { name: "Caption placement" }).getByRole("button", { name: "Below image" }).click();
     await expect.poll(() => state.exported().pages?.[0].cover?.hero_image_caption_placement, { timeout: 60_000 }).toBe("below");
     await expect.poll(() => state.exported().pages?.[0].cover?.hero_image_caption, { timeout: 60_000 }).toBe(longCaption);
 
-    const hero = dialog.locator('main [data-cover-section="hero"]');
+    const hero = editorCanvas.locator('[data-cover-section="hero"]');
     await expect(hero.locator("[data-cover-hero-caption]")).toHaveText(longCaption);
-    const geometry = await hero.evaluate((element) => {
-      const canvas = element.closest("[data-page-canvas]")?.getBoundingClientRect();
-      const main = element.closest("[data-cover-main]")?.getBoundingClientRect();
-      const image = element.querySelector("[data-cover-hero-image]")?.getBoundingClientRect();
-      const caption = element.querySelector("[data-cover-hero-caption]")?.getBoundingClientRect();
-      if (!canvas || !main || !image || !caption) throw new Error("Cover layout is missing");
-      return {
-        imageAspectRatio: image.width / image.height,
-        imageHeightFraction: image.height / canvas.height,
-        imageBottom: image.bottom,
-        captionTop: caption.top,
-        captionBottom: caption.bottom,
-        mainBottom: main.bottom,
-      };
-    });
-    expect(geometry.imageAspectRatio).toBeCloseTo(aspectRatio, 2);
-    expect(geometry.imageHeightFraction).toBeLessThanOrEqual(0.33);
-    expect(geometry.captionTop).toBeGreaterThanOrEqual(geometry.imageBottom);
-    expect(geometry.captionBottom).toBeLessThanOrEqual(geometry.mainBottom + 1);
+    const geometry = await expectCoverColumnAlignment(editorCanvas, "below");
+    expect(geometry.image.width / geometry.image.height).toBeGreaterThan(aspectRatio);
+    await dialog.getByRole("button", { name: "Close", exact: true }).click();
+    await expect(dialog).toBeHidden();
+    await expectCoverColumnAlignment(previewCanvas, "below");
   });
 }
 
