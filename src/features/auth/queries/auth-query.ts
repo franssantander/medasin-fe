@@ -16,6 +16,8 @@ export function useLoginMutation() {
   return useMutation({
     mutationFn: authService.login,
     onSuccess: async () => {
+      queryClient.removeQueries({ queryKey: ["dashboard"] });
+      queryClient.removeQueries({ queryKey: ["resources"] });
       queryClient.removeQueries({ queryKey: ["calendar-plans"] });
       queryClient.removeQueries({ queryKey: ["notifications"] });
       await queryClient.invalidateQueries({
@@ -32,6 +34,8 @@ export function useLogoutMutation() {
     mutationFn: authService.logout,
     onSuccess: () => {
       queryClient.removeQueries({ queryKey: ["current-user"] });
+      queryClient.removeQueries({ queryKey: ["dashboard"] });
+      queryClient.removeQueries({ queryKey: ["resources"] });
       queryClient.removeQueries({ queryKey: ["calendar-plans"] });
       queryClient.removeQueries({ queryKey: ["notifications"] });
     },

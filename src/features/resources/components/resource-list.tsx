@@ -1,10 +1,20 @@
 "use client";
 
 import { Filter, LoaderCircle, Plus, Search, X } from "lucide-react";
+import { useRouter } from "next/navigation";
 import PageHeader from "@/components/shared/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Sheet,
   SheetContent,
@@ -14,6 +24,7 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { useResourceList } from "../hooks/use-resource-list";
+import { useResourceQuery } from "../queries/resource-query";
 import { ResourceActionDialog } from "./resource-action-dialog";
 import { ResourceDetailDialog } from "./resource-detail-dialog";
 import { ResourceFormDialog } from "./resource-form-dialog";
@@ -21,9 +32,19 @@ import { ResourceListFilters } from "./resource-list-filters";
 import { resourceTypeOptions } from "./resource-list-options";
 import { ResourceListResults } from "./resource-list-results";
 
-export function ResourceList() {
+export function ResourceList({
+  initialResourceUuid,
+}: {
+  initialResourceUuid?: string;
+}) {
+  const router = useRouter();
   const list = useResourceList();
+  const linkedResourceQuery = useResourceQuery(initialResourceUuid);
   const query = list.resourcesQuery;
+  const showLinkedResource = Boolean(
+    initialResourceUuid && !list.selected && !list.creating && !list.archiving,
+  );
+  const closeLinkedResource = () => router.replace("/resources");
   const selectedTypeLabel = list.type
     ? resourceTypeOptions.find((item) => item.value === list.type)?.label ??
       list.type
@@ -195,6 +216,54 @@ export function ResourceList() {
           onClose={() => list.setSelected(undefined)}
         />
       )}
+      {showLinkedResource && linkedResourceQuery.data?.data ? (
+        <ResourceDetailDialog
+          key={initialResourceUuid}
+          resource={linkedResourceQuery.data.data}
+          onClose={closeLinkedResource}
+        />
+      ) : showLinkedResource ? (
+        <Dialog
+          open
+          onOpenChange={(open) => {
+            if (!open) closeLinkedResource();
+          }}
+        >
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>
+                {linkedResourceQuery.isError
+                  ? "Resource could not be loaded"
+                  : "Opening resource"}
+              </DialogTitle>
+              <DialogDescription role={linkedResourceQuery.isError ? "alert" : undefined}>
+                {linkedResourceQuery.isError
+                  ? linkedResourceQuery.error instanceof Error
+                    ? linkedResourceQuery.error.message
+                    : "The resource could not be loaded. Try again."
+                  : "Loading resource details…"}
+              </DialogDescription>
+            </DialogHeader>
+            {!linkedResourceQuery.isError && (
+              <div className="grid gap-3" role="status" aria-label="Loading resource">
+                <Skeleton className="h-7 w-2/3" />
+                <Skeleton className="h-4 w-full" />
+                <Skeleton className="h-4 w-4/5" />
+              </div>
+            )}
+            <DialogFooter>
+              <Button variant="outline" onClick={closeLinkedResource}>
+                Close
+              </Button>
+              {linkedResourceQuery.isError && (
+                <Button onClick={() => void linkedResourceQuery.refetch()}>
+                  Try again
+                </Button>
+              )}
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      ) : null}
       <ResourceActionDialog
         resource={list.archiving}
         isPending={list.archiveResource.isPending}

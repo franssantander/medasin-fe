@@ -31,7 +31,7 @@ function Brand() {
   return (
     <Link
       href="/home"
-      aria-label="Medasin home"
+      aria-label="Medasin dashboard"
       className="flex h-10 min-w-0 items-center gap-1 overflow-hidden rounded-md outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
     >
       <Image

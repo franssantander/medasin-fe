@@ -5,7 +5,7 @@ import {
   CalendarCheck,
   CirclePile,
   Feather,
-  Home,
+  LayoutDashboard,
   KanbanSquare,
   NotebookPen,
   StarCheck,
@@ -21,9 +21,9 @@ export type DashboardNavigationItem = {
 };
 
 export const dashboardHomeItem: DashboardNavigationItem = {
-  label: "Home",
+  label: "Dashboard",
   href: "/home",
-  icon: Home,
+  icon: LayoutDashboard,
 };
 
 export const dashboardNavigationGroups: {
@@ -66,6 +66,6 @@ export function getDashboardTitle(pathname: string) {
   return (
     dashboardNavigationItems.find((item) =>
       isActiveDashboardRoute(pathname, item.href),
-    )?.label ?? "Home"
+    )?.label ?? "Dashboard"
   );
 }

@@ -1,11 +1,9 @@
-import React from "react";
+import type { Metadata } from "next";
+
+import { DashboardPage } from "@/features/home/components/dashboard-page";
+
+export const metadata: Metadata = { title: "Dashboard" };
 
 export default function HomePage() {
-  return (
-    <div className="w-full">
-      <div>
-        <h1 className="font-bold text-lg">Home</h1>
-      </div>
-    </div>
-  );
+  return <DashboardPage />;
 }
