@@ -8,6 +8,7 @@ export type DashboardStats = {
 export type DashboardProject = {
   uuid: string;
   name: string;
+  icon: string | null;
   area: { uuid: string; name: string } | null;
   completed_tasks: number;
   total_tasks: number;

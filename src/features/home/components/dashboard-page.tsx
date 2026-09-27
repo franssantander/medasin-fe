@@ -1,13 +1,14 @@
 "use client";
 
 import {
+  ArrowRight,
+  ArrowUpRight,
   BookOpen,
   CalendarDays,
   Feather,
   File,
   ImageIcon,
   KanbanSquare,
-  Layers3,
   Link2,
   Mail,
   NotebookPen,
@@ -32,6 +33,7 @@ import {
 } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
+import { DashboardRecordIcon } from "@/features/home/components/dashboard-record-icon";
 import { useDashboardQuery } from "@/features/home/queries/dashboard-query";
 import { cn } from "@/lib/utils";
 import type {
@@ -75,15 +77,19 @@ function SectionHeading({
   href?: string;
 }) {
   return (
-    <div className="flex items-center justify-between gap-3">
-      <h2 id={id} className="text-sm font-medium">{title}</h2>
+    <div className="flex items-center justify-between gap-3 pb-0.5">
+      <h2 id={id} className="text-base font-semibold tracking-tight">{title}</h2>
       {href && (
         <Link
           href={href}
           aria-label={`View all ${title.toLowerCase()}`}
-          className="rounded-sm text-xs text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          className="group/view-all -my-1.5 inline-flex min-h-11 items-center gap-1 rounded-sm px-1 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
         >
           View all
+          <ArrowRight
+            className="size-3.5 transition-transform group-hover/view-all:translate-x-0.5 motion-reduce:transform-none"
+            aria-hidden="true"
+          />
         </Link>
       )}
     </div>
@@ -117,21 +123,33 @@ function ProjectPreview({ project }: { project: DashboardProject }) {
   const percentage = project.progress_percentage;
   const hasTasks = project.total_tasks > 0 && percentage !== null;
   return (
-    <Card size="sm" className="min-w-0 gap-3">
-      <CardHeader className="min-w-0 gap-2">
-        <CardTitle className="min-w-0 truncate">
-          <Link
-            href={`/projects/${project.uuid}`}
-            aria-label={`Open project ${project.name}`}
-            className="rounded-sm underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+    <Card
+      size="sm"
+      className="group/preview relative min-h-40 min-w-0 gap-0 overflow-visible py-0 transition-[box-shadow,transform] duration-200 hover:-translate-y-0.5 hover:shadow-md motion-reduce:transform-none"
+    >
+      <Link
+        href={`/projects/${project.uuid}`}
+        aria-label={`Open project ${project.name}`}
+        className="absolute inset-0 z-10 rounded-xl focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+      />
+      <CardHeader className="pointer-events-none min-w-0 gap-3 py-4">
+        <div className="flex min-w-0 items-start gap-3">
+          <DashboardRecordIcon kind="project" name={project.icon} />
+          <h3
+            className="min-w-0 flex-1 truncate pt-0.5 text-sm leading-5 font-semibold"
+            title={project.name}
           >
             {project.name}
-          </Link>
-        </CardTitle>
+          </h3>
+          <ArrowUpRight
+            className="mt-0.5 size-4 shrink-0 text-muted-foreground/60 transition-colors group-hover/preview:text-foreground group-focus-within/preview:text-foreground"
+            aria-hidden="true"
+          />
+        </div>
         {project.area ? (
           <Badge
             variant="secondary"
-            className="max-w-full"
+            className="pointer-events-auto relative z-20 max-w-full self-start"
             render={
               <Link
                 href={`/areas/${project.area.uuid}`}
@@ -142,10 +160,12 @@ function ProjectPreview({ project }: { project: DashboardProject }) {
             <span className="truncate">Area · {project.area.name}</span>
           </Badge>
         ) : (
-          <Badge variant="outline">Inbox</Badge>
+          <Badge variant="outline" className="self-start">
+            Inbox
+          </Badge>
         )}
       </CardHeader>
-      <CardContent className="gap-2">
+      <CardContent className="pointer-events-none mt-auto min-h-16 gap-2 border-t border-border/70 py-3">
         {hasTasks ? (
           <>
             <div className="flex items-center justify-between gap-2 text-xs">
@@ -201,20 +221,31 @@ function AreaPreview({ area }: { area: DashboardArea }) {
     { label: "Projects", value: area.projects_count },
   ];
   return (
-    <Card size="sm" className="min-w-0 gap-3">
-      <CardHeader className="min-w-0">
-        <CardTitle className="flex min-w-0 items-center gap-2">
-          <Layers3 className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-          <Link
-            href={`/areas/${area.uuid}`}
-            aria-label={`Open area ${area.name}`}
-            className="min-w-0 truncate rounded-sm underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+    <Card
+      size="sm"
+      className="group/preview relative min-h-36 min-w-0 gap-0 overflow-visible py-0 transition-[box-shadow,transform] duration-200 hover:-translate-y-0.5 hover:shadow-md motion-reduce:transform-none"
+    >
+      <Link
+        href={`/areas/${area.uuid}`}
+        aria-label={`Open area ${area.name}`}
+        className="absolute inset-0 z-10 rounded-xl focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+      />
+      <CardHeader className="pointer-events-none min-w-0 py-4">
+        <div className="flex min-w-0 items-start gap-3">
+          <DashboardRecordIcon kind="area" name={area.icon} />
+          <h3
+            className="min-w-0 flex-1 truncate pt-0.5 text-sm leading-5 font-semibold"
+            title={area.name}
           >
             {area.name}
-          </Link>
-        </CardTitle>
+          </h3>
+          <ArrowUpRight
+            className="mt-0.5 size-4 shrink-0 text-muted-foreground/60 transition-colors group-hover/preview:text-foreground group-focus-within/preview:text-foreground"
+            aria-hidden="true"
+          />
+        </div>
       </CardHeader>
-      <CardContent>
+      <CardContent className="pointer-events-none mt-auto border-t border-border/70 py-3">
         <dl className="grid grid-cols-3 gap-2">
           {counts.map((count) => (
             <div key={count.label} className="flex min-w-0 flex-col">
@@ -291,10 +322,12 @@ function RecentResourcesSection({
                   <li key={item.item_key}>
                     <Link
                       href={`/resources?resource=${encodeURIComponent(item.resource_uuid)}`}
-                      className="flex min-h-12 min-w-0 items-center gap-3 rounded-sm py-2 text-sm transition-colors hover:text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                      className="group/resource -mx-2 flex min-h-13 min-w-0 items-center gap-3 rounded-lg px-2 py-2 text-sm transition-colors hover:bg-muted/60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                     >
-                      <Icon className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-                      <span className="min-w-0 flex-1 truncate">{item.title}</span>
+                      <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground transition-colors group-hover/resource:text-foreground">
+                        <Icon className="size-4" aria-hidden="true" />
+                      </span>
+                      <span className="min-w-0 flex-1 truncate font-medium group-hover/resource:text-foreground">{item.title}</span>
                       {age && (
                         <time
                           dateTime={item.occurred_at}
@@ -341,7 +374,7 @@ function ArchivesSection({ archives }: { archives: DashboardArchives }) {
           </dl>
         </CardContent>
         <CardFooter>
-          <Link href="/archives" className={cn(buttonVariants(), "w-full")}>
+          <Link href="/archives" className={cn(buttonVariants(), "min-h-11 w-full")}>
             View archive
           </Link>
         </CardFooter>
@@ -358,13 +391,19 @@ function UtilitiesSection() {
         {utilities.map((utility) => {
           const Icon = utility.icon;
           return (
-            <Card key={utility.label} size="sm" className="py-0">
+            <Card
+              key={utility.label}
+              size="sm"
+              className="group/utility overflow-visible py-0 transition-[box-shadow,transform] duration-200 hover:-translate-y-0.5 hover:shadow-md motion-reduce:transform-none"
+            >
               <CardContent className="p-0">
                 <Link
                   href={utility.href}
-                  className="flex min-h-18 flex-col items-center justify-center gap-1.5 rounded-xl px-2 py-3 text-[11px] font-medium transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                  className="flex min-h-21 flex-col items-center justify-center gap-2 rounded-xl px-2 py-3 text-[11px] font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                 >
-                  <Icon className="size-4.5" aria-hidden="true" />
+                  <span className="flex size-9 items-center justify-center rounded-lg bg-muted text-muted-foreground transition-colors group-hover/utility:bg-primary/10 group-hover/utility:text-primary group-focus-within/utility:bg-primary/10 group-focus-within/utility:text-primary">
+                    <Icon className="size-4.5" aria-hidden="true" />
+                  </span>
                   {utility.label}
                 </Link>
               </CardContent>

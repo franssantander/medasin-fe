@@ -1,20 +1,27 @@
 import { expect, test, type Page } from "@playwright/test";
 
 import type { DashboardData } from "./type";
+import type { Area } from "@/features/areas/type";
+import type { ProjectDetail } from "@/features/projects/type";
 import type { Resource } from "@/features/resources/type";
 
 test.use({ timezoneId: "Asia/Manila" });
 
 const projectUuid = "9a5f7c88-3707-4979-a422-e54dd475d140";
 const completedProjectUuid = "6f15b8b7-c46d-490b-8141-470e456ea86b";
+const waitingProjectUuid = "5d4e8974-1ceb-4b31-948b-9288873c7c19";
+const unknownIconProjectUuid = "4aa19b9e-55a4-451d-b6bf-9175239e90a1";
 const areaUuid = "c43e0592-81e0-4d70-9477-c06aceaa082e";
+const learningAreaUuid = "ae5fd74a-3ceb-4e20-b28e-9305c83729de";
+const noIconAreaUuid = "963695a4-766e-4d42-b595-f1dadcf4c76e";
+const unknownIconAreaUuid = "62b8c993-1358-4bf0-8e5f-57684a48a0cc";
 const resourceUuid = "b18cb1d5-7dd9-4b5e-a8c8-fbbf62fe8f20";
 
 function populatedDashboard(): DashboardData {
   return {
     stats: {
       active_projects: 11,
-      areas: 1,
+      areas: 4,
       resources_saved: 13,
       habit_streak: 5,
     },
@@ -22,6 +29,7 @@ function populatedDashboard(): DashboardData {
       {
         uuid: projectUuid,
         name: "North star",
+        icon: "ChartNoAxesCombined",
         area: { uuid: areaUuid, name: "Life" },
         completed_tasks: 2,
         total_tasks: 4,
@@ -31,6 +39,7 @@ function populatedDashboard(): DashboardData {
       {
         uuid: completedProjectUuid,
         name: "Completed roadmap",
+        icon: "Axis3d",
         area: null,
         completed_tasks: 3,
         total_tasks: 3,
@@ -38,12 +47,23 @@ function populatedDashboard(): DashboardData {
         last_activity_at: new Date().toISOString(),
       },
       {
-        uuid: "5d4e8974-1ceb-4b31-948b-9288873c7c19",
+        uuid: waitingProjectUuid,
         name: "Waiting plan",
+        icon: null,
         area: null,
         completed_tasks: 0,
         total_tasks: 0,
         progress_percentage: null,
+        last_activity_at: new Date().toISOString(),
+      },
+      {
+        uuid: unknownIconProjectUuid,
+        name: "Unknown icon project",
+        icon: "MissingProjectIcon",
+        area: null,
+        completed_tasks: 1,
+        total_tasks: 2,
+        progress_percentage: 50,
         last_activity_at: new Date().toISOString(),
       },
     ],
@@ -51,10 +71,34 @@ function populatedDashboard(): DashboardData {
       {
         uuid: areaUuid,
         name: "Life",
-        icon: "Layers3",
+        icon: "Leaf",
         goals_count: 2,
         habits_count: 3,
         projects_count: 4,
+      },
+      {
+        uuid: learningAreaUuid,
+        name: "Learning",
+        icon: "ArrowDownAZ",
+        goals_count: 1,
+        habits_count: 2,
+        projects_count: 1,
+      },
+      {
+        uuid: noIconAreaUuid,
+        name: "Wellbeing",
+        icon: null,
+        goals_count: 1,
+        habits_count: 0,
+        projects_count: 0,
+      },
+      {
+        uuid: unknownIconAreaUuid,
+        name: "Unknown icon area",
+        icon: "MissingAreaIcon",
+        goals_count: 0,
+        habits_count: 0,
+        projects_count: 0,
       },
     ],
     recent_resources: [
@@ -100,6 +144,41 @@ const resource: Resource = {
   areas: [],
 };
 
+const projectDetail: ProjectDetail = {
+  uuid: projectUuid,
+  name: "North star",
+  slug: "north-star",
+  description: null,
+  icon: "ChartNoAxesCombined",
+  background: null,
+  status: "in_progress",
+  progress_percentage: 50,
+  start_date: null,
+  due_date: null,
+  is_overdue: false,
+  days_overdue: null,
+  archived_at: null,
+  area: { uuid: areaUuid, name: "Life", slug: "life", icon: "Leaf" },
+  goals: { count: 2, url: null },
+  boards: [],
+  resources: [],
+};
+
+const areaDetail: Area = {
+  id: 1,
+  uuid: areaUuid,
+  name: "Life",
+  slug: "life",
+  icon: "Leaf",
+  background: null,
+  background_image: null,
+  background_image_url: null,
+  description: null,
+  archived_at: null,
+  created_at: "2026-09-20T00:00:00.000Z",
+  updated_at: "2026-09-25T00:00:00.000Z",
+};
+
 async function mockApi(page: Page, data: DashboardData) {
   const dashboardRequests: URL[] = [];
   let dashboardFails = false;
@@ -138,6 +217,12 @@ async function mockApi(page: Page, data: DashboardData) {
         per_page: 15,
         total: 0,
       };
+    } else if (path === `/project/${projectUuid}`) {
+      result = projectDetail;
+    } else if (path === `/area/${areaUuid}`) {
+      result = areaDetail;
+    } else if (path === `/area/${areaUuid}/projects`) {
+      result = { current_page: 1, data: [], last_page: 1, per_page: 15, total: 0 };
     } else if (path === `/resource/${resourceUuid}`) {
       if (resourceFails) status = 503;
       result = status === 200 ? resource : null;
@@ -196,12 +281,66 @@ test("dashboard shows backend totals, progress, links, and local streak timezone
     await expect(page.getByRole("heading", { name: "Dashboard", exact: true })).toBeVisible();
     const main = page.locator("#dashboard-shell main");
     expect(await main.evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
   }
 
   await page.getByRole("link", { name: /Knowledge note/ }).click();
   await expect(page).toHaveURL(new RegExp(`/resources\\?resource=${resourceUuid}$`));
   await expect(page.getByRole("dialog", { name: `Edit ${resource.title}` })).toBeVisible();
   await expect(page.getByRole("textbox", { name: "Resource title" })).toHaveValue(resource.title);
+});
+
+test("dashboard renders saved icons and fallback icons with accessible card navigation", async ({ page }) => {
+  await mockApi(page, populatedDashboard());
+  await page.goto("/home");
+
+  const projects = page.getByRole("region", { name: "Projects" });
+  const areas = page.getByRole("region", { name: "Areas" });
+  const projectCard = (name: string) =>
+    projects.getByRole("link", { name: `Open project ${name}` })
+      .locator('xpath=ancestor::*[@data-slot="card"][1]');
+  const areaCard = (name: string) =>
+    areas.getByRole("link", { name: `Open area ${name}` })
+      .locator('xpath=ancestor::*[@data-slot="card"][1]');
+
+  await expect(projectCard("North star").locator('svg[data-icon-name="chart-no-axes-combined"]')).toBeVisible();
+  await expect(projectCard("Completed roadmap").locator('svg[data-icon-name="axis-3d"]')).toBeVisible();
+  await expect(projectCard("Waiting plan").locator("svg.lucide-rocket")).toBeVisible();
+  await expect(projectCard("Unknown icon project").locator("svg.lucide-rocket")).toBeVisible();
+  await expect(areaCard("Life").locator('svg[data-icon-name="leaf"]')).toBeVisible();
+  await expect(areaCard("Learning").locator('svg[data-icon-name="arrow-down-a-z"]')).toBeVisible();
+  await expect(areaCard("Wellbeing").locator("svg.lucide-leaf")).toBeVisible();
+  await expect(areaCard("Unknown icon area").locator("svg.lucide-leaf")).toBeVisible();
+
+  const projectLink = projects.getByRole("link", { name: "Open project North star" });
+  const projectBounds = await projectCard("North star").boundingBox();
+  const projectLinkBounds = await projectLink.boundingBox();
+  expect(projectBounds).not.toBeNull();
+  expect(projectLinkBounds?.height).toBeGreaterThan(projectBounds!.height * 0.9);
+  expect(projectLinkBounds?.width).toBeGreaterThan(projectBounds!.width * 0.9);
+  await page.keyboard.press("Tab");
+  await projectLink.focus();
+  await expect(projectLink).toBeFocused();
+  await expect(projectLink).toHaveCSS("outline-style", "solid");
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(new RegExp(`/projects/${projectUuid}$`));
+
+  await page.goto("/home");
+  const areaLink = page.getByRole("region", { name: "Areas" }).getByRole("link", { name: "Open area Life" });
+  await expect(areaLink).toHaveAttribute("href", `/areas/${areaUuid}`);
+  const areaBounds = await areaCard("Life").boundingBox();
+  const areaLinkBounds = await areaLink.boundingBox();
+  expect(areaBounds).not.toBeNull();
+  expect(areaLinkBounds?.height).toBeGreaterThan(areaBounds!.height * 0.9);
+  expect(areaLinkBounds?.width).toBeGreaterThan(areaBounds!.width * 0.9);
+  await areaLink.click();
+  await expect(page).toHaveURL(new RegExp(`/areas/${areaUuid}$`));
+
+  await page.goto("/home");
+  const areaBadge = page.getByRole("region", { name: "Projects" }).getByRole("link", { name: "Open area Life" });
+  await expect(areaBadge).toHaveAttribute("href", `/areas/${areaUuid}`);
+  await areaBadge.click();
+  await expect(page).toHaveURL(new RegExp(`/areas/${areaUuid}$`));
 });
 
 test("empty dashboard shows zero totals and helpful empty sections", async ({ page }) => {
