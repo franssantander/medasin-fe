@@ -34,6 +34,7 @@ export function useLetterPageAutosave({
 }) {
   const mutation = useUpdateLetterExportMutation();
   const [pages, setPages] = useState(() => normalizePages(letterExport));
+  const [saveError, setSaveError] = useState<Error | undefined>();
   const [saveStatus, setSaveStatus] = useState<LetterPageSaveStatus>("idle");
   const pagesRef = useRef(pages);
   const revisionRef = useRef(0);
@@ -89,6 +90,7 @@ export function useLetterPageAutosave({
             pagesRef.current = normalized;
             setPages(normalized);
             setSaveStatus("saved");
+            setSaveError(undefined);
             onSavedRef.current(response.data.letter);
           }
         } catch (error) {
@@ -98,7 +100,14 @@ export function useLetterPageAutosave({
             await new Promise((resolve) => window.setTimeout(resolve, 750));
             continue;
           }
-          if (mountedRef.current) setSaveStatus("error");
+          if (mountedRef.current) {
+            setSaveStatus("error");
+            setSaveError(
+              error instanceof Error
+                ? error
+                : new Error("Your page changes could not be saved."),
+            );
+          }
           throw error;
         }
       }
@@ -115,6 +124,7 @@ export function useLetterPageAutosave({
       controllerRef.current?.abort();
       setPages(next);
       setSaveStatus("dirty");
+      setSaveError(undefined);
       if (timerRef.current) window.clearTimeout(timerRef.current);
       timerRef.current = window.setTimeout(() => {
         void flush().catch(() => undefined);
@@ -134,7 +144,7 @@ export function useLetterPageAutosave({
 
   const getPages = useCallback(() => pagesRef.current, []);
 
-  return { flush, getPages, pages, saveStatus, updatePages };
+  return { flush, getPages, pages, saveError, saveStatus, updatePages };
 }
 
 function normalizePages(letterExport: LetterExport) {

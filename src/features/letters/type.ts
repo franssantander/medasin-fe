@@ -55,6 +55,9 @@ export type LetterCover = {
   show_logo: boolean;
   text_alignment: LetterCoverTextAlignment;
   subheader: string;
+  subheader_font_scale: number;
+  title_font_scale: number;
+  body_font_scale: number;
   description_blocks: unknown[];
   author_name: string;
   date_label: string;

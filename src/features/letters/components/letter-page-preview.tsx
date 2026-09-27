@@ -25,6 +25,7 @@ import { imageFetchSource } from "@/lib/image/crop-image";
 import { cn } from "@/lib/utils";
 import {
   LETTER_COVER_HERO_ASPECT_RATIO,
+  letterCoverTextSize,
   normalizeLetterCover,
 } from "../letter-cover";
 import {
@@ -206,7 +207,13 @@ export const LetterPageCanvas = forwardRef<
                         "text-[5cqw] font-medium uppercase tracking-[0.18em]",
                         pageIsDark ? "text-zinc-300" : "text-zinc-500",
                       )}
-                      style={{ fontSize: letterPageTextSize(1.5, textScale) }}
+                      style={{
+                        fontSize: letterCoverTextSize(
+                          1.5,
+                          textScale,
+                          cover.subheader_font_scale,
+                        ),
+                      }}
                     >
                       {cover.subheader}
                     </p>
@@ -232,7 +239,13 @@ export const LetterPageCanvas = forwardRef<
                         "font-spectral leading-[0.98] tracking-[-0.03em]",
                         coverTextAlignmentClass,
                       )}
-                      style={{ fontSize: letterPageTextSize(5.8, textScale) }}
+                      style={{
+                        fontSize: letterCoverTextSize(
+                          5.8,
+                          textScale,
+                          cover.title_font_scale,
+                        ),
+                      }}
                       editable={editable}
                       maxLength={120}
                       placeholder="Untitled letter"
@@ -258,7 +271,11 @@ export const LetterPageCanvas = forwardRef<
                     )}
                     style={{
                       "--letter-cover-description-font-size":
-                        letterPageTextSize(1.8, textScale),
+                        letterCoverTextSize(
+                          1.8,
+                          textScale,
+                          cover.body_font_scale,
+                        ),
                     } as CSSProperties}
                   >
                     <NoteRichTextEditor

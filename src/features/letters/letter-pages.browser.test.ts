@@ -328,6 +328,17 @@ test("long cover text crops the image height without resizing the typography", a
 function normalize(pages: LetterPage[]): LetterPage[] {
   return pages.map((page, index) => ({ ...page, number: index + 1, kind: index === 0 ? "cover" : index === pages.length - 1 ? "final" : "body", signature: index === pages.length - 1 ? page.signature ?? { name: "Test Author", handle: "@author" } : null, truncated: false, continuation_label: null }));
 }
+
+async function setRangeValue(locator: Locator, percent: number) {
+  await locator.evaluate((node, value) => {
+    const input = node as HTMLInputElement;
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!
+      .set!.call(input, String(value));
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  }, percent);
+}
+
 function text(value: unknown): string {
   if (typeof value === "string") return value;
   if (Array.isArray(value)) return value.map(text).join("");
@@ -1508,6 +1519,103 @@ test("dark background applies to cover, body, rich text, logos, and thumbnails",
   expect(lightEditorColor).not.toBe(darkEditorColor);
 });
 
+test("cover font sizes adjust independently and persist in previews and downloads", async ({ page }) => {
+  const state = await fixture(page, document(2), "portrait", {
+    subtitle: "A short cover body.",
+  });
+  await page.getByRole("button", { name: "Preview pages" }).click();
+  await page.getByRole("button", { name: "Customize pages", exact: true }).click();
+
+  const dialog = page.getByRole("dialog", { name: "Prepare social pages" });
+  const cover = dialog.locator('main [data-page-layout="cover"]');
+  const fonts = async (canvas: Locator) =>
+    canvas.evaluate((element) => {
+      const size = (selector: string) => {
+        const target = element.querySelector(selector);
+        if (!target) throw new Error(`Missing cover text: ${selector}`);
+        return Number.parseFloat(getComputedStyle(target).fontSize);
+      };
+      return {
+        subheader: size('[data-cover-section="header"] p'),
+        title: size('[data-cover-section="title"] h2'),
+        body: size('.letter-cover-description .bn-editor'),
+      };
+    });
+  const initial = await fonts(cover);
+  const subheaderSize = dialog.getByRole("slider", { name: "Subheader size" });
+  const titleSize = dialog.getByRole("slider", { name: "Title size" });
+  const bodySize = dialog.getByRole("slider", { name: "Cover body text size" });
+  const overallSize = dialog.getByRole("slider", { name: "Overall text size" });
+  await expect(subheaderSize).toHaveValue("100");
+  await expect(titleSize).toHaveValue("100");
+  await expect(bodySize).toHaveValue("100");
+
+  await setRangeValue(subheaderSize, 130);
+  let changed = await fonts(cover);
+  expect(changed.subheader).toBeCloseTo(initial.subheader * 1.3, 1);
+  expect(changed.title).toBeCloseTo(initial.title, 1);
+  expect(changed.body).toBeCloseTo(initial.body, 1);
+
+  await setRangeValue(titleSize, 90);
+  await setRangeValue(bodySize, 120);
+  await setRangeValue(overallSize, 110);
+  await expect.poll(() => state.exported().pages?.[0].cover?.subheader_font_scale).toBe(1.3);
+  await expect.poll(() => state.exported().pages?.[0].cover?.title_font_scale).toBe(0.9);
+  await expect.poll(() => state.exported().pages?.[0].cover?.body_font_scale).toBe(1.2);
+  await expect(dialog.getByText("Saved", { exact: true })).toBeVisible();
+  changed = await fonts(cover);
+  expect(changed.subheader).toBeCloseTo(initial.subheader * 1.3 * 1.1, 1);
+  expect(changed.title).toBeCloseTo(initial.title * 0.9 * 1.1, 1);
+  expect(changed.body).toBeCloseTo(initial.body * 1.2 * 1.1, 1);
+
+  const downloadPromise = page.waitForEvent("download");
+  await dialog.getByRole("button", { name: "Current page" }).click();
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toMatch(/page-01\.png$/);
+  expect(await download.failure()).toBeNull();
+
+  await dialog.getByRole("button", { name: "Close", exact: true }).click();
+  const preview = page
+    .locator('[aria-label="Letter export preview"] [data-page-layout="cover"]')
+    .first();
+  const previewFonts = await fonts(preview);
+  expect(previewFonts.subheader).toBeCloseTo(changed.subheader, 1);
+  expect(previewFonts.title).toBeCloseTo(changed.title, 1);
+  expect(previewFonts.body).toBeCloseTo(changed.body, 1);
+
+  await page.getByRole("button", { name: "Customize pages", exact: true }).click();
+  await expect(subheaderSize).toHaveValue("130");
+  await expect(titleSize).toHaveValue("90");
+  await expect(bodySize).toHaveValue("120");
+  await expect(overallSize).toHaveValue("110");
+  await dialog.getByRole("button", { name: "Reset cover sizes" }).click();
+  await expect.poll(() => state.exported().pages?.[0].cover?.subheader_font_scale).toBe(1);
+  await expect.poll(() => state.exported().pages?.[0].cover?.title_font_scale).toBe(1);
+  await expect.poll(() => state.exported().pages?.[0].cover?.body_font_scale).toBe(1);
+  expect((await fonts(cover)).title).toBeCloseTo(initial.title * 1.1, 1);
+});
+
+test("an oversized cover shows a fit error and recovers after resizing", async ({ page }) => {
+  const state = await fixture(page, document(2));
+  await page.getByRole("button", { name: "Preview pages" }).click();
+  await page.getByRole("button", { name: "Customize pages", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Prepare social pages" });
+
+  await dialog.getByRole("textbox", { name: "Subheader" }).fill("W".repeat(80));
+  await setRangeValue(dialog.getByRole("slider", { name: "Subheader size" }), 140);
+  await expect(dialog.getByRole("alert")).toContainText(
+    "too large to fit",
+    { timeout: 60_000 },
+  );
+  await expect(dialog.getByRole("button", { name: "Current page" })).toBeDisabled();
+
+  await dialog.getByRole("textbox", { name: "Subheader" }).fill("A LETTER");
+  await expect(dialog.getByText("Saved", { exact: true })).toBeVisible({ timeout: 60_000 });
+  await expect(dialog.getByRole("alert")).toHaveCount(0);
+  await expect(dialog.getByRole("button", { name: "Current page" })).toBeEnabled();
+  expect(state.exported().pages?.[0].cover?.subheader_font_scale).toBe(1.4);
+});
+
 test("cover controls persist styling, metadata, and image removal", async ({ page }) => {
   const state = await fixture(page, document(2), "portrait", {
     initialHeroImageUrl: "http://localhost/storage/existing-cover.png",
@@ -1526,7 +1634,7 @@ test("cover controls persist styling, metadata, and image removal", async ({ pag
   await dialog.getByRole("textbox", { name: "Subheader" }).fill("CIPER DATASETS");
   await dialog.getByRole("textbox", { name: "Author name" }).fill("Ciper");
   await dialog
-    .getByRole("slider", { name: "Text size", exact: true })
+    .getByRole("slider", { name: "Overall text size", exact: true })
     .evaluate((node) => {
       const input = node as HTMLInputElement;
       Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!
@@ -1780,6 +1888,14 @@ for (const format of ["portrait", "square", "story", "landscape"] as const) {
     await page.getByRole("button", { name: "Customize pages", exact: true }).click();
 
     const dialog = page.getByRole("dialog", { name: "Prepare social pages" });
+    if (format === "story") {
+      const titleSize = dialog.getByRole("slider", { name: "Title size" });
+      await titleSize.scrollIntoViewIfNeeded();
+      await titleSize.focus();
+      await titleSize.press("ArrowRight");
+      await expect(titleSize).toHaveValue("105");
+      await expect.poll(() => state.exported().pages?.[0].cover?.title_font_scale).toBe(1.05);
+    }
     const longCaption = "A city view with layers of quiet detail and people finding their way through an ordinary afternoon. ".repeat(2).slice(0, 120);
     await dialog.getByRole("textbox", { name: "Cover image caption" }).fill(longCaption);
     await expect.poll(() => state.exported().pages?.[0].cover?.hero_image_caption, { timeout: 60_000 }).toBe(longCaption);

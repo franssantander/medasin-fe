@@ -1,4 +1,5 @@
 import { parseNoteDocument } from "@/components/ui/note-editor-document";
+import { normalizeLetterPageTextScale } from "./letter-page-text-scale";
 import type {
   Letter,
   LetterCover,
@@ -21,6 +22,10 @@ export const LETTER_COVER_SECTIONS: LetterCoverSection[] = [
 /** The fallback crop used by new and legacy cover images. */
 export const LETTER_COVER_HERO_ASPECT_RATIO = 16 / 9;
 export const LETTER_COVER_HERO_CAPTION_MAX_LENGTH = 120;
+export const LETTER_COVER_FONT_SCALE_DEFAULT = 1;
+export const LETTER_COVER_FONT_SCALE_MIN = 0.7;
+export const LETTER_COVER_FONT_SCALE_MAX = 1.4;
+export const LETTER_COVER_FONT_SCALE_STEP = 0.05;
 const LETTER_COVER_HERO_ASPECT_RATIO_MIN = 0.1;
 const LETTER_COVER_HERO_ASPECT_RATIO_MAX = 10;
 
@@ -38,6 +43,9 @@ export function createLetterCover(letter?: Letter): LetterCover {
     show_logo: true,
     text_alignment: "center",
     subheader: "A LETTER",
+    subheader_font_scale: LETTER_COVER_FONT_SCALE_DEFAULT,
+    title_font_scale: LETTER_COVER_FONT_SCALE_DEFAULT,
+    body_font_scale: LETTER_COVER_FONT_SCALE_DEFAULT,
     description_blocks: descriptionBlocks(letter?.subtitle),
     author_name: letter?.author?.name ?? "",
     date_label: formatLetterCoverDate(letter?.created_at),
@@ -85,6 +93,11 @@ export function normalizeLetterCover(
         : "center",
     subheader:
       typeof source.subheader === "string" ? source.subheader : "A LETTER",
+    subheader_font_scale: normalizeLetterCoverFontScale(
+      source.subheader_font_scale,
+    ),
+    title_font_scale: normalizeLetterCoverFontScale(source.title_font_scale),
+    body_font_scale: normalizeLetterCoverFontScale(source.body_font_scale),
     description_blocks: Array.isArray(source.description_blocks)
       ? source.description_blocks
       : descriptionBlocks(),
@@ -136,6 +149,35 @@ export function normalizeLetterCoverHeroAspectRatio(value: unknown): number {
     LETTER_COVER_HERO_ASPECT_RATIO_MAX,
     Math.max(LETTER_COVER_HERO_ASPECT_RATIO_MIN, value),
   );
+}
+
+export function normalizeLetterCoverFontScale(value: unknown): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return LETTER_COVER_FONT_SCALE_DEFAULT;
+  }
+
+  const clamped = Math.min(
+    LETTER_COVER_FONT_SCALE_MAX,
+    Math.max(LETTER_COVER_FONT_SCALE_MIN, value),
+  );
+  return Number(
+    (
+      Math.round(clamped / LETTER_COVER_FONT_SCALE_STEP) *
+      LETTER_COVER_FONT_SCALE_STEP
+    ).toFixed(2),
+  );
+}
+
+export function letterCoverTextSize(
+  baseCqw: number,
+  pageScale: unknown,
+  sectionScale: unknown,
+): string {
+  return `${(
+    baseCqw *
+    normalizeLetterPageTextScale(pageScale) *
+    normalizeLetterCoverFontScale(sectionScale)
+  ).toFixed(3)}cqw`;
 }
 
 export function normalizeLetterPageCover(

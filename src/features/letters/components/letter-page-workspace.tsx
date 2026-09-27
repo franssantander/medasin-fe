@@ -44,6 +44,13 @@ import {
 } from "react";
 import { Button } from "@/components/ui/button";
 import {
+  Field,
+  FieldGroup,
+  FieldLabel,
+  FieldLegend,
+  FieldSet,
+} from "@/components/ui/field";
+import {
   ImageCropDialog,
   type ImageCropAspectOption,
   type ImageCropMetadata,
@@ -90,11 +97,20 @@ import {
   LETTER_COVER_SECTION_LABELS,
   LETTER_COVER_HERO_ASPECT_RATIO,
   LETTER_COVER_HERO_CAPTION_MAX_LENGTH,
+  LETTER_COVER_FONT_SCALE_DEFAULT,
+  LETTER_COVER_FONT_SCALE_MAX,
+  LETTER_COVER_FONT_SCALE_MIN,
+  LETTER_COVER_FONT_SCALE_STEP,
   getLetterPageTheme,
+  normalizeLetterCoverFontScale,
   normalizeLetterCover,
   normalizeLetterCoverHeroAspectRatio,
 } from "../letter-cover";
-import { mapFlowSelection, type LetterPageFlowResult } from "../letter-page-flow";
+import {
+  LetterCoverOverflowError,
+  mapFlowSelection,
+  type LetterPageFlowResult,
+} from "../letter-page-flow";
 import { measureLetterPage } from "../letter-page-renderer";
 import { letterService } from "../services/letter-service";
 import {
@@ -233,7 +249,7 @@ export function LetterPageWorkspace({
     },
     [letterExport.canvas, letterExport.uuid],
   );
-  const { flush, getPages, pages, saveStatus, updatePages } = useLetterPageAutosave({
+  const { flush, getPages, pages, saveError, saveStatus, updatePages } = useLetterPageAutosave({
     letterExport,
     letterUuid,
     onSaved,
@@ -840,11 +856,11 @@ export function LetterPageWorkspace({
               <span className="text-xs text-muted-foreground" aria-live="polite">
                 {saveStatus === "arranging" ? "Arranging pages…" : saveStatus === "saving" ? "Saving…" : saveStatus === "dirty" ? "Unsaved changes" : saveStatus === "error" ? "Save failed" : saveStatus === "saved" ? "Saved" : null}
               </span>
-              <Button type="button" variant="outline" size="sm" disabled={downloading || closing} onClick={() => void download(false)}>
+              <Button type="button" variant="outline" size="sm" disabled={downloading || closing || saveError instanceof LetterCoverOverflowError} onClick={() => void download(false)}>
                 <Download data-icon="inline-start" />
                 Current page
               </Button>
-              <Button type="button" size="sm" disabled={downloading || closing} onClick={() => void download(true)}>
+              <Button type="button" size="sm" disabled={downloading || closing || saveError instanceof LetterCoverOverflowError} onClick={() => void download(true)}>
                 {downloading ? <LoaderCircle className="animate-spin" data-icon="inline-start" /> : <Download data-icon="inline-start" />}
                 {downloading ? `Exporting ${downloadProgress}/${pages.length}` : "Download all"}
               </Button>
@@ -945,7 +961,7 @@ export function LetterPageWorkspace({
                   className="flex items-center gap-2 text-sm font-medium"
                 >
                   <Type aria-hidden="true" />
-                  Text size
+                  {selectedPage.layout === "cover" ? "Overall text size" : "Text size"}
                 </label>
                 <output
                   htmlFor={`letter-page-text-scale-${selectedPage.uuid}`}
@@ -965,7 +981,7 @@ export function LetterPageWorkspace({
                 value={letterPageTextScalePercent(selectedTextScale)}
                 onChange={handleTextScaleChange}
                 className="h-11 w-full cursor-pointer accent-foreground"
-                aria-label="Text size"
+                aria-label={selectedPage.layout === "cover" ? "Overall text size" : "Text size"}
                 aria-valuetext={`${letterPageTextScalePercent(selectedTextScale)}%${selectedTextScaleMode === "auto" ? " automatic" : " manual"}`}
               />
                 <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
@@ -989,13 +1005,21 @@ export function LetterPageWorkspace({
                 <span>{LETTER_PAGE_TEXT_SCALE_MAX * 100}%</span>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                {selectedPage.layout === "body"
+                {selectedPage.layout === "cover"
+                  ? "Scales all cover text. The three cover font controls below adjust each main text section. Oversized covers shrink to fit."
+                  : selectedPage.layout === "body"
                   ? "Text flows between pages at the selected size. Reset restores the default size for this format."
                   : selectedTextScaleMode === "auto"
                   ? "Auto-fits this page to its canvas. Use the slider to override it."
                   : "Manual override for this page. Reset to let it auto-fit again."} Branding and signatures stay fixed.
                 </p>
               </div>
+            ) : null}
+
+            {selectedPage.layout === "cover" && saveError ? (
+              <p role="alert" className="text-sm text-destructive">
+                {saveError.message}
+              </p>
             ) : null}
 
             {selectedIsCoverContinuation ? (
@@ -1250,6 +1274,73 @@ function CoverControls({
           Applies to the cover subheader, title, and body text.
         </p>
       </div>
+
+      <FieldSet className="gap-3">
+        <FieldLegend variant="label" className="mb-0">
+          Cover font sizes
+        </FieldLegend>
+        <FieldGroup className="gap-3">
+          {([
+            ["subheader_font_scale", "Subheader size"],
+            ["title_font_scale", "Title size"],
+            ["body_font_scale", "Cover body text size"],
+          ] as const).map(([key, label]) => {
+            const id = `cover-${key}-${page.uuid}`;
+            const percent = Math.round(cover[key] * 100);
+
+            return (
+              <Field key={key} className="gap-1.5">
+                <div className="flex items-center justify-between gap-3">
+                  <FieldLabel htmlFor={id} className="text-sm font-medium">
+                    {label}
+                  </FieldLabel>
+                  <output htmlFor={id} className="text-sm tabular-nums text-muted-foreground">
+                    {percent}%
+                  </output>
+                </div>
+                <input
+                  id={id}
+                  type="range"
+                  min={LETTER_COVER_FONT_SCALE_MIN * 100}
+                  max={LETTER_COVER_FONT_SCALE_MAX * 100}
+                  step={LETTER_COVER_FONT_SCALE_STEP * 100}
+                  value={percent}
+                  onChange={(event) =>
+                    onCoverChange({
+                      [key]: normalizeLetterCoverFontScale(
+                        Number(event.target.value) / 100,
+                      ),
+                    })
+                  }
+                  className="h-11 w-full cursor-pointer accent-foreground"
+                  aria-valuetext={`${percent}%`}
+                />
+              </Field>
+            );
+          })}
+        </FieldGroup>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="self-start"
+          disabled={
+            cover.subheader_font_scale === LETTER_COVER_FONT_SCALE_DEFAULT &&
+            cover.title_font_scale === LETTER_COVER_FONT_SCALE_DEFAULT &&
+            cover.body_font_scale === LETTER_COVER_FONT_SCALE_DEFAULT
+          }
+          onClick={() =>
+            onCoverChange({
+              subheader_font_scale: LETTER_COVER_FONT_SCALE_DEFAULT,
+              title_font_scale: LETTER_COVER_FONT_SCALE_DEFAULT,
+              body_font_scale: LETTER_COVER_FONT_SCALE_DEFAULT,
+            })
+          }
+        >
+          <RotateCcw data-icon="inline-start" />
+          Reset cover sizes
+        </Button>
+      </FieldSet>
 
       <label className="flex flex-col gap-1.5 text-sm font-medium">
         Subheader

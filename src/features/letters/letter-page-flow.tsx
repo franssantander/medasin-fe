@@ -31,6 +31,13 @@ export type LetterPageFlowResult = {
 const splittable = new Set(["paragraph", "heading", "quote", "bulletListItem", "numberedListItem", "checkListItem"]);
 const fragmentSeparator = "::letter-part::";
 
+export class LetterCoverOverflowError extends Error {
+  constructor() {
+    super("The cover text or image is too large to fit. Reduce a cover font size, shorten the subheader or title, or remove the image before downloading.");
+    this.name = "LetterCoverOverflowError";
+  }
+}
+
 export async function prepareLetterPages(letter: Letter, format: LetterExportFormat): Promise<LetterExportPageInput[]> {
   const canvas = LETTER_EXPORT_FORMATS[format];
   const body = bodyPage(canvas);
@@ -139,6 +146,10 @@ async function paginateCoverEntry(
   ) as Block[];
   assignBlockIds(completeEntry);
   const remaining = completeEntry.slice();
+  const requestedMode = normalizeLetterPageTextScaleMode(
+    sourceCover.text_scale_mode,
+    sourceCover.text_scale,
+  );
   let cover = {
     ...sourceCover,
     cover: sourceCover.cover
@@ -148,9 +159,11 @@ async function paginateCoverEntry(
     blocks: [] as Block[],
     text_scale: Math.max(
       LETTER_PAGE_TEXT_SCALE_MIN,
-      getLetterPageCanvasBaseline(canvas),
+      requestedMode === "manual"
+        ? normalizeLetterPageTextScale(sourceCover.text_scale)
+        : getLetterPageCanvasBaseline(canvas),
     ),
-    text_scale_mode: "auto" as const,
+    text_scale_mode: requestedMode,
   };
 
   // Fit the title, image and fixed footer before placing body copy. Additional
@@ -169,7 +182,12 @@ async function paginateCoverEntry(
           cover.text_scale - LETTER_PAGE_TEXT_SCALE_STEP,
         ),
       ),
+      text_scale_mode: "auto" as const,
     };
+  }
+
+  if (!(await fits(cover))) {
+    throw new LetterCoverOverflowError();
   }
 
   while (remaining.length) {
