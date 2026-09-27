@@ -59,6 +59,20 @@ export function createLetterCover(letter?: Letter): LetterCover {
   };
 }
 
+export function carryLetterCover(
+  letter: Letter,
+  previousPage?: LetterPage | null,
+): LetterCover {
+  const defaults = createLetterCover(letter);
+  if (!previousPage?.cover) return defaults;
+
+  const cover = normalizeLetterCover(previousPage.cover, defaults);
+  // Page edits also update the letter subtitle; only editor changes replace the cover body.
+  return previousPage.subtitle === letter.subtitle
+    ? cover
+    : { ...cover, description_blocks: defaults.description_blocks };
+}
+
 export function normalizeLetterCover(
   cover?: Partial<LetterCover> | null,
   fallback?: Partial<LetterCover>,

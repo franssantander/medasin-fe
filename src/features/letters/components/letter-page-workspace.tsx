@@ -370,17 +370,16 @@ export function LetterPageWorkspace({
     closingRef.current = true;
     setClosing(true);
     commitActiveEditor();
-    const pendingSave = flush();
-    onOpenChange(false);
     try {
-      await pendingSave;
+      await flush();
+      onOpenChange(false);
     } catch (error) {
       toast.add({
         type: "error",
         description:
           error instanceof Error
             ? error.message
-            : "Your page edits could not be saved. Reopen the workspace and try again.",
+            : "Your page edits could not be saved. Try again before closing.",
       });
     } finally {
       closingRef.current = false;

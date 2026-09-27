@@ -28,6 +28,8 @@ async function fixture(
     author: { name: "Test Author", handle: "@author" }, latest_export: null,
   };
   let exported: LetterExport | null = null;
+  let exportCount = 0;
+  const exports = new Map<string, LetterExport>();
   const updates: LetterPage[][] = [];
   let mediaUploads = 0;
   await page.route(/\/storage\/(?:existing-cover|uploaded-cover-\d+)\.png$/, async (route) => {
@@ -42,14 +44,19 @@ async function fixture(
     else if (path === "/letters" && method === "GET") data = { current_page: 1, data: [letter], last_page: 1, per_page: 15, total: 1 };
     else if (path === "/letters/letter-test") {
       if (method === "PATCH") {
+        const previousTitle = letter.title;
+        const previousSubtitle = letter.subtitle;
         const previousContent = letter.content;
         letter = { ...letter, ...route.request().postDataJSON() };
         if (
           metadata?.invalidateExportOnLetterUpdate &&
           exported &&
-          previousContent !== letter.content
+          (previousTitle !== letter.title ||
+            previousSubtitle !== letter.subtitle ||
+            previousContent !== letter.content)
         ) {
           exported = { ...exported, is_current: false };
+          exports.set(exported.uuid, exported);
           letter = { ...letter, latest_export: exported };
         }
       }
@@ -58,7 +65,7 @@ async function fixture(
       const input = route.request().postDataJSON();
       const canvas = LETTER_EXPORT_FORMATS[input.format as LetterExportFormat];
       const pages = normalize(input.pages);
-      if (metadata?.initialCoverDescriptionBlocks && pages[0]?.cover) {
+      if (exportCount === 0 && metadata?.initialCoverDescriptionBlocks && pages[0]?.cover) {
         pages[0] = {
           ...pages[0],
           cover: {
@@ -67,7 +74,7 @@ async function fixture(
           },
         };
       }
-      if (metadata?.initialHeroImageUrl && pages[0]?.cover) {
+      if (exportCount === 0 && metadata?.initialHeroImageUrl && pages[0]?.cover) {
         pages[0] = {
           ...pages[0],
           cover: {
@@ -78,11 +85,12 @@ async function fixture(
           },
         };
       }
-      if (metadata?.legacyCaptionPlacement && pages[0]?.cover) {
+      if (exportCount === 0 && metadata?.legacyCaptionPlacement && pages[0]?.cover) {
         pages[0].cover.hero_image_caption = "An older image caption";
         Reflect.deleteProperty(pages[0].cover, "hero_image_caption_placement");
       }
-      exported = { uuid: "export-test", letter_uuid: letter.uuid, format: input.format, canvas, status: "ready", is_current: true, pages, page_count: pages.length, error: null, created_at: null, updated_at: null, started_at: null, completed_at: null };
+      exported = { uuid: `export-test-${++exportCount}`, letter_uuid: letter.uuid, format: input.format, canvas, status: "ready", is_current: true, pages, page_count: pages.length, error: null, created_at: null, updated_at: null, started_at: null, completed_at: null };
+      exports.set(exported.uuid, exported);
       letter = { ...letter, latest_export: exported };
       data = exported;
     } else if (path === "/letters/letter-test/media" && method === "POST") {
@@ -99,7 +107,13 @@ async function fixture(
         return;
       }
       data = { url: `/storage/uploaded-cover-${mediaUploads}.png` };
-    } else if (path === "/letters/letter-test/exports/export-test") {
+    } else if (path.startsWith("/letters/letter-test/exports/")) {
+      const exportUuid = path.split("/").at(-1)!;
+      const requestedExport = exports.get(exportUuid);
+      if (!requestedExport) {
+        await route.fulfill({ status: 404, json: { message: "Export not found" } });
+        return;
+      }
       if (method === "PATCH") {
         if (metadata?.updateDelayMs) {
           await new Promise((resolve) =>
@@ -108,10 +122,11 @@ async function fixture(
         }
         const input = route.request().postDataJSON();
         updates.push(input.pages);
-        exported = { ...exported!, pages: normalize(input.pages), page_count: input.pages.length };
+        exported = { ...requestedExport, pages: normalize(input.pages), page_count: input.pages.length };
+        exports.set(exportUuid, exported);
         letter = { ...letter, title: input.pages[0].title, subtitle: input.pages[0].subtitle, content: JSON.stringify({ version: 1, blocks: input.pages.slice(1).flatMap((p: LetterPage) => p.blocks) }), latest_export: exported };
         data = { export: exported, letter };
-      } else data = exported;
+      } else data = requestedExport;
     } else data = [];
     await route.fulfill({ json: { data, status: 200, message: "Saved" } });
   });
@@ -125,6 +140,7 @@ async function fixture(
   return {
     letter: () => letter,
     exported: () => exported!,
+    exportsCreated: () => exportCount,
     mediaUploads: () => mediaUploads,
     updates,
   };
@@ -1847,6 +1863,108 @@ test("cover image replacement retains the caption, placement, and alignment", as
   expect(state.exported().pages?.[0].cover?.hero_image_caption_placement).toBe("overlay");
   await expect(captionInput).toBeHidden();
   await expect(dialog.locator('main [data-cover-section="hero"]')).toHaveCount(0);
+});
+
+test("saved cover edits carry across formats and a letter reload", async ({ page }) => {
+  const state = await fixture(page, document(2), "portrait", {
+    subtitle: "A short cover body.",
+    initialCoverDescriptionBlocks: [{
+      id: "cover-paragraph",
+      type: "paragraph",
+      content: [
+        { type: "text", text: "A short", styles: { bold: true } },
+        { type: "text", text: " cover body.", styles: {} },
+      ],
+    }],
+    updateDelayMs: 500,
+  });
+  await page.getByRole("button", { name: "Preview pages" }).click();
+  await page.getByRole("button", { name: "Customize pages", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Prepare social pages" });
+
+  await dialog.getByRole("combobox", { name: "Background" }).click();
+  await page.getByRole("option", { name: "Dark", exact: true }).click();
+  await dialog.getByRole("textbox", { name: "Subheader" }).fill("SAVED COVER");
+  await setRangeValue(dialog.getByRole("slider", { name: "Subheader size" }), 90);
+  await setRangeValue(dialog.getByRole("slider", { name: "Title size" }), 95);
+  await setRangeValue(dialog.getByRole("slider", { name: "Cover body text size" }), 90);
+
+  const heroControl = dialog.getByText("Landscape cover image", { exact: true }).locator("..");
+  const cropDialog = await chooseCoverImage(page, heroControl, "saved-cover.png");
+  await cropDialog.getByRole("button", { name: "4:5" }).click();
+  await cropDialog.getByRole("button", { name: "Apply crop" }).click();
+  await expect(cropDialog).toBeHidden();
+  await dialog.getByRole("textbox", { name: "Cover image caption" }).fill("Saved caption");
+  await dialog.getByRole("group", { name: "Caption placement" })
+    .getByRole("button", { name: "Below image" }).click();
+
+  await dialog.getByRole("button", { name: "Close", exact: true }).click();
+  await expect(dialog).toBeHidden({ timeout: 60_000 });
+  const savedCover = structuredClone(state.exported().pages?.[0].cover);
+  expect(savedCover?.hero_image_url).toBe("/storage/uploaded-cover-1.png");
+  expect(JSON.stringify(savedCover?.description_blocks)).toContain('"bold":true');
+
+  const preview = page.getByRole("dialog", { name: "Preview letter pages" });
+  await preview.getByRole("combobox", { name: "Export format" }).click();
+  await page.getByRole("option", { name: /IG square/ }).click();
+  await expect.poll(() => state.exported().format, { timeout: 60_000 }).toBe("square");
+  expect(state.exportsCreated()).toBe(2);
+  expect(state.exported().pages?.[0].cover).toEqual(savedCover);
+  expect(state.mediaUploads()).toBe(1);
+
+  await preview.getByRole("button", { name: "Close", exact: true }).click();
+  await page.reload();
+  await page.getByRole("button", { name: "Preview pages" }).click();
+  await preview.getByRole("combobox", { name: "Export format" }).click();
+  await page.getByRole("option", { name: /IG story/ }).click();
+  await expect.poll(() => state.exported().format, { timeout: 60_000 }).toBe("story");
+  expect(state.exportsCreated()).toBe(3);
+  expect(state.exported().pages?.[0].cover).toEqual(savedCover);
+  expect(state.mediaUploads()).toBe(1);
+});
+
+test("new letter text replaces cover text while image and styling persist", async ({ page }) => {
+  const state = await fixture(page, document(2), "portrait", {
+    subtitle: "Original description",
+    invalidateExportOnLetterUpdate: true,
+  });
+  await page.getByRole("button", { name: "Preview pages" }).click();
+  await page.getByRole("button", { name: "Customize pages", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Prepare social pages" });
+  await dialog.getByRole("textbox", { name: "Subheader" }).fill("LETTER DESIGN");
+  const heroControl = dialog.getByText("Landscape cover image", { exact: true }).locator("..");
+  const cropDialog = await chooseCoverImage(page, heroControl, "letter-cover.png");
+  await cropDialog.getByRole("button", { name: "Apply crop" }).click();
+  await expect(cropDialog).toBeHidden();
+  await dialog.getByRole("button", { name: "Close", exact: true }).click();
+  await expect(dialog).toBeHidden({ timeout: 60_000 });
+  await page.getByRole("dialog", { name: "Preview letter pages" })
+    .getByRole("button", { name: "Close", exact: true }).click();
+
+  await page.getByRole("textbox", { name: "Letter title" }).fill("Updated letter title");
+  await page.getByRole("textbox", { name: "Letter subtitle" }).fill("Updated description");
+  await page.getByRole("button", { name: "Preview pages" }).click();
+  await expect.poll(() => state.exportsCreated(), { timeout: 60_000 }).toBe(2);
+  const updatedCoverPage = state.exported().pages?.[0];
+  expect(updatedCoverPage?.title).toBe("Updated letter title");
+  expect(text(updatedCoverPage?.cover?.description_blocks)).toBe("Updated description");
+  expect(updatedCoverPage?.cover?.hero_image_url).toBe("/storage/uploaded-cover-1.png");
+  expect(updatedCoverPage?.cover?.subheader).toBe("LETTER DESIGN");
+
+  await page.getByRole("button", { name: "Customize pages", exact: true }).click();
+  await heroControl.getByRole("button", { name: "Remove", exact: true }).click();
+  await dialog.getByRole("button", { name: "Close", exact: true }).click();
+  await expect(dialog).toBeHidden({ timeout: 60_000 });
+  await page.getByRole("dialog", { name: "Preview letter pages" })
+    .getByRole("button", { name: "Close", exact: true }).click();
+
+  await page.getByRole("textbox", { name: "Letter title" }).fill("Newest letter title");
+  await page.getByRole("button", { name: "Preview pages" }).click();
+  await expect.poll(() => state.exportsCreated(), { timeout: 60_000 }).toBe(3);
+  expect(state.exported().pages?.[0].title).toBe("Newest letter title");
+  expect(state.exported().pages?.[0].cover?.hero_image_url).toBeNull();
+  expect(state.exported().pages?.[0].cover?.subheader).toBe("LETTER DESIGN");
+  expect(state.mediaUploads()).toBe(1);
 });
 
 test("legacy image captions stay on the image", async ({ page }) => {

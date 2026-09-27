@@ -2,7 +2,7 @@ import { parseNoteDocument } from "@/components/ui/note-editor-document";
 import type { NoteEditorSelection } from "@/components/ui/note-rich-text-editor-client";
 import { LETTER_EXPORT_FORMATS } from "./letter-export-formats";
 import {
-  createLetterCover,
+  carryLetterCover,
   getLetterPageTheme,
   normalizeLetterPageCover,
 } from "./letter-cover";
@@ -38,12 +38,28 @@ export class LetterCoverOverflowError extends Error {
   }
 }
 
-export async function prepareLetterPages(letter: Letter, format: LetterExportFormat): Promise<LetterExportPageInput[]> {
+export async function prepareLetterPages(
+  letter: Letter,
+  format: LetterExportFormat,
+  previousCoverPage?: LetterPage | null,
+): Promise<LetterExportPageInput[]> {
   const canvas = LETTER_EXPORT_FORMATS[format];
   const body = bodyPage(canvas);
   body.blocks = parseNoteDocument(letter.content).blocks;
   body.signature = letter.author;
-  const cover: LetterPage = { ...bodyPage(canvas), number: 1, kind: "cover", layout: "cover", title: letter.title, subtitle: letter.subtitle, cover: createLetterCover(letter) };
+  const cover: LetterPage = {
+    ...bodyPage(canvas),
+    number: 1,
+    kind: "cover",
+    layout: "cover",
+    title: letter.title,
+    subtitle: letter.subtitle,
+    cover: carryLetterCover(letter, previousCoverPage),
+    ...(previousCoverPage && {
+      text_scale: previousCoverPage.text_scale,
+      text_scale_mode: previousCoverPage.text_scale_mode,
+    }),
+  };
   const result = await flowLetterPages([cover, body], canvas, `prepare-${letter.uuid}`);
   return result.pages.map(({ uuid, layout, text_scale, text_scale_mode, title, subtitle, cover, content_source, blocks }) =>
     ({ uuid, layout, text_scale, text_scale_mode, title, subtitle, cover, content_source, blocks }));

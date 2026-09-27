@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Redo2, Undo2 } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -20,9 +21,9 @@ import type {
 } from "@/components/ui/note-rich-text-editor-client";
 import { EMPTY_NOTE_DOCUMENT, getNoteDocumentPreview } from "@/components/ui/note-editor-document";
 import { parseApiError } from "@/lib/axios";
-import { useCreateLetterExportMutation } from "../queries/letter-query";
+import { letterKeys, useCreateLetterExportMutation } from "../queries/letter-query";
 import { useLetterAutosave } from "../hooks/use-letter-autosave";
-import type { Letter, LetterExportFormat } from "../type";
+import type { Letter, LetterApiResponse, LetterExportFormat } from "../type";
 import { letterService } from "../services/letter-service";
 import { LetterExportPanel } from "./letter-export-panel";
 
@@ -49,6 +50,7 @@ export function LetterEditor({
   ) => void;
   onRegisterPreviewOpen: (open?: () => void) => void;
 }) {
+  const queryClient = useQueryClient();
   const [historyState, setHistoryState] = useState<NoteEditorHistoryState>({
     canUndo: false,
     canRedo: false,
@@ -118,13 +120,26 @@ export function LetterEditor({
       throw new Error("Save the letter before preparing its pages.");
     }
 
-    const currentLetter = savedLetter ?? letter;
+    const cachedLetter = queryClient.getQueryData<LetterApiResponse<Letter>>(
+      letterKeys.detail(uuid),
+    )?.data;
+    const currentLetter = savedLetter ?? cachedLetter ?? letter;
     if (!currentLetter) {
       throw new Error("The saved letter could not be loaded for pagination.");
     }
 
+    const previousExport = cachedLetter
+      ? cachedLetter.latest_export
+      : currentLetter.latest_export;
+    const previousCoverPage = previousExport?.pages?.find(
+      (page) => page.layout === "cover",
+    );
     const { prepareLetterPages } = await import("../letter-page-flow");
-    const pages = await prepareLetterPages(currentLetter, format);
+    const pages = await prepareLetterPages(
+      currentLetter,
+      format,
+      previousCoverPage,
+    );
     const response = await exportMutation.mutateAsync({
       letterUuid: uuid,
       format,
