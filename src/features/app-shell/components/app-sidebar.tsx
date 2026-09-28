@@ -13,13 +13,13 @@ import {
 } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import {
-  dashboardHomeItem,
-  dashboardNavigationGroups,
-  dashboardNavigationItems,
-  isActiveDashboardRoute,
-} from "./dashboard-navigation";
+  homeNavigationItem,
+  appNavigationGroups,
+  appNavigationItems,
+  isActiveAppRoute,
+} from "./app-navigation";
 
-type DashboardSidebarProps = {
+type AppSidebarProps = {
   pathname: string;
   isCollapsed: boolean;
   onToggle: () => void;
@@ -31,7 +31,7 @@ function Brand() {
   return (
     <Link
       href="/home"
-      aria-label="Medasin dashboard"
+      aria-label="Medasin home"
       className="flex h-10 min-w-0 items-center gap-1 overflow-hidden rounded-md outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
     >
       <Image
@@ -49,7 +49,7 @@ function Brand() {
   );
 }
 
-function DashboardNavigation({
+function AppNavigation({
   pathname,
   collapsed = false,
   onNavigate,
@@ -59,9 +59,9 @@ function DashboardNavigation({
   onNavigate?: () => void;
 }) {
   const renderNavigationItem = (
-    item: (typeof dashboardNavigationItems)[number],
+    item: (typeof appNavigationItems)[number],
   ) => {
-    const active = isActiveDashboardRoute(pathname, item.href);
+    const active = isActiveAppRoute(pathname, item.href);
     const Icon = item.icon;
 
     return (
@@ -88,10 +88,10 @@ function DashboardNavigation({
   };
 
   return (
-    <nav aria-label="Dashboard navigation" className="flex flex-col">
-      {renderNavigationItem(dashboardHomeItem)}
+    <nav aria-label="Main navigation" className="flex flex-col">
+      {renderNavigationItem(homeNavigationItem)}
 
-      {dashboardNavigationGroups.map((group) => (
+      {appNavigationGroups.map((group) => (
         <div key={group.label} className="mt-4 flex flex-col gap-1.5 pt-3">
           {!collapsed && (
             <p className="px-2.5 text-xs font-semibold uppercase tracking-wider text-sidebar-foreground/40">
@@ -105,13 +105,13 @@ function DashboardNavigation({
   );
 }
 
-export function DashboardSidebar({
+export function AppSidebar({
   pathname,
   isCollapsed,
   onToggle,
   isMobileOpen,
   onMobileOpenChange,
-}: DashboardSidebarProps) {
+}: AppSidebarProps) {
   return (
     <>
       <aside
@@ -144,21 +144,21 @@ export function DashboardSidebar({
           </Button>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto px-3 py-4">
-          <DashboardNavigation pathname={pathname} collapsed={isCollapsed} />
+          <AppNavigation pathname={pathname} collapsed={isCollapsed} />
         </div>
       </aside>
 
       <Sheet open={isMobileOpen} onOpenChange={onMobileOpenChange}>
         <SheetContent side="left" className="w-72 gap-0 p-0" showCloseButton>
-          <SheetTitle className="sr-only">Dashboard navigation</SheetTitle>
+          <SheetTitle className="sr-only">Main navigation</SheetTitle>
           <SheetDescription className="sr-only">
-            Navigate between dashboard sections.
+            Navigate between app sections.
           </SheetDescription>
           <div className="flex h-14 items-center border-b border-sidebar-border px-4">
             <Brand />
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto p-3">
-            <DashboardNavigation
+            <AppNavigation
               pathname={pathname}
               onNavigate={() => onMobileOpenChange(false)}
             />

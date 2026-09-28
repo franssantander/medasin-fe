@@ -5,7 +5,7 @@ import {
   CalendarCheck,
   CirclePile,
   Feather,
-  LayoutDashboard,
+  House,
   KanbanSquare,
   NotebookPen,
   StarCheck,
@@ -14,21 +14,21 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
-export type DashboardNavigationItem = {
+export type AppNavigationItem = {
   label: string;
   href: string;
   icon: LucideIcon;
 };
 
-export const dashboardHomeItem: DashboardNavigationItem = {
-  label: "Dashboard",
+export const homeNavigationItem: AppNavigationItem = {
+  label: "Home",
   href: "/home",
-  icon: LayoutDashboard,
+  icon: House,
 };
 
-export const dashboardNavigationGroups: {
+export const appNavigationGroups: {
   label: string;
-  items: DashboardNavigationItem[];
+  items: AppNavigationItem[];
 }[] = [
   {
     label: "Organize",
@@ -53,19 +53,12 @@ export const dashboardNavigationGroups: {
   },
 ];
 
-export const dashboardNavigationItems: DashboardNavigationItem[] = [
-  dashboardHomeItem,
-  ...dashboardNavigationGroups.flatMap((group) => group.items),
+export const appNavigationItems: AppNavigationItem[] = [
+  homeNavigationItem,
+  ...appNavigationGroups.flatMap((group) => group.items),
 ];
 
-export function isActiveDashboardRoute(pathname: string, href: string) {
+export function isActiveAppRoute(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-export function getDashboardTitle(pathname: string) {
-  return (
-    dashboardNavigationItems.find((item) =>
-      isActiveDashboardRoute(pathname, item.href),
-    )?.label ?? "Dashboard"
-  );
-}

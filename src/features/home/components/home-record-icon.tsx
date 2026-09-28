@@ -21,7 +21,7 @@ function AreaFallbackIcon() {
   return <Leaf className="size-5" aria-hidden="true" />;
 }
 
-export function DashboardRecordIcon({
+export function HomeRecordIcon({
   kind,
   name,
 }: {

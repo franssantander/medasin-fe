@@ -1,11 +1,11 @@
-export type DashboardStats = {
+export type HomeStats = {
   active_projects: number;
   areas: number;
   resources_saved: number;
   habit_streak: number;
 };
 
-export type DashboardProject = {
+export type HomeProject = {
   uuid: string;
   name: string;
   icon: string | null;
@@ -16,7 +16,7 @@ export type DashboardProject = {
   last_activity_at: string;
 };
 
-export type DashboardArea = {
+export type HomeArea = {
   uuid: string;
   name: string;
   icon: string | null;
@@ -25,7 +25,7 @@ export type DashboardArea = {
   projects_count: number;
 };
 
-export type DashboardRecentResource = {
+export type HomeRecentResource = {
   item_key: string;
   type: "note" | "link" | "file" | "image";
   title: string;
@@ -33,21 +33,21 @@ export type DashboardRecentResource = {
   occurred_at: string;
 };
 
-export type DashboardArchives = {
+export type HomeArchives = {
   projects: number;
   areas: number;
   resources: number;
 };
 
-export type DashboardData = {
-  stats: DashboardStats;
-  projects: DashboardProject[];
-  areas: DashboardArea[];
-  recent_resources: DashboardRecentResource[];
-  archives: DashboardArchives;
+export type HomeData = {
+  stats: HomeStats;
+  projects: HomeProject[];
+  areas: HomeArea[];
+  recent_resources: HomeRecentResource[];
+  archives: HomeArchives;
 };
 
-export type DashboardApiResponse<T = DashboardData> = {
+export type HomeApiResponse<T = HomeData> = {
   data: T;
   status: number;
   message: string;

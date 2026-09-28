@@ -3,17 +3,20 @@
 import {
   ArrowRight,
   ArrowUpRight,
+  BookHeart,
   BookOpen,
-  CalendarDays,
+  CalendarCheck,
+  CirclePile,
   Feather,
   File,
+  Flame,
   ImageIcon,
   KanbanSquare,
   Link2,
-  Mail,
   NotebookPen,
   RefreshCw,
-  Repeat2,
+  StarCheck,
+  Target,
   Timer,
   type LucideIcon,
 } from "lucide-react";
@@ -33,16 +36,16 @@ import {
 } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
-import { DashboardRecordIcon } from "@/features/home/components/dashboard-record-icon";
-import { useDashboardQuery } from "@/features/home/queries/dashboard-query";
+import { HomeRecordIcon } from "@/features/home/components/home-record-icon";
+import { useHomeQuery } from "@/features/home/queries/home-query";
 import { cn } from "@/lib/utils";
 import type {
-  DashboardArchives,
-  DashboardArea,
-  DashboardData,
-  DashboardProject,
-  DashboardRecentResource,
-  DashboardStats,
+  HomeArchives,
+  HomeArea,
+  HomeData,
+  HomeProject,
+  HomeRecentResource,
+  HomeStats,
 } from "@/features/home/type";
 
 const subscribeTimezone = () => () => {};
@@ -50,7 +53,7 @@ const serverTimezone = () => null;
 const browserTimezone = () =>
   Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
 
-const resourceIcons: Record<DashboardRecentResource["type"], LucideIcon> = {
+const resourceIcons: Record<HomeRecentResource["type"], LucideIcon> = {
   note: BookOpen,
   link: Link2,
   file: File,
@@ -60,11 +63,11 @@ const resourceIcons: Record<DashboardRecentResource["type"], LucideIcon> = {
 const utilities = [
   { label: "Board", href: "/board", icon: KanbanSquare },
   { label: "Focus", href: "/focus", icon: Timer },
-  { label: "Habits", href: "/habits", icon: Repeat2 },
+  { label: "Habits", href: "/habits", icon: StarCheck },
   { label: "Notes", href: "/notes", icon: NotebookPen },
-  { label: "Journal", href: "/journal", icon: Feather },
-  { label: "Letters", href: "/letters", icon: Mail },
-  { label: "Plans", href: "/plans", icon: CalendarDays },
+  { label: "Journal", href: "/journal", icon: BookHeart },
+  { label: "Letters", href: "/letters", icon: Feather },
+  { label: "Plans", href: "/plans", icon: CalendarCheck },
 ] as const;
 
 function SectionHeading({
@@ -77,7 +80,7 @@ function SectionHeading({
   href?: string;
 }) {
   return (
-    <div className="flex items-center justify-between gap-3 pb-0.5">
+    <div className="flex items-center justify-between gap-3 pb-1">
       <h2 id={id} className="text-base font-semibold tracking-tight">{title}</h2>
       {href && (
         <Link
@@ -96,47 +99,57 @@ function SectionHeading({
   );
 }
 
-function StatStrip({ stats }: { stats: DashboardStats }) {
+function StatStrip({ stats }: { stats: HomeStats }) {
   const items = [
-    { label: "Active projects", value: stats.active_projects },
-    { label: "Areas", value: stats.areas },
-    { label: "Resources saved", value: stats.resources_saved },
-    { label: "Habit streak", value: stats.habit_streak },
+    { label: "Active projects", value: stats.active_projects, icon: Target },
+    { label: "Areas", value: stats.areas, icon: CirclePile },
+    { label: "Resources saved", value: stats.resources_saved, icon: BookOpen },
+    { label: "Habit streak", value: stats.habit_streak, icon: Flame },
   ];
   return (
     <section aria-label="Overview" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-      {items.map((item) => (
-        <Card key={item.label} size="sm" className="gap-0">
-          <CardHeader className="gap-1">
-            <CardDescription className="text-[11px]">{item.label}</CardDescription>
-            <p className="text-[22px] leading-7 font-medium tabular-nums">
-              {item.value}
-            </p>
-          </CardHeader>
-        </Card>
-      ))}
+      {items.map((item) => {
+        const Icon = item.icon;
+        return (
+          <Card key={item.label} size="sm" className="min-h-30 gap-0 py-0">
+            <CardHeader className="grid flex-1 grid-rows-[auto_1fr] gap-3 py-4">
+              <div className="flex min-w-0 items-start justify-between gap-2">
+                <CardDescription className="min-w-0 pt-1 text-xs font-medium leading-4">
+                  {item.label}
+                </CardDescription>
+                <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted text-foreground ring-1 ring-foreground/5">
+                  <Icon className="size-4.5" aria-hidden="true" />
+                </span>
+              </div>
+              <p className="self-end text-3xl leading-none font-semibold tracking-tight tabular-nums">
+                {item.value}
+              </p>
+            </CardHeader>
+          </Card>
+        );
+      })}
     </section>
   );
 }
 
-function ProjectPreview({ project }: { project: DashboardProject }) {
+function ProjectPreview({ project }: { project: HomeProject }) {
   const percentage = project.progress_percentage;
   const hasTasks = project.total_tasks > 0 && percentage !== null;
   return (
     <Card
       size="sm"
-      className="group/preview relative min-h-40 min-w-0 gap-0 overflow-visible py-0 transition-[box-shadow,transform] duration-200 hover:-translate-y-0.5 hover:shadow-md motion-reduce:transform-none"
+      className="group/preview relative min-h-44 min-w-0 gap-0 overflow-visible py-0 transition-[box-shadow,transform] duration-200 hover:-translate-y-0.5 hover:shadow-md motion-reduce:transform-none"
     >
       <Link
         href={`/projects/${project.uuid}`}
         aria-label={`Open project ${project.name}`}
         className="absolute inset-0 z-10 rounded-xl focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
       />
-      <CardHeader className="pointer-events-none min-w-0 gap-3 py-4">
+      <CardHeader className="pointer-events-none min-w-0 gap-4 py-4">
         <div className="flex min-w-0 items-start gap-3">
-          <DashboardRecordIcon kind="project" name={project.icon} />
+          <HomeRecordIcon kind="project" name={project.icon} />
           <h3
-            className="min-w-0 flex-1 truncate pt-0.5 text-sm leading-5 font-semibold"
+            className="min-w-0 flex-1 truncate pt-0.5 text-[15px] leading-5 font-semibold"
             title={project.name}
           >
             {project.name}
@@ -165,7 +178,7 @@ function ProjectPreview({ project }: { project: DashboardProject }) {
           </Badge>
         )}
       </CardHeader>
-      <CardContent className="pointer-events-none mt-auto min-h-16 gap-2 border-t border-border/70 py-3">
+      <CardContent className="pointer-events-none mt-auto min-h-18 gap-2.5 border-t border-border/70 bg-muted/20 py-3">
         {hasTasks ? (
           <>
             <div className="flex items-center justify-between gap-2 text-xs">
@@ -190,10 +203,10 @@ function ProjectPreview({ project }: { project: DashboardProject }) {
   );
 }
 
-function ProjectsSection({ projects }: { projects: DashboardProject[] }) {
+function ProjectsSection({ projects }: { projects: HomeProject[] }) {
   return (
-    <section aria-labelledby="dashboard-projects" className="grid gap-2">
-      <SectionHeading id="dashboard-projects" title="Projects" href="/projects" />
+    <section aria-labelledby="home-projects" className="grid gap-3">
+      <SectionHeading id="home-projects" title="Projects" href="/projects" />
       {projects.length ? (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {projects.slice(0, 6).map((project) => (
@@ -214,7 +227,7 @@ function ProjectsSection({ projects }: { projects: DashboardProject[] }) {
   );
 }
 
-function AreaPreview({ area }: { area: DashboardArea }) {
+function AreaPreview({ area }: { area: HomeArea }) {
   const counts = [
     { label: "Goals", value: area.goals_count },
     { label: "Habits", value: area.habits_count },
@@ -223,7 +236,7 @@ function AreaPreview({ area }: { area: DashboardArea }) {
   return (
     <Card
       size="sm"
-      className="group/preview relative min-h-36 min-w-0 gap-0 overflow-visible py-0 transition-[box-shadow,transform] duration-200 hover:-translate-y-0.5 hover:shadow-md motion-reduce:transform-none"
+      className="group/preview relative min-h-40 min-w-0 gap-0 overflow-visible py-0 transition-[box-shadow,transform] duration-200 hover:-translate-y-0.5 hover:shadow-md motion-reduce:transform-none"
     >
       <Link
         href={`/areas/${area.uuid}`}
@@ -232,9 +245,9 @@ function AreaPreview({ area }: { area: DashboardArea }) {
       />
       <CardHeader className="pointer-events-none min-w-0 py-4">
         <div className="flex min-w-0 items-start gap-3">
-          <DashboardRecordIcon kind="area" name={area.icon} />
+          <HomeRecordIcon kind="area" name={area.icon} />
           <h3
-            className="min-w-0 flex-1 truncate pt-0.5 text-sm leading-5 font-semibold"
+            className="min-w-0 flex-1 truncate pt-0.5 text-[15px] leading-5 font-semibold"
             title={area.name}
           >
             {area.name}
@@ -245,14 +258,14 @@ function AreaPreview({ area }: { area: DashboardArea }) {
           />
         </div>
       </CardHeader>
-      <CardContent className="pointer-events-none mt-auto border-t border-border/70 py-3">
-        <dl className="grid grid-cols-3 gap-2">
+      <CardContent className="pointer-events-none mt-auto border-t border-border/70 bg-muted/20 py-3">
+        <dl className="grid grid-cols-3">
           {counts.map((count) => (
-            <div key={count.label} className="flex min-w-0 flex-col">
-              <dt className="order-2 text-[10px] text-muted-foreground">
+            <div key={count.label} className="flex min-w-0 flex-col items-center justify-center gap-0.5 border-r border-border/70 px-1 text-center last:border-r-0">
+              <dt className="order-2 text-[11px] leading-4 text-muted-foreground">
                 {count.label}
               </dt>
-              <dd className="order-1 text-[15px] font-medium tabular-nums">
+              <dd className="order-1 text-lg leading-5 font-semibold tabular-nums">
                 {count.value}
               </dd>
             </div>
@@ -263,10 +276,10 @@ function AreaPreview({ area }: { area: DashboardArea }) {
   );
 }
 
-function AreasSection({ areas }: { areas: DashboardArea[] }) {
+function AreasSection({ areas }: { areas: HomeArea[] }) {
   return (
-    <section aria-labelledby="dashboard-areas" className="grid gap-2">
-      <SectionHeading id="dashboard-areas" title="Areas" href="/areas" />
+    <section aria-labelledby="home-areas" className="grid gap-3">
+      <SectionHeading id="home-areas" title="Areas" href="/areas" />
       {areas.length ? (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {areas.map((area) => (
@@ -306,15 +319,15 @@ function compactAge(value: string) {
 function RecentResourcesSection({
   resources,
 }: {
-  resources: DashboardRecentResource[];
+  resources: HomeRecentResource[];
 }) {
   return (
-    <section aria-labelledby="dashboard-resources" className="grid min-w-0 gap-2">
-      <SectionHeading id="dashboard-resources" title="Recent resources" href="/resources" />
-      <Card size="sm" className="min-w-0 py-1">
+    <section aria-labelledby="home-resources" className="grid min-w-0 gap-3">
+      <SectionHeading id="home-resources" title="Recent resources" href="/resources" />
+      <Card size="sm" className="min-w-0 gap-0 py-2">
         <CardContent className="gap-0">
           {resources.length ? (
-            <ul className="divide-y divide-border">
+            <ul className="divide-y divide-border/70">
               {resources.slice(0, 5).map((item) => {
                 const Icon = resourceIcons[item.type] ?? BookOpen;
                 const age = compactAge(item.occurred_at);
@@ -322,9 +335,9 @@ function RecentResourcesSection({
                   <li key={item.item_key}>
                     <Link
                       href={`/resources?resource=${encodeURIComponent(item.resource_uuid)}`}
-                      className="group/resource -mx-2 flex min-h-13 min-w-0 items-center gap-3 rounded-lg px-2 py-2 text-sm transition-colors hover:bg-muted/60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                      className="group/resource -mx-2 flex min-h-14 min-w-0 items-center gap-3 rounded-lg px-2 py-2.5 text-sm transition-colors hover:bg-muted/60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                     >
-                      <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground transition-colors group-hover/resource:text-foreground">
+                      <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground ring-1 ring-foreground/5 transition-colors group-hover/resource:text-foreground">
                         <Icon className="size-4" aria-hidden="true" />
                       </span>
                       <span className="min-w-0 flex-1 truncate font-medium group-hover/resource:text-foreground">{item.title}</span>
@@ -343,7 +356,7 @@ function RecentResourcesSection({
               })}
             </ul>
           ) : (
-            <p className="py-4 text-sm text-muted-foreground">
+            <p className="py-7 text-center text-sm text-muted-foreground">
               No recent resources yet.
             </p>
           )}
@@ -353,27 +366,27 @@ function RecentResourcesSection({
   );
 }
 
-function ArchivesSection({ archives }: { archives: DashboardArchives }) {
+function ArchivesSection({ archives }: { archives: HomeArchives }) {
   const counts = [
     { label: "Projects", value: archives.projects },
     { label: "Areas", value: archives.areas },
     { label: "Resources", value: archives.resources },
   ];
   return (
-    <section aria-labelledby="dashboard-archives" className="grid min-w-0 gap-2">
-      <SectionHeading id="dashboard-archives" title="Archives" />
-      <Card size="sm" className="min-w-0 gap-2">
-        <CardContent>
-          <dl className="grid gap-2">
+    <section aria-labelledby="home-archives" className="grid min-w-0 gap-3">
+      <SectionHeading id="home-archives" title="Archives" />
+      <Card size="sm" className="min-w-0 gap-0 py-0">
+        <CardContent className="py-5">
+          <dl className="grid grid-cols-3">
             {counts.map((count) => (
-              <div key={count.label} className="flex items-center justify-between gap-3 text-sm">
-                <dt className="text-muted-foreground">{count.label}</dt>
-                <dd className="font-medium tabular-nums">{count.value}</dd>
+              <div key={count.label} className="flex min-w-0 flex-col items-center justify-center gap-1 border-r border-border/70 px-1 text-center last:border-r-0">
+                <dt className="order-2 text-xs text-muted-foreground">{count.label}</dt>
+                <dd className="order-1 text-xl leading-6 font-semibold tabular-nums">{count.value}</dd>
               </div>
             ))}
           </dl>
         </CardContent>
-        <CardFooter>
+        <CardFooter className="border-t border-border/70 py-4">
           <Link href="/archives" className={cn(buttonVariants(), "min-h-11 w-full")}>
             View archive
           </Link>
@@ -385,8 +398,8 @@ function ArchivesSection({ archives }: { archives: DashboardArchives }) {
 
 function UtilitiesSection() {
   return (
-    <section aria-labelledby="dashboard-utilities" className="grid gap-2">
-      <SectionHeading id="dashboard-utilities" title="Utilities" />
+    <section aria-labelledby="home-utilities" className="grid gap-3">
+      <SectionHeading id="home-utilities" title="Utilities" />
       <div className="grid grid-cols-2 gap-3 min-[480px]:grid-cols-3 sm:grid-cols-4 lg:grid-cols-7">
         {utilities.map((utility) => {
           const Icon = utility.icon;
@@ -399,10 +412,10 @@ function UtilitiesSection() {
               <CardContent className="p-0">
                 <Link
                   href={utility.href}
-                  className="flex min-h-21 flex-col items-center justify-center gap-2 rounded-xl px-2 py-3 text-[11px] font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                  className="flex min-h-24 flex-col items-center justify-center gap-2.5 rounded-xl px-2 py-3 text-xs font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                 >
-                  <span className="flex size-9 items-center justify-center rounded-lg bg-muted text-muted-foreground transition-colors group-hover/utility:bg-primary/10 group-hover/utility:text-primary group-focus-within/utility:bg-primary/10 group-focus-within/utility:text-primary">
-                    <Icon className="size-4.5" aria-hidden="true" />
+                  <span className="flex size-10 items-center justify-center rounded-lg bg-muted text-muted-foreground ring-1 ring-foreground/5 transition-colors group-hover/utility:bg-primary/10 group-hover/utility:text-primary group-focus-within/utility:bg-primary/10 group-focus-within/utility:text-primary">
+                    <Icon className="size-5" aria-hidden="true" />
                   </span>
                   {utility.label}
                 </Link>
@@ -415,39 +428,48 @@ function UtilitiesSection() {
   );
 }
 
-function DashboardSkeleton() {
+function HomeSkeleton() {
   return (
-    <div role="status" aria-label="Loading dashboard" className="grid gap-5">
+    <div role="status" aria-label="Loading home" className="grid gap-6">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {[1, 2, 3, 4].map((item) => (
-          <Skeleton key={item} className="h-20 rounded-xl" />
+          <Skeleton key={item} className="h-30 rounded-xl" />
         ))}
       </div>
       <Skeleton className="h-5 w-28" />
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {[1, 2, 3].map((item) => (
-          <Skeleton key={item} className="h-28 rounded-xl" />
+          <Skeleton key={item} className="h-44 rounded-xl" />
         ))}
       </div>
       <Skeleton className="h-5 w-20" />
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {[1, 2, 3, 4].map((item) => (
-          <Skeleton key={item} className="h-28 rounded-xl" />
+          <Skeleton key={item} className="h-40 rounded-xl" />
         ))}
       </div>
-      <Skeleton className="h-44 rounded-xl" />
-      <span className="sr-only">Loading dashboard…</span>
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
+        <Skeleton className="h-72 rounded-xl" />
+        <Skeleton className="h-40 rounded-xl" />
+      </div>
+      <Skeleton className="h-5 w-24" />
+      <div className="grid grid-cols-2 gap-3 min-[480px]:grid-cols-3 sm:grid-cols-4 lg:grid-cols-7">
+        {[1, 2, 3, 4, 5, 6, 7].map((item) => (
+          <Skeleton key={item} className="h-24 rounded-xl" />
+        ))}
+      </div>
+      <span className="sr-only">Loading home…</span>
     </div>
   );
 }
 
-function DashboardContent({ data }: { data: DashboardData }) {
+function HomeContent({ data }: { data: HomeData }) {
   return (
-    <div className="grid gap-5">
+    <div className="grid gap-6">
       <StatStrip stats={data.stats} />
       <ProjectsSection projects={data.projects} />
       <AreasSection areas={data.areas} />
-      <div className="grid min-w-0 items-start gap-5 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
+      <div className="grid min-w-0 items-start gap-6 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
         <RecentResourcesSection resources={data.recent_resources} />
         <ArchivesSection archives={data.archives} />
       </div>
@@ -456,26 +478,26 @@ function DashboardContent({ data }: { data: DashboardData }) {
   );
 }
 
-export function DashboardPage() {
+export function HomeOverviewPage() {
   const timezone = useSyncExternalStore(
     subscribeTimezone,
     browserTimezone,
     serverTimezone,
   );
-  const query = useDashboardQuery(timezone ?? "UTC", Boolean(timezone));
+  const query = useHomeQuery(timezone ?? "UTC", Boolean(timezone));
 
   return (
-    <div className="mx-auto grid w-full max-w-[110rem] gap-5">
+    <div className="mx-auto grid w-full max-w-[110rem] gap-6">
       <PageHeader
-        title="Dashboard"
+        title="Home"
         description="A bird's-eye view of everything in motion."
       />
       {!timezone || query.isPending ? (
-        <DashboardSkeleton />
+        <HomeSkeleton />
       ) : query.isError ? (
         <Card className="items-center py-12 text-center" role="alert">
           <CardHeader className="justify-items-center">
-            <CardTitle>Dashboard could not be loaded</CardTitle>
+            <CardTitle>Home could not be loaded</CardTitle>
             <CardDescription>Check your connection and try again.</CardDescription>
           </CardHeader>
           <CardContent>
@@ -486,7 +508,7 @@ export function DashboardPage() {
           </CardContent>
         </Card>
       ) : query.data ? (
-        <DashboardContent data={query.data.data} />
+        <HomeContent data={query.data.data} />
       ) : null}
     </div>
   );

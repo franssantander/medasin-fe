@@ -29,7 +29,7 @@ import { useLogoutMutation } from "@/features/auth/queries/auth-query";
 import { PlanNotifications } from "@/features/plans/notifications/plan-notifications";
 import type { CurrentUser } from "@/features/auth/type";
 
-type DashboardHeaderProps = {
+type AppHeaderProps = {
   currentUser?: CurrentUser;
   isMobileNavOpen: boolean;
   onOpenMobileNav: () => void;
@@ -105,11 +105,11 @@ function ProfileMenu({ user }: { user?: CurrentUser }) {
   );
 }
 
-export function DashboardHeader({
+export function AppHeader({
   currentUser,
   isMobileNavOpen,
   onOpenMobileNav,
-}: DashboardHeaderProps) {
+}: AppHeaderProps) {
   return (
     <header className="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-border bg-background px-2 sm:px-6">
       <div className="w-full flex items-center">

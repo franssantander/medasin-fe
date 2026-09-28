@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 
-import type { DashboardData } from "./type";
+import type { HomeData } from "./type";
 import type { Area } from "@/features/areas/type";
 import type { ProjectDetail } from "@/features/projects/type";
 import type { Resource } from "@/features/resources/type";
@@ -17,7 +17,7 @@ const noIconAreaUuid = "963695a4-766e-4d42-b595-f1dadcf4c76e";
 const unknownIconAreaUuid = "62b8c993-1358-4bf0-8e5f-57684a48a0cc";
 const resourceUuid = "b18cb1d5-7dd9-4b5e-a8c8-fbbf62fe8f20";
 
-function populatedDashboard(): DashboardData {
+function populatedHome(): HomeData {
   return {
     stats: {
       active_projects: 11,
@@ -179,9 +179,9 @@ const areaDetail: Area = {
   updated_at: "2026-09-25T00:00:00.000Z",
 };
 
-async function mockApi(page: Page, data: DashboardData) {
-  const dashboardRequests: URL[] = [];
-  let dashboardFails = false;
+async function mockApi(page: Page, data: HomeData) {
+  const homeRequests: URL[] = [];
+  let homeFails = false;
   let resourceFails = false;
 
   await page.context().addCookies([{
@@ -205,9 +205,9 @@ async function mockApi(page: Page, data: DashboardData) {
         username: "tester",
         email: "tester@example.com",
       };
-    } else if (path === "/dashboard") {
-      dashboardRequests.push(url);
-      if (dashboardFails) status = 503;
+    } else if (path === "/home") {
+      homeRequests.push(url);
+      if (homeFails) status = 503;
       result = status === 200 ? data : null;
     } else if (path === "/notifications") {
       result = {
@@ -244,21 +244,33 @@ async function mockApi(page: Page, data: DashboardData) {
   });
 
   return {
-    dashboardRequests,
-    setDashboardFails: (value: boolean) => { dashboardFails = value; },
+    homeRequests,
+    setHomeFails: (value: boolean) => { homeFails = value; },
     setResourceFails: (value: boolean) => { resourceFails = value; },
   };
 }
 
-test("dashboard shows backend totals, progress, links, and local streak timezone", async ({ page }) => {
-  const state = await mockApi(page, populatedDashboard());
+test("home shows backend totals, progress, links, and local streak timezone", async ({ page }) => {
+  const state = await mockApi(page, populatedHome());
   await page.goto("/home");
 
-  await expect(page.getByRole("heading", { name: "Dashboard", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Home", exact: true })).toBeVisible();
+  const homeLink = page.getByRole("navigation", { name: "Main navigation" }).getByRole("link", { name: "Home" });
+  await expect(homeLink).toHaveAttribute("href", "/home");
+  await expect(homeLink.locator("svg.lucide-house")).toBeVisible();
   await expect(page.getByText("A bird's-eye view of everything in motion.")).toBeVisible();
-  await expect(page.getByText("11", { exact: true })).toBeVisible();
-  await expect(page.getByRole("region", { name: "Overview" }).getByText("11", { exact: true })).toHaveCSS("font-size", "22px");
-  await expect(page.getByText("13", { exact: true })).toBeVisible();
+  const overview = page.getByRole("region", { name: "Overview" });
+  for (const [label, value, iconClass] of [
+    ["Active projects", "11", "lucide-target"],
+    ["Areas", "4", "lucide-circle-pile"],
+    ["Resources saved", "13", "lucide-book-open"],
+    ["Habit streak", "5", "lucide-flame"],
+  ]) {
+    const card = overview.locator('[data-slot="card"]').filter({ hasText: label });
+    await expect(card).toContainText(value);
+    await expect(card.locator(`svg.${iconClass}`)).toBeVisible();
+    await expect(card.locator(`svg.${iconClass}`)).toHaveAttribute("aria-hidden", "true");
+  }
   await expect(page.getByText("2 of 4 tasks")).toBeVisible();
   await expect(page.getByText("Done", { exact: true })).toBeVisible();
   await expect(page.getByText("No tasks yet")).toBeVisible();
@@ -273,13 +285,33 @@ test("dashboard shows backend totals, progress, links, and local streak timezone
   ]) {
     await expect(utilities.getByRole("link", { name: label })).toHaveAttribute("href", href);
   }
-  await expect.poll(() => state.dashboardRequests.length).toBeGreaterThan(0);
-  expect(state.dashboardRequests[0].searchParams.get("timezone")).toBe("Asia/Manila");
+  await expect.poll(() => state.homeRequests.length).toBeGreaterThan(0);
+  expect(state.homeRequests[0].searchParams.get("timezone")).toBe("Asia/Manila");
 
   for (const width of [375, 768, 1440]) {
     await page.setViewportSize({ width, height: 900 });
-    await expect(page.getByRole("heading", { name: "Dashboard", exact: true })).toBeVisible();
-    const main = page.locator("#dashboard-shell main");
+    await expect(page.getByRole("heading", { name: "Home", exact: true })).toBeVisible();
+    await expect(page.getByRole("region", { name: "Areas" }).getByRole("link", { name: "Open area Life" })).toBeVisible();
+    const metricAlignment = await page.getByRole("region", { name: "Areas" })
+      .locator('[data-slot="card"] dl > div')
+      .evaluateAll((metrics) => metrics.map((metric) => {
+        const center = metric.getBoundingClientRect().left + metric.getBoundingClientRect().width / 2;
+        const textOffset = (selector: string) => {
+          const element = metric.querySelector(selector);
+          if (!element) return Number.POSITIVE_INFINITY;
+          const range = document.createRange();
+          range.selectNodeContents(element);
+          const text = range.getBoundingClientRect();
+          return Math.abs(text.left + text.width / 2 - center);
+        };
+        return { number: textOffset("dd"), label: textOffset("dt") };
+      }));
+    expect(metricAlignment).toHaveLength(populatedHome().areas.length * 3);
+    for (const metric of metricAlignment) {
+      expect(metric.number).toBeLessThanOrEqual(2);
+      expect(metric.label).toBeLessThanOrEqual(2);
+    }
+    const main = page.locator("#app-shell main");
     expect(await main.evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
   }
@@ -290,8 +322,8 @@ test("dashboard shows backend totals, progress, links, and local streak timezone
   await expect(page.getByRole("textbox", { name: "Resource title" })).toHaveValue(resource.title);
 });
 
-test("dashboard renders saved icons and fallback icons with accessible card navigation", async ({ page }) => {
-  await mockApi(page, populatedDashboard());
+test("home renders saved icons and fallback icons with accessible card navigation", async ({ page }) => {
+  await mockApi(page, populatedHome());
   await page.goto("/home");
 
   const projects = page.getByRole("region", { name: "Projects" });
@@ -343,7 +375,7 @@ test("dashboard renders saved icons and fallback icons with accessible card navi
   await expect(page).toHaveURL(new RegExp(`/areas/${areaUuid}$`));
 });
 
-test("empty dashboard shows zero totals and helpful empty sections", async ({ page }) => {
+test("empty home shows zero totals and helpful empty sections", async ({ page }) => {
   await mockApi(page, {
     stats: { active_projects: 0, areas: 0, resources_saved: 0, habit_streak: 0 },
     projects: [],
@@ -353,27 +385,27 @@ test("empty dashboard shows zero totals and helpful empty sections", async ({ pa
   });
   await page.goto("/home");
 
-  await expect(page.getByRole("heading", { name: "Dashboard", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Home", exact: true })).toBeVisible();
   await expect(page.getByText("No projects yet")).toBeVisible();
   await expect(page.getByText("No areas yet")).toBeVisible();
   await expect(page.getByText("No recent resources")).toBeVisible();
   await expect(page.getByRole("link", { name: "View archive" })).toHaveAttribute("href", "/archives");
 });
 
-test("dashboard request failure offers a retry", async ({ page }) => {
-  const state = await mockApi(page, populatedDashboard());
-  state.setDashboardFails(true);
+test("home request failure offers a retry", async ({ page }) => {
+  const state = await mockApi(page, populatedHome());
+  state.setHomeFails(true);
   await page.goto("/home");
 
-  await expect(page.locator("#dashboard-shell main").getByRole("alert")).toContainText("Dashboard could not be loaded");
-  state.setDashboardFails(false);
+  await expect(page.locator("#app-shell main").getByRole("alert")).toContainText("Home could not be loaded");
+  state.setHomeFails(false);
   await page.getByRole("button", { name: "Try again" }).click();
   await expect(page.getByText("North star")).toBeVisible();
-  expect(state.dashboardRequests.length).toBeGreaterThanOrEqual(2);
+  expect(state.homeRequests.length).toBeGreaterThanOrEqual(2);
 });
 
 test("resource deep link retries a failed detail request and closes cleanly", async ({ page }) => {
-  const state = await mockApi(page, populatedDashboard());
+  const state = await mockApi(page, populatedHome());
   state.setResourceFails(true);
   await page.goto(`/resources?resource=${resourceUuid}`);
 

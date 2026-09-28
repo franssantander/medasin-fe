@@ -5,18 +5,18 @@ import { useState } from "react";
 
 import { Skeleton } from "@/components/ui/skeleton";
 import { useRoleGate } from "@/features/auth/hooks/use-role-gate";
-import { DashboardHeader } from "@/features/home/components/dashboard-header";
-import { dashboardNavigationItems } from "@/features/home/components/dashboard-navigation";
-import { DashboardSidebar } from "@/features/home/components/dashboard-sidebar";
-import { useSidebar } from "@/features/home/hooks/use-sidebar";
+import { AppHeader } from "@/features/app-shell/components/app-header";
+import { appNavigationItems } from "@/features/app-shell/components/app-navigation";
+import { AppSidebar } from "@/features/app-shell/components/app-sidebar";
+import { useSidebar } from "@/features/app-shell/hooks/use-sidebar";
 
-function DashboardLoadingSkeleton() {
+function AppLoadingSkeleton() {
   return (
-    <div id="dashboard-shell" className="flex h-dvh overflow-hidden">
+    <div id="app-shell" className="flex h-dvh overflow-hidden">
       <div className="hidden h-full w-64 shrink-0 flex-col gap-4 border-r border-sidebar-border bg-sidebar p-4 md:flex">
         <Skeleton className="h-8 w-32" />
         <div className="flex flex-col gap-2 pt-2">
-          {dashboardNavigationItems.map((item) => (
+          {appNavigationItems.map((item) => (
             <Skeleton key={item.href} className="h-10 w-full" />
           ))}
         </div>
@@ -47,12 +47,12 @@ export default function AppLayout({
   const { isCollapsed, toggleSidebar } = useSidebar();
 
   if (!isReady) {
-    return <DashboardLoadingSkeleton />;
+    return <AppLoadingSkeleton />;
   }
 
   return (
-    <div id="dashboard-shell" className="flex h-dvh overflow-hidden bg-background">
-      <DashboardSidebar
+    <div id="app-shell" className="flex h-dvh overflow-hidden bg-background">
+      <AppSidebar
         pathname={pathname}
         isCollapsed={isCollapsed}
         onToggle={toggleSidebar}
@@ -61,7 +61,7 @@ export default function AppLayout({
       />
 
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        <DashboardHeader
+        <AppHeader
           currentUser={currentUser}
           isMobileNavOpen={isMobileNavOpen}
           onOpenMobileNav={() => setIsMobileNavOpen(true)}
