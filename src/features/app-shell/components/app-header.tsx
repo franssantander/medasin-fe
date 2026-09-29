@@ -107,8 +107,8 @@ export function AppHeader({
   onOpenMobileNav,
 }: AppHeaderProps) {
   return (
-    <header className="flex h-14 shrink-0 items-center gap-2 border-b border-border bg-background px-2 sm:px-6">
-      <div className="flex min-w-0 flex-1 items-center">
+    <header className="relative z-20 flex h-14 shrink-0 items-center gap-2 border-b border-border bg-background px-2 sm:px-6">
+      <div className="flex min-w-0 flex-1 items-center gap-2">
         <Button
           type="button"
           variant="ghost"
@@ -136,9 +136,9 @@ export function AppHeader({
             Medasin
           </span>
         </Link>
+        <GlobalSearch userId={currentUser?.id} />
       </div>
-      <GlobalSearch userId={currentUser?.id} />
-      <div className="flex min-w-0 flex-1 items-center justify-end gap-3">
+      <div className="flex shrink-0 items-center justify-end gap-3">
         <PlanNotifications userId={currentUser?.id} />
         <ProfileMenu user={currentUser} />
       </div>

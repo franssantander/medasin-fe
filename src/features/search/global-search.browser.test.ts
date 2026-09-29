@@ -218,6 +218,49 @@ test("shortcut focuses search, short input stays local, and a filter scopes the 
   await expect(page.getByRole("option", { name: /Atlas research note/ })).toHaveCount(0);
 });
 
+test("search stays at the left of the header and above Notes content", async ({ page }) => {
+  await fixture(page);
+
+  for (const width of [1440, 900, 768]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto("/notes");
+    await expect(page.getByRole("heading", { name: "Notes", exact: true }).first()).toBeVisible();
+
+    const input = page.getByRole("combobox", { name: "Search everything" });
+    const header = page.locator("#app-shell > div > header");
+    const headerBounds = await header.boundingBox();
+    const inputBounds = await input.boundingBox();
+    expect(headerBounds).not.toBeNull();
+    expect(inputBounds).not.toBeNull();
+    expect(inputBounds!.x - headerBounds!.x).toBeLessThan(80);
+
+    await input.click();
+    const placeholder = page.getByText("Find anything in your workspace");
+    await expect(placeholder).toBeVisible();
+    expect(await placeholder.evaluate((element) => {
+      const bounds = element.getBoundingClientRect();
+      return element.contains(document.elementFromPoint(
+        bounds.left + bounds.width / 2,
+        bounds.top + bounds.height / 2,
+      ));
+    })).toBe(true);
+    await input.fill("a");
+    await expect(page.getByText("Keep typing to search")).toBeVisible();
+
+    await input.fill("atlas");
+    const option = page.getByRole("option", { name: /Atlas research note/ });
+    await expect(option).toBeVisible();
+    expect(await option.evaluate((element) => {
+      const bounds = element.getBoundingClientRect();
+      return element.contains(document.elementFromPoint(
+        bounds.left + bounds.width / 2,
+        bounds.top + bounds.height / 2,
+      ));
+    })).toBe(true);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+  }
+});
+
 test("arrow keys move across groups and Enter opens the active record", async ({ page }) => {
   await fixture(page);
   const input = page.getByRole("combobox", { name: "Search everything" });

@@ -193,13 +193,28 @@ function SearchPanel({
             </div>
           </section>
         ) : !hasQuery ? (
-          <div className="px-4 py-8 text-center text-sm text-muted-foreground">
-            {trimmed ? "Type at least two characters to search." : "Search across your workspace."}
+          <div className="flex flex-col items-center gap-2 px-5 py-8 text-center">
+            <span className="flex size-10 items-center justify-center rounded-full bg-muted text-muted-foreground">
+              <Search className="size-5" aria-hidden="true" />
+            </span>
+            <p className="text-sm font-medium text-foreground">
+              {trimmed ? "Keep typing to search" : "Find anything in your workspace"}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {trimmed ? "Enter at least two characters." : "Search notes, projects, areas, and more."}
+            </p>
           </div>
         ) : isLoading || (isDebouncing && groups.length === 0) ? (
-          <div className="flex flex-col gap-3 p-2" aria-label="Loading search results">
+          <div className="flex flex-col gap-3 p-3" aria-label="Loading search results">
+            <Skeleton className="h-3 w-20" />
             {[0, 1, 2].map((item) => (
-              <Skeleton key={item} className="h-16 w-full" />
+              <div key={item} className="flex items-center gap-3 rounded-md px-1 py-1">
+                <Skeleton className="size-8 shrink-0 rounded-md" />
+                <div className="flex flex-1 flex-col gap-2">
+                  <Skeleton className="h-3 w-3/4" />
+                  <Skeleton className="h-2.5 w-1/2" />
+                </div>
+              </div>
             ))}
           </div>
         ) : isError ? (
@@ -211,9 +226,12 @@ function SearchPanel({
             </Button>
           </div>
         ) : showResults && options.length === 0 ? (
-          <div className="px-4 py-8 text-center">
+          <div className="flex flex-col items-center gap-2 px-5 py-8 text-center">
+            <span className="flex size-10 items-center justify-center rounded-full bg-muted text-muted-foreground">
+              <Search className="size-5" aria-hidden="true" />
+            </span>
             <p className="text-sm font-medium">No results for “{trimmed}”</p>
-            <p className="mt-1 text-sm text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               Try a different word or choose another category.
             </p>
           </div>
@@ -488,7 +506,7 @@ export function GlobalSearch({ userId }: { userId?: number }) {
   };
 
   return (
-    <div ref={rootRef} className="relative flex min-w-0 items-center justify-end md:w-full md:max-w-[440px]">
+    <div ref={rootRef} className="relative flex min-w-0 items-center md:w-full md:max-w-[440px]">
       <Button
         type="button"
         variant="ghost"
@@ -529,7 +547,7 @@ export function GlobalSearch({ userId }: { userId?: number }) {
           </InputGroupAddon>
         </InputGroup>
         {desktopOpen && (
-          <div className="absolute left-1/2 top-full mt-2 w-[min(500px,calc(100vw-2rem))] -translate-x-1/2 overflow-hidden rounded-lg border bg-popover text-popover-foreground shadow-lg">
+          <div className="absolute top-full left-0 mt-2 w-full overflow-hidden rounded-lg border bg-popover text-popover-foreground shadow-lg">
             <SearchPanel id="desktop-search-results" className="max-h-[340px]" {...panelProps} />
           </div>
         )}
