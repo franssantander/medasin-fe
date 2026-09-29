@@ -94,6 +94,7 @@ export function createLetterPageRenderer(
         <LetterPageCanvas
           page={{ ...page, uuid: "measurement" }} canvas={canvas} exportUuid={exportUuid}
           pageTheme={pageTheme}
+          editable={page.layout !== "cover"}
           onContentApplied={() => { applied = true; }}
         />,
       );

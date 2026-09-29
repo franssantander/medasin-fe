@@ -108,16 +108,15 @@ import {
 } from "../letter-cover";
 import {
   LetterCoverOverflowError,
+  LetterPageOverflowError,
   mapFlowSelection,
   type LetterPageFlowResult,
 } from "../letter-page-flow";
-import { measureLetterPage } from "../letter-page-renderer";
 import { letterService } from "../services/letter-service";
 import {
   LETTER_PAGE_TEXT_SCALE_MAX,
   LETTER_PAGE_TEXT_SCALE_MIN,
   LETTER_PAGE_TEXT_SCALE_STEP,
-  getLetterPageAutoFitScale,
   getLetterPageCanvasBaseline,
   letterPageTextScalePercent,
   normalizeLetterPageTextScale,
@@ -186,6 +185,7 @@ export function LetterPageWorkspace({
   const reflowedExportRef = useRef<string | undefined>(undefined);
   const controlsRef = useRef<NoteRichTextEditorControls | null>(null);
   const editorDraftRef = useRef<{ pageUuid: string; content: string } | null>(null);
+  const preparedDraftRef = useRef<{ pageUuid: string; content: string } | null>(null);
   const pendingSelectionRef = useRef<NoteEditorSelection | null>(null);
   const onLayout = useCallback((result: LetterPageFlowResult) => {
     const selection = controlsRef.current?.getSelection();
@@ -238,13 +238,7 @@ export function LetterPageWorkspace({
         letterExport.uuid,
         signal,
       );
-      if (
-        draft &&
-        editorDraftRef.current?.pageUuid === draft.pageUuid &&
-        editorDraftRef.current.content === draft.content
-      ) {
-        editorDraftRef.current = null;
-      }
+      preparedDraftRef.current = draft;
       return result;
     },
     [letterExport.canvas, letterExport.uuid],
@@ -253,6 +247,18 @@ export function LetterPageWorkspace({
     letterExport,
     letterUuid,
     onSaved,
+    onPagesSaved: () => {
+      const draft = editorDraftRef.current;
+      const prepared = preparedDraftRef.current;
+      if (
+        draft && prepared &&
+        draft.pageUuid === prepared.pageUuid &&
+        draft.content === prepared.content
+      ) {
+        editorDraftRef.current = null;
+      }
+      preparedDraftRef.current = null;
+    },
     preparePages,
     onLayout,
     isComposing: () =>
@@ -293,8 +299,6 @@ export function LetterPageWorkspace({
     setEditorControls(controls);
     restorePendingSelection();
   }, [restorePendingSelection]);
-  const canvasRef = useRef<HTMLDivElement>(null);
-  const autoFitKeyRef = useRef<string | undefined>(undefined);
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
@@ -315,24 +319,6 @@ export function LetterPageWorkspace({
     selectedPage?.text_scale_mode,
     selectedPage?.text_scale,
   );
-  const selectedContentKey = useMemo(() => {
-    if (!selectedPage) return "";
-
-    return JSON.stringify([
-      selectedPage.uuid,
-      selectedPage.layout,
-      selectedPage.title ?? "",
-      selectedPage.subtitle ?? "",
-      JSON.stringify(selectedPage.cover ?? null),
-      serializeNoteDocument(selectedPage.blocks),
-      letterExport.canvas.width,
-      letterExport.canvas.height,
-    ]);
-  }, [
-    letterExport.canvas.height,
-    letterExport.canvas.width,
-    selectedPage,
-  ]);
 
   useEffect(() => {
     selectedUuidRef.current = selectedUuid;
@@ -632,106 +618,6 @@ export function LetterPageWorkspace({
     if (coverCrop) URL.revokeObjectURL(coverCrop.source);
   }, [coverCrop]);
 
-  useEffect(() => {
-    if (
-      !open ||
-      !selectedPage ||
-      selectedPage.layout !== "quote" ||
-      selectedTextScaleMode !== "auto" ||
-      !selectedContentKey
-    ) {
-      autoFitKeyRef.current = undefined;
-      return;
-    }
-
-    const fitKey = selectedContentKey;
-    let frame: number | undefined;
-    let retryFrame: number | undefined;
-    let resizeObserver: ResizeObserver | undefined;
-    let mutationObserver: MutationObserver | undefined;
-
-    const scheduleMeasure = () => {
-      if (frame !== undefined) return;
-      frame = window.requestAnimationFrame(() => {
-        frame = undefined;
-        const baseline = getLetterPageCanvasBaseline(letterExport.canvas);
-
-        if (autoFitKeyRef.current !== fitKey) {
-          autoFitKeyRef.current = fitKey;
-          if (selectedTextScale !== baseline) {
-            updateSelected({ text_scale: baseline });
-            return;
-          }
-        }
-
-        const measured = canvasRef.current
-          ? measureLetterPage(canvasRef.current)
-          : null;
-        if (!measured) return;
-
-        const nextScale = getLetterPageAutoFitScale(
-          selectedTextScale,
-          measured.availableHeight,
-          measured.contentHeight,
-        );
-        if (nextScale !== selectedTextScale) {
-          updateSelected({ text_scale: nextScale });
-          return;
-        }
-
-      });
-    };
-
-    const observeCanvas = () => {
-      const canvas = canvasRef.current;
-      if (!canvas) {
-        retryFrame = window.requestAnimationFrame(observeCanvas);
-        return;
-      }
-
-      const observer = new ResizeObserver(() => scheduleMeasure());
-      resizeObserver = observer;
-      mutationObserver = new MutationObserver(() => {
-        const content = canvas.querySelector<HTMLElement>("[data-page-content]");
-        if (content) {
-          observer.observe(content);
-          const editor = content.querySelector<HTMLElement>(".bn-editor");
-          if (editor) {
-            observer.observe(editor);
-            const blockGroup = editor.querySelector<HTMLElement>(".bn-block-group");
-            if (blockGroup) observer.observe(blockGroup);
-          }
-        }
-        scheduleMeasure();
-      });
-
-      observer.observe(canvas);
-      mutationObserver.observe(canvas, {
-        childList: true,
-        characterData: true,
-        subtree: true,
-      });
-      scheduleMeasure();
-    };
-
-    observeCanvas();
-
-    return () => {
-      if (frame !== undefined) window.cancelAnimationFrame(frame);
-      if (retryFrame !== undefined) window.cancelAnimationFrame(retryFrame);
-      resizeObserver?.disconnect();
-      mutationObserver?.disconnect();
-    };
-  }, [
-    letterExport.canvas,
-    open,
-    selectedContentKey,
-    selectedPage,
-    selectedTextScale,
-    selectedTextScaleMode,
-    updateSelected,
-  ]);
-
   const selectPage = useCallback((uuid: string) => {
     commitActiveEditor();
     const page = pages.find((item) => item.uuid === uuid);
@@ -742,10 +628,16 @@ export function LetterPageWorkspace({
   }, [commitActiveEditor, pages]);
 
   const handleTextScaleChange = (event: ChangeEvent<HTMLInputElement>) => {
-    updateSelected({
-      text_scale: normalizeLetterPageTextScale(Number(event.target.value) / 100),
-      text_scale_mode: "manual",
-    });
+    const textScale = normalizeLetterPageTextScale(Number(event.target.value) / 100);
+    if (selectedPage?.layout === "cover") {
+      updateSelected({ text_scale: textScale, text_scale_mode: "manual" });
+      return;
+    }
+    updatePages((current) => current.map((page) =>
+      page.layout === "cover"
+        ? page
+        : { ...page, text_scale: textScale, text_scale_mode: "manual" },
+    ));
   };
 
   const duplicatePage = () => {
@@ -835,6 +727,9 @@ export function LetterPageWorkspace({
   };
 
   if (!selectedPage) return null;
+  const pageCannotFit =
+    saveError instanceof LetterCoverOverflowError ||
+    saveError instanceof LetterPageOverflowError;
 
   return (
     <>
@@ -855,11 +750,11 @@ export function LetterPageWorkspace({
               <span className="text-xs text-muted-foreground" aria-live="polite">
                 {saveStatus === "arranging" ? "Arranging pages…" : saveStatus === "saving" ? "Saving…" : saveStatus === "dirty" ? "Unsaved changes" : saveStatus === "error" ? "Save failed" : saveStatus === "saved" ? "Saved" : null}
               </span>
-              <Button type="button" variant="outline" size="sm" disabled={downloading || closing || saveError instanceof LetterCoverOverflowError} onClick={() => void download(false)}>
+              <Button type="button" variant="outline" size="sm" disabled={downloading || closing || pageCannotFit} onClick={() => void download(false)}>
                 <Download data-icon="inline-start" />
                 Current page
               </Button>
-              <Button type="button" size="sm" disabled={downloading || closing || saveError instanceof LetterCoverOverflowError} onClick={() => void download(true)}>
+              <Button type="button" size="sm" disabled={downloading || closing || pageCannotFit} onClick={() => void download(true)}>
                 {downloading ? <LoaderCircle className="animate-spin" data-icon="inline-start" /> : <Download data-icon="inline-start" />}
                 {downloading ? `Exporting ${downloadProgress}/${pages.length}` : "Download all"}
               </Button>
@@ -893,7 +788,6 @@ export function LetterPageWorkspace({
             >
               <LetterPageCanvas
                 key={selectedPage.uuid}
-                ref={canvasRef}
                 page={selectedPage}
                 canvas={letterExport.canvas}
                 exportUuid={letterExport.uuid}
@@ -952,15 +846,14 @@ export function LetterPageWorkspace({
               ) : null}
             </div>
 
-            {!selectedIsCoverContinuation ? (
-              <div className="flex flex-col gap-2 border-b pb-4">
-                <div className="flex items-center justify-between gap-3">
+            <div className="flex flex-col gap-2 border-b pb-4">
+              <div className="flex items-center justify-between gap-3">
                 <label
                   htmlFor={`letter-page-text-scale-${selectedPage.uuid}`}
                   className="flex items-center gap-2 text-sm font-medium"
                 >
                   <Type aria-hidden="true" />
-                  {selectedPage.layout === "cover" ? "Overall text size" : "Text size"}
+                  {selectedPage.layout === "cover" ? "Overall text size" : "Text size for all pages"}
                 </label>
                 <output
                   htmlFor={`letter-page-text-scale-${selectedPage.uuid}`}
@@ -970,8 +863,8 @@ export function LetterPageWorkspace({
                   {selectedTextScaleMode === "auto" ? "Auto · " : ""}
                   {letterPageTextScalePercent(selectedTextScale)}%
                 </output>
-                </div>
-                <input
+              </div>
+              <input
                 id={`letter-page-text-scale-${selectedPage.uuid}`}
                 type="range"
                 min={LETTER_PAGE_TEXT_SCALE_MIN * 100}
@@ -980,10 +873,10 @@ export function LetterPageWorkspace({
                 value={letterPageTextScalePercent(selectedTextScale)}
                 onChange={handleTextScaleChange}
                 className="h-11 w-full cursor-pointer accent-foreground"
-                aria-label={selectedPage.layout === "cover" ? "Overall text size" : "Text size"}
+                aria-label={selectedPage.layout === "cover" ? "Overall text size" : "Text size for all pages"}
                 aria-valuetext={`${letterPageTextScalePercent(selectedTextScale)}%${selectedTextScaleMode === "auto" ? " automatic" : " manual"}`}
               />
-                <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+              <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
                 <span>{LETTER_PAGE_TEXT_SCALE_MIN * 100}%</span>
                 <Button
                   type="button"
@@ -991,31 +884,32 @@ export function LetterPageWorkspace({
                   size="sm"
                   className="h-8 px-2"
                   disabled={selectedTextScaleMode === "auto"}
-                  onClick={() =>
-                    updateSelected({
-                      text_scale: getLetterPageCanvasBaseline(letterExport.canvas),
-                      text_scale_mode: "auto",
-                    })
-                  }
+                  onClick={() => {
+                    const textScale = getLetterPageCanvasBaseline(letterExport.canvas);
+                    if (selectedPage.layout === "cover") {
+                      updateSelected({ text_scale: textScale, text_scale_mode: "auto" });
+                    } else {
+                      updatePages((current) => current.map((page) =>
+                        page.layout === "cover"
+                          ? page
+                          : { ...page, text_scale: textScale, text_scale_mode: "auto" },
+                      ));
+                    }
+                  }}
                 >
                   <RotateCcw data-icon="inline-start" />
                   Reset
                 </Button>
                 <span>{LETTER_PAGE_TEXT_SCALE_MAX * 100}%</span>
-                </div>
-                <p className="text-xs text-muted-foreground">
+              </div>
+              <p className="text-xs text-muted-foreground">
                 {selectedPage.layout === "cover"
                   ? "Scales all cover text. The three cover font controls below adjust each main text section. Oversized covers shrink to fit."
-                  : selectedPage.layout === "body"
-                  ? "Text flows between pages at the selected size. Reset restores the default size for this format."
-                  : selectedTextScaleMode === "auto"
-                  ? "Auto-fits this page to its canvas. Use the slider to override it."
-                  : "Manual override for this page. Reset to let it auto-fit again."} Branding and signatures stay fixed.
-                </p>
-              </div>
-            ) : null}
+                  : "Applies to every page after the cover, including quotes and cover entry continuations. Text flows to more pages as needed. Reset restores the default size for this format."} Branding and signatures stay fixed.
+              </p>
+            </div>
 
-            {selectedPage.layout === "cover" && saveError ? (
+            {saveError ? (
               <p role="alert" className="text-sm text-destructive">
                 {saveError.message}
               </p>

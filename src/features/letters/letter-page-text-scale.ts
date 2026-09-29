@@ -1,4 +1,4 @@
-import type { LetterCanvas, LetterPageTextScaleMode } from "./type";
+import type { LetterCanvas, LetterPage, LetterPageTextScaleMode } from "./type";
 
 export const LETTER_PAGE_TEXT_SCALE_DEFAULT = 1;
 export const LETTER_PAGE_AUTO_FIT_SCALE_MIN = 0.1;
@@ -49,6 +49,28 @@ export function getLetterPageCanvasBaseline(canvas: LetterCanvas): number {
   );
 
   return normalizeLetterPageTextScale(sizeRatio);
+}
+
+export function unifyNonCoverTextScale(
+  pages: LetterPage[],
+  canvas: LetterCanvas,
+): LetterPage[] {
+  const manualPage = pages.find(
+    (page) =>
+      page.layout !== "cover" &&
+      normalizeLetterPageTextScaleMode(page.text_scale_mode, page.text_scale) ===
+        "manual",
+  );
+  const textScale = manualPage
+    ? normalizeLetterPageTextScale(manualPage.text_scale)
+    : getLetterPageCanvasBaseline(canvas);
+  const textScaleMode = manualPage ? "manual" : "auto";
+
+  return pages.map((page) =>
+    page.layout === "cover"
+      ? page
+      : { ...page, text_scale: textScale, text_scale_mode: textScaleMode },
+  );
 }
 
 export function getLetterPageAutoFitScale(

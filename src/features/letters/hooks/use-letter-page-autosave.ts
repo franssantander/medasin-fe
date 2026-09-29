@@ -5,6 +5,7 @@ import { useUpdateLetterExportMutation } from "../queries/letter-query";
 import {
   normalizeLetterPageTextScale,
   normalizeLetterPageTextScaleMode,
+  unifyNonCoverTextScale,
 } from "../letter-page-text-scale";
 import type {
   Letter,
@@ -21,6 +22,7 @@ export function useLetterPageAutosave({
   letterExport,
   letterUuid,
   onSaved,
+  onPagesSaved,
   preparePages,
   onLayout,
   isComposing,
@@ -28,6 +30,7 @@ export function useLetterPageAutosave({
   letterExport: LetterExport;
   letterUuid: string;
   onSaved: (letter: Letter) => void;
+  onPagesSaved?: () => void;
   preparePages: (pages: LetterPage[], signal: AbortSignal) => Promise<LetterPageFlowResult>;
   onLayout?: (result: LetterPageFlowResult) => void;
   isComposing?: () => boolean;
@@ -45,6 +48,7 @@ export function useLetterPageAutosave({
   const mountedRef = useRef(true);
   const mutationRef = useRef(mutation.mutateAsync);
   const onSavedRef = useRef(onSaved);
+  const onPagesSavedRef = useRef(onPagesSaved);
   const preparePagesRef = useRef(preparePages);
   const onLayoutRef = useRef(onLayout);
   const isComposingRef = useRef(isComposing);
@@ -52,10 +56,11 @@ export function useLetterPageAutosave({
   useEffect(() => {
     mutationRef.current = mutation.mutateAsync;
     onSavedRef.current = onSaved;
+    onPagesSavedRef.current = onPagesSaved;
     preparePagesRef.current = preparePages;
     onLayoutRef.current = onLayout;
     isComposingRef.current = isComposing;
-  }, [mutation.mutateAsync, onSaved, preparePages, onLayout, isComposing]);
+  }, [mutation.mutateAsync, onSaved, onPagesSaved, preparePages, onLayout, isComposing]);
 
   const flush = useCallback(() => {
     if (timerRef.current) window.clearTimeout(timerRef.current);
@@ -91,6 +96,7 @@ export function useLetterPageAutosave({
             setPages(normalized);
             setSaveStatus("saved");
             setSaveError(undefined);
+            onPagesSavedRef.current?.();
             onSavedRef.current(response.data.letter);
           }
         } catch (error) {
@@ -154,7 +160,7 @@ function normalizePages(letterExport: LetterExport) {
     .find((page) => page.signature)?.signature?.name;
 
   return renumberPages(
-    sourcePages.map((page) =>
+    unifyNonCoverTextScale(sourcePages.map((page) =>
       normalizeLetterPageCover(
         {
           ...page,
@@ -168,7 +174,7 @@ function normalizePages(letterExport: LetterExport) {
         },
         { author_name: sourceAuthor },
       ),
-    ),
+    ), letterExport.canvas),
   );
 }
 

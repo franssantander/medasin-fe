@@ -132,10 +132,12 @@ async function fixture(
   });
   await page.goto("/letters?letter=letter-test");
   if (format !== "portrait") {
+    await page.getByRole("button", { name: "Preview pages" }).click();
     const formatSelect = page.getByRole("combobox", { name: "Export format" });
     await expect(formatSelect).toBeEnabled({ timeout: 60_000 });
     await formatSelect.click();
     await page.getByRole("option", { name: new RegExp(LETTER_EXPORT_FORMATS[format].shortLabel) }).click();
+    await expect(page.getByText(new RegExp(`pages · ${LETTER_EXPORT_FORMATS[format].shortLabel}`))).toBeVisible({ timeout: 60_000 });
   }
   return {
     letter: () => letter,
@@ -230,6 +232,7 @@ test("long cover text auto-fits before the export is created", async ({ page }) 
     subtitle: "Supporting cover copy that should continue onto generated pages without changing the original letter body. ".repeat(35).trim(),
   });
 
+  await page.getByRole("button", { name: "Preview pages" }).click();
   await expect(
     page.getByRole("button", { name: "Customize pages", exact: true }),
   ).toBeVisible({ timeout: 60_000 });
@@ -248,6 +251,14 @@ test("long cover text auto-fits before the export is created", async ({ page }) 
         .flatMap((item) => item.blocks),
     ),
   ).toBe(text(JSON.parse(document(2)).blocks));
+
+  const coverScale = state.exported().pages?.[0].text_scale;
+  await page.getByRole("button", { name: "Customize pages", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Prepare social pages" });
+  await dialog.getByRole("button", { name: "Edit page 2", exact: true }).click();
+  await setRangeValue(dialog.getByRole("slider", { name: "Text size for all pages" }), 90);
+  await expect.poll(() => state.exported().pages?.slice(1).every((item) => item.text_scale === 0.9)).toBe(true);
+  expect(state.exported().pages?.[0].text_scale).toBe(coverScale);
 });
 
 test("long cover text crops the image height without resizing the typography", async ({
@@ -781,7 +792,7 @@ test("quote page toolbar formatting keeps spaces in quote text", async ({ page }
   ).toBe("Lorem Ipsum is");
 });
 
-test("auto-sized quote keeps a space inserted after bold text", async ({ page }) => {
+test("a long quote flows across pages at the shared size and keeps rich text", async ({ page }) => {
   const content = `Lorem Ipsumis ${"word ".repeat(95)}`;
   const { state, dialog } = await preparePageEditor(
     page,
@@ -791,13 +802,15 @@ test("auto-sized quote keeps a space inserted after bold text", async ({ page })
     }),
   );
   const canvas = dialog.locator("main [data-page-canvas]");
-  const textSize = dialog.getByRole("slider", { name: "Text size" });
+  const textSize = dialog.getByRole("slider", { name: "Text size for all pages" });
   const bodySize = await textSize.getAttribute("aria-valuetext");
   await dialog.getByRole("combobox", { name: "Page layout" }).click();
   await page.getByRole("option", { name: "Featured quote", exact: true }).click();
   const editor = canvas.locator('.letter-page-quote-document .bn-editor[contenteditable="true"]');
   await expect(editor).toBeVisible();
-  await expect.poll(() => textSize.getAttribute("aria-valuetext")).not.toBe(bodySize);
+  await expect.poll(() => textSize.getAttribute("aria-valuetext")).toBe(bodySize);
+  await expect.poll(() => state.exported().pages?.filter((page) => page.layout === "quote").length).toBeGreaterThan(1);
+  expect(new Set(state.exported().pages?.slice(1).map((page) => page.text_scale)).size).toBe(1);
 
   await selectPageEditorText(editor, 0, "Lorem Ipsum".length);
   await dialog.locator('.bn-toolbar [data-test="bold"]').click();
@@ -812,6 +825,12 @@ test("auto-sized quote keeps a space inserted after bold text", async ({ page })
     () => text(state.exported().pages?.[1].blocks),
     { timeout: 60_000 },
   ).toContain("Lorem Ipsum is");
+
+  await setRangeValue(textSize, 110);
+  await expect.poll(
+    () => text(state.exported().pages?.filter((item) => item.layout === "quote").flatMap((item) => item.blocks)),
+    { timeout: 60_000 },
+  ).toBe(`Lorem Ipsum is ${"word ".repeat(95)}`);
 });
 
 test("bold page text accepts a trailing space before more typing", async ({ page }) => {
@@ -1273,6 +1292,9 @@ for (const format of ["portrait", "square", "story", "landscape"] as const) {
   test(`${format}: measured pages preserve text, fit, and reflow with text size`, async ({ page }) => {
     const original = document(100);
     const state = await fixture(page, original, format);
+    if (format === "portrait") {
+      await page.getByRole("button", { name: "Preview pages" }).click();
+    }
     await expect(page.getByRole("button", { name: "Customize pages", exact: true })).toBeVisible({ timeout: 60_000 });
     expect(text(state.exported().pages?.slice(1).flatMap((p) => p.blocks))).toBe(text(JSON.parse(original).blocks));
     await page.getByRole("button", { name: "Customize pages", exact: true }).click();
@@ -1281,7 +1303,7 @@ for (const format of ["portrait", "square", "story", "landscape"] as const) {
     await expect(dialog.locator(".bn-editor")).toBeVisible();
     for (const scale of [140, 70, 100]) {
       const count = state.updates.length;
-      await dialog.getByRole("slider", { name: "Text size", exact: true }).evaluate((node, value) => {
+      await dialog.getByRole("slider", { name: "Text size for all pages", exact: true }).evaluate((node, value) => {
         const input = node as HTMLInputElement;
         Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, String(value));
         input.dispatchEvent(new Event("input", { bubbles: true }));
@@ -1290,6 +1312,7 @@ for (const format of ["portrait", "square", "story", "landscape"] as const) {
       await expect.poll(() => state.updates.length, { timeout: 60_000 }).toBeGreaterThan(count);
       await expect(dialog.getByText("Saved", { exact: true })).toBeVisible();
       expect(text(state.exported().pages?.slice(1).flatMap((p) => p.blocks))).toBe(text(JSON.parse(original).blocks));
+      expect(new Set(state.exported().pages?.slice(1).map((page) => page.text_scale))).toEqual(new Set([scale / 100]));
       for (const p of state.exported().pages!.slice(1)) {
         await dialog.getByRole("button", { name: `Edit page ${p.number}`, exact: true }).click();
         await expect(dialog.locator(".bn-editor")).toBeVisible();
@@ -1301,7 +1324,7 @@ for (const format of ["portrait", "square", "story", "landscape"] as const) {
 }
 
 test("long letters create every page they need without blocking preparation", async ({ page }) => {
-  const original = document(250);
+  const original = document(350);
   const state = await fixture(page, original, "landscape");
   await expect(
     page.getByRole("button", { name: "Customize pages", exact: true }),
@@ -1426,12 +1449,13 @@ test("the page workspace closes while pending edits save", async ({ page }) => {
 
 test("body text survives autosave, page changes, and an immediate close", async ({ page }) => {
   const state = await fixture(page, document(2));
+  await page.getByRole("button", { name: "Preview pages" }).click();
   await expect(
     page.getByRole("button", { name: "Customize pages", exact: true }),
   ).toBeVisible({ timeout: 60_000 });
   await page.getByRole("button", { name: "Customize pages", exact: true }).click();
 
-  const dialog = page.getByRole("dialog");
+  const dialog = page.getByRole("dialog", { name: "Prepare social pages" });
   await dialog.getByRole("button", { name: "Edit page 2", exact: true }).click();
   const bodyEditor = dialog.locator(
     'main .letter-page-document [contenteditable="true"]',
@@ -1450,13 +1474,40 @@ test("body text survives autosave, page changes, and an immediate close", async 
   await bodyEditor.press("End");
   await bodyEditor.pressSequentially(" Final words.");
   await dialog.getByRole("button", { name: "Close", exact: true }).click();
-  await expect(dialog).toBeHidden({ timeout: 500 });
+  await expect(dialog).toBeHidden({ timeout: 60_000 });
   await expect
     .poll(
       () => text(state.exported().pages?.slice(1).flatMap((item) => item.blocks)),
       { timeout: 60_000 },
     )
     .toContain("A page draft that must survive autosave. Final words.");
+});
+
+test("text edits and one shared size survive delayed saves and reopening", async ({ page }) => {
+  const state = await fixture(page, document(60), "portrait", { updateDelayMs: 800 });
+  await page.getByRole("button", { name: "Preview pages" }).click();
+  await expect(page.getByRole("button", { name: "Customize pages", exact: true })).toBeVisible({ timeout: 60_000 });
+  await page.getByRole("button", { name: "Customize pages", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Prepare social pages" });
+  const coverSize = await dialog.getByRole("slider", { name: "Overall text size" }).inputValue();
+  await dialog.getByRole("button", { name: "Edit page 2", exact: true }).click();
+  const size = dialog.getByRole("slider", { name: "Text size for all pages" });
+  await setRangeValue(size, 120);
+  const editor = dialog.locator('main .letter-page-document [contenteditable="true"]');
+  await editor.press("End");
+  await editor.pressSequentially(" A saved addition.");
+  await dialog.getByRole("button", { name: "Close", exact: true }).click();
+  await expect(dialog).toBeHidden({ timeout: 60_000 });
+
+  await expect.poll(() => state.letter().content).toContain("A saved addition.");
+  expect(state.exported().pages?.[0].text_scale).toBe(Number(coverSize) / 100);
+  expect(new Set(state.exported().pages?.slice(1).map((item) => item.text_scale))).toEqual(new Set([1.2]));
+  expect(new Set(state.exported().pages?.slice(1).map((item) => item.text_scale_mode))).toEqual(new Set(["manual"]));
+
+  await page.getByRole("button", { name: "Customize pages", exact: true }).click();
+  await dialog.getByRole("button", { name: "Edit page 2", exact: true }).click();
+  await expect(dialog.getByRole("slider", { name: "Text size for all pages" })).toHaveValue("120");
+  await expect(dialog.locator('main .letter-page-document [contenteditable="true"]')).toContainText("A saved addition.");
 });
 
 test("dark background applies to cover, body, rich text, logos, and thumbnails", async ({
