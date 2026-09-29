@@ -1,5 +1,6 @@
 "use client";
 
+import { useTheme } from "next-themes";
 import { useEffect, useState } from "react";
 import {
   Clock3,
@@ -37,12 +38,15 @@ export function JournalEntryEditor({
   onSaved: (entry: JournalEntry, created: boolean) => void;
   onRegisterDeleteFlush: (flush?: () => Promise<void>) => void;
 }) {
+  const { resolvedTheme } = useTheme();
   const [historyState, setHistoryState] = useState<NoteEditorHistoryState>({
     canUndo: false,
     canRedo: false,
   });
   const [editorControls, setEditorControls] =
     useState<NoteRichTextEditorControls | null>(null);
+  const [formattingToolbarContainer, setFormattingToolbarContainer] =
+    useState<HTMLDivElement | null>(null);
   const autosave = useJournalAutosave({
     initialUuid: entry?.uuid,
     initialTitle: entry?.title ?? "",
@@ -133,23 +137,35 @@ export function JournalEntryEditor({
 
       {entry?.source && <FocusSource source={entry.source} />}
 
-      <div className="flex h-full min-h-0 min-w-0 flex-1 overflow-hidden rounded-lg border bg-white">
-        <NoteRichTextEditor
-          mode="resource"
-          documentId={entry?.uuid ?? `journal-draft-${draftKey}`}
-          content={entry?.content ?? EMPTY_NOTE_DOCUMENT}
-          editable
-          noteOptions={[]}
-          onChange={autosave.updateContent}
-          onUploadFile={unavailable}
-          onCreateChild={unavailable}
-          onOpenNote={noop}
-          onEditorReady={setEditorControls}
-          onHistoryStateChange={setHistoryState}
-          onBlur={() => void autosave.flush().catch(() => undefined)}
-        />
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-lg border bg-card text-card-foreground">
+        <div className="shrink-0 border-b bg-card px-3 py-1.5 sm:px-5">
+          <div
+            ref={setFormattingToolbarContainer}
+            role="toolbar"
+            aria-label="Journal formatting"
+            className="journal-formatting-toolbar min-h-10 min-w-0 overflow-x-auto"
+          />
+        </div>
+        <div className="journal-writing-canvas flex min-h-0 min-w-0 flex-1 overflow-hidden">
+          <NoteRichTextEditor
+            mode="resource"
+            theme={resolvedTheme === "dark" ? "dark" : "light"}
+            formattingToolbarMode="persistent"
+            formattingToolbarContainer={formattingToolbarContainer}
+            documentId={entry?.uuid ?? `journal-draft-${draftKey}`}
+            content={entry?.content ?? EMPTY_NOTE_DOCUMENT}
+            editable
+            noteOptions={[]}
+            onChange={autosave.updateContent}
+            onUploadFile={unavailable}
+            onCreateChild={unavailable}
+            onOpenNote={noop}
+            onEditorReady={setEditorControls}
+            onHistoryStateChange={setHistoryState}
+            onBlur={() => void autosave.flush().catch(() => undefined)}
+          />
+        </div>
       </div>
-
     </div>
   );
 }

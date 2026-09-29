@@ -188,10 +188,10 @@ export function JournalWorkspace({
       <div className="flex min-h-0 min-w-0 flex-1">
         <div
           className={cn(
-            "grid h-full min-h-0 min-w-0 flex-1 grid-rows-[auto_minmax(0,1fr)] overflow-hidden rounded-xl border bg-card md:grid-rows-[minmax(0,1fr)]",
+            "grid h-full min-h-0 min-w-0 flex-1 overflow-hidden rounded-xl border bg-card md:grid-rows-[minmax(0,1fr)]",
             listOpen
-              ? "md:grid-cols-[23rem_minmax(0,1fr)]"
-              : "md:grid-cols-[minmax(0,1fr)]",
+              ? "grid-rows-[auto_minmax(0,1fr)] md:grid-cols-[23rem_minmax(0,1fr)]"
+              : "grid-rows-[minmax(0,1fr)] md:grid-cols-[minmax(0,1fr)]",
           )}
         >
           {listOpen && (
@@ -216,7 +216,7 @@ export function JournalWorkspace({
           <section
             aria-label="Journal entry editor"
             className={cn(
-              "relative flex min-h-0 min-w-0 justify-center overflow-hidden bg-white p-4 sm:p-6",
+              "relative flex min-h-0 min-w-0 justify-center overflow-hidden bg-card p-4 sm:p-6",
               !listOpen && "pt-14 sm:pt-16",
             )}
           >

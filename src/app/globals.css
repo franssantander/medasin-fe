@@ -387,6 +387,72 @@
   background-clip: padding-box;
 }
 
+.journal-formatting-toolbar {
+  scrollbar-color: color-mix(in oklab, var(--muted-foreground) 40%, transparent)
+    transparent;
+  scrollbar-width: thin;
+}
+
+.journal-formatting-toolbar .bn-toolbar {
+  width: max-content;
+  min-width: 100%;
+  max-width: none;
+  justify-content: flex-start;
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
+  box-shadow: none;
+}
+
+.journal-formatting-toolbar .bn-button {
+  min-height: 2.5rem;
+}
+
+.journal-writing-canvas .note-rich-text,
+.journal-writing-canvas .note-rich-text > div,
+.journal-writing-canvas .note-rich-text .bn-container,
+.journal-writing-canvas .note-rich-text .bn-editor,
+.journal-writing-canvas .note-rich-text .ProseMirror {
+  background: var(--card);
+  color: var(--card-foreground);
+}
+
+.journal-writing-canvas .note-rich-text .bn-editor {
+  padding-block: 1.5rem 3rem;
+  padding-inline: 2.5rem 1rem;
+  font-size: 1rem;
+  line-height: 1.625;
+}
+
+.journal-writing-canvas .note-rich-text .bn-editor > .bn-block-group {
+  max-width: 70ch;
+  margin-inline: auto;
+}
+
+.journal-writing-canvas .bn-block-outer {
+  line-height: 1.625;
+}
+
+.journal-writing-canvas
+  .bn-block-content:is(
+    [data-content-type="paragraph"],
+    [data-content-type="bulletListItem"],
+    [data-content-type="numberedListItem"],
+    [data-content-type="checkListItem"],
+    [data-content-type="quote"]
+  ) {
+  padding-block: 4px;
+}
+
+@media (min-width: 640px) {
+  .journal-writing-canvas .note-rich-text .bn-editor {
+    padding-block: 2rem 3rem;
+    padding-inline: 3.25rem;
+  }
+}
+
 @media (min-width: 640px) {
   .letter-composer-document .note-rich-text .bn-editor {
     padding-inline: 3.25rem;
