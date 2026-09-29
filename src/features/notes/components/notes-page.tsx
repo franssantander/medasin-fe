@@ -48,14 +48,14 @@ export function NotesPage({ initialNoteUuid }: { initialNoteUuid?: string }) {
   );
 
   return (
-    <div className="flex min-h-full min-w-0 flex-col gap-5">
-      <PageHeader
-        title="Notes"
-        description="Capture ideas, write freely, and keep related pages together."
-      />
-      <div className="flex h-[calc(100dvh-10rem)] min-h-[36rem] min-w-0">
-        {areasQuery.isError ? (
-          <div className="flex flex-1 items-center justify-center rounded-xl border bg-card p-8 text-center">
+    <div className="h-[calc(100dvh-5.5rem)] min-w-0 sm:h-[calc(100dvh-6.5rem)]">
+      {areasQuery.isError ? (
+        <div className="flex h-full min-h-0 min-w-0 flex-col gap-5">
+          <PageHeader
+            title="Notes"
+            description="Capture ideas, write freely, and keep related pages together."
+          />
+          <div className="flex min-h-0 flex-1 items-center justify-center rounded-xl border bg-card p-8 text-center">
             <div className="grid max-w-sm gap-3">
               <h2 className="font-semibold">Could not load Areas</h2>
               <p className="text-sm text-muted-foreground">
@@ -71,13 +71,14 @@ export function NotesPage({ initialNoteUuid }: { initialNoteUuid?: string }) {
               </Button>
             </div>
           </div>
-        ) : (
-          <NoteWorkspace
-            collections={collections}
-            initialNoteUuid={initialNoteUuid}
-          />
-        )}
-      </div>
+        </div>
+      ) : (
+        <NoteWorkspace
+          collections={collections}
+          initialNoteUuid={initialNoteUuid}
+          presentation="journal"
+        />
+      )}
     </div>
   );
 }

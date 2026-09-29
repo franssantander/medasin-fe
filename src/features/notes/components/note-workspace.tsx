@@ -8,6 +8,7 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
+import { useTheme } from "next-themes";
 import {
   ChevronRight,
   Ellipsis,
@@ -24,6 +25,8 @@ import {
   Undo2,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { ReactNode } from "react";
+import PageHeader from "@/components/shared/page-header";
 import {
   Accordion,
   AccordionContent,
@@ -99,12 +102,46 @@ type NoteCollectionState = NoteWorkspaceCollection & {
   flatNotes: FlatNote[];
 };
 
+type NoteWorkspacePresentation = "standard" | "journal";
+
+function NoteWorkspaceFrame({
+  presentation,
+  onNew,
+  children,
+}: {
+  presentation: NoteWorkspacePresentation;
+  onNew?: () => void;
+  children: ReactNode;
+}) {
+  if (presentation === "standard") return <>{children}</>;
+
+  return (
+    <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col gap-5">
+      <PageHeader
+        title="Notes"
+        description="Capture ideas, write freely, and keep related pages together."
+        action={
+          onNew ? (
+            <Button type="button" onClick={onNew}>
+              <Plus data-icon="inline-start" />
+              New note
+            </Button>
+          ) : undefined
+        }
+      />
+      <div className="flex min-h-0 min-w-0 flex-1">{children}</div>
+    </div>
+  );
+}
+
 export function NoteWorkspace({
   collections,
   initialNoteUuid,
+  presentation = "standard",
 }: {
   collections: NoteWorkspaceCollection[];
   initialNoteUuid?: string;
+  presentation?: NoteWorkspacePresentation;
 }) {
   const queryClient = useQueryClient();
   const [selection, setSelection] = useState<NoteSelection>();
@@ -175,7 +212,9 @@ export function NoteWorkspace({
     0,
   );
   const visibleCollections = collectionStates.filter(
-    (collection) => collection.tree.length > 0 || collection.canCreate,
+    (collection) =>
+      collection.tree.length > 0 ||
+      (presentation === "standard" && collection.canCreate),
   );
   const showCollectionLabels = collections.length > 1;
 
@@ -242,32 +281,6 @@ export function NoteWorkspace({
   const isTreeLoading = treeQueries.some((query) => query.isLoading);
   const treeError = treeQueries.find((query) => query.isError);
 
-  if (isTreeLoading) {
-    return <Skeleton className="min-h-[48rem] flex-1 rounded-xl" />;
-  }
-
-  if (treeError) {
-    return (
-      <Card className="items-center py-12 text-center">
-        <CardTitle>Could not load notes</CardTitle>
-        <CardDescription>
-          {treeError.error instanceof Error
-            ? treeError.error.message
-            : "Check your connection and try again."}
-        </CardDescription>
-        <Button
-          variant="outline"
-          onClick={() => {
-            void Promise.all(treeQueries.map((query) => query.refetch()));
-          }}
-        >
-          <RefreshCw />
-          Try again
-        </Button>
-      </Card>
-    );
-  }
-
   const startDraft = () => {
     if (!createCollection) return;
 
@@ -280,22 +293,68 @@ export function NoteWorkspace({
     });
   };
 
-  if (!selectedCollection) {
+  if (isTreeLoading) {
     return (
-      <Card className="items-center py-12 text-center">
-        <CardTitle>No note collection available</CardTitle>
-        <CardDescription>Try refreshing the page.</CardDescription>
-      </Card>
+      <NoteWorkspaceFrame presentation={presentation}>
+        <Skeleton
+          className={cn(
+            "flex-1 rounded-xl",
+            presentation === "journal" ? "min-h-0" : "min-h-[48rem]",
+          )}
+        />
+      </NoteWorkspaceFrame>
     );
   }
 
-  return (
+  if (treeError) {
+    return (
+      <NoteWorkspaceFrame presentation={presentation}>
+        <Card className={cn("items-center py-12 text-center", presentation === "journal" && "flex-1")}>
+          <CardTitle>Could not load notes</CardTitle>
+          <CardDescription>
+            {treeError.error instanceof Error
+              ? treeError.error.message
+              : "Check your connection and try again."}
+          </CardDescription>
+          <Button
+            variant="outline"
+            onClick={() => {
+              void Promise.all(treeQueries.map((query) => query.refetch()));
+            }}
+          >
+            <RefreshCw data-icon="inline-start" />
+            Try again
+          </Button>
+        </Card>
+      </NoteWorkspaceFrame>
+    );
+  }
+
+  if (!selectedCollection) {
+    return (
+      <NoteWorkspaceFrame presentation={presentation}>
+        <Card className={cn("items-center py-12 text-center", presentation === "journal" && "flex-1")}>
+          <CardTitle>No note collection available</CardTitle>
+          <CardDescription>Try refreshing the page.</CardDescription>
+        </Card>
+      </NoteWorkspaceFrame>
+    );
+  }
+
+  const workspace = (
     <div
       className={cn(
-        "grid h-full min-h-0 min-w-0 flex-1 grid-rows-[auto_minmax(0,1fr)] overflow-hidden rounded-xl border bg-card md:grid-rows-[minmax(0,1fr)]",
+        "grid h-full min-h-0 min-w-0 flex-1 overflow-hidden rounded-xl border bg-card md:grid-rows-[minmax(0,1fr)]",
         notesListOpen
-          ? "md:grid-cols-[24rem_minmax(0,1fr)]"
-          : "md:grid-cols-[minmax(0,1fr)]",
+          ? cn(
+              "grid-rows-[auto_minmax(0,1fr)]",
+              presentation === "journal"
+                ? "md:grid-cols-[23rem_minmax(0,1fr)]"
+                : "md:grid-cols-[24rem_minmax(0,1fr)]",
+            )
+          : presentation === "journal"
+            ? "grid-rows-[minmax(0,1fr)] md:grid-cols-[minmax(0,1fr)]"
+            : "grid-rows-[auto_minmax(0,1fr)] md:grid-cols-[minmax(0,1fr)]",
       )}
     >
       {notesListOpen && (
@@ -310,15 +369,18 @@ export function NoteWorkspace({
             <div className="flex items-center gap-1">
               {createCollection && (
                 <Button
+                  type="button"
                   variant="ghost"
                   size="icon-sm"
                   aria-label="New note"
+                  title="New note"
                   onClick={startDraft}
                 >
                   <Plus />
                 </Button>
               )}
               <Button
+                type="button"
                 variant="ghost"
                 size="icon-sm"
                 aria-label="Close notes list"
@@ -329,13 +391,15 @@ export function NoteWorkspace({
               </Button>
             </div>
           </div>
-          <div className="workspace-list-scrollbar max-h-64 min-w-0 overflow-x-hidden overflow-y-auto p-2 md:max-h-none md:flex-1">
+          <div className="workspace-list-scrollbar max-h-64 min-h-0 min-w-0 overflow-x-hidden overflow-y-auto p-2 md:max-h-none md:flex-1">
             {visibleCollections.length === 0 ? (
-              <p className="px-2 py-6 text-center text-sm text-muted-foreground">
-                {selectedCollection.archived
-                  ? "No notes in this collection."
-                  : "Start writing your first note."}
-              </p>
+              presentation === "standard" ? (
+                <p className="px-2 py-6 text-center text-sm text-muted-foreground">
+                  {selectedCollection.archived
+                    ? "No notes in this collection."
+                    : "Start writing your first note."}
+                </p>
+              ) : null
             ) : (
               <div className="grid gap-5">
                 {visibleCollections.map((collection) => (
@@ -364,6 +428,7 @@ export function NoteWorkspace({
                       </p>
                     ) : (
                       <NoteTree
+                        presentation={presentation}
                         nodes={collection.tree}
                         selectedUuid={
                           derivedSelection.collectionKey === collection.key
@@ -402,12 +467,27 @@ export function NoteWorkspace({
           </div>
         </aside>
       )}
-      <main className="relative flex min-h-0 min-w-0 justify-center overflow-hidden bg-white p-6">
+      <main
+        aria-label="Note editor"
+        className={cn(
+          "relative flex min-h-0 min-w-0 justify-center overflow-hidden",
+          presentation === "journal"
+            ? "bg-card p-4 sm:p-6"
+            : "bg-white p-6",
+          !notesListOpen && presentation === "journal" && "pt-14 sm:pt-16",
+        )}
+      >
         {!notesListOpen && (
           <Button
+            type="button"
             variant="ghost"
             size="icon-sm"
-            className="absolute top-3 left-3 z-10"
+            className={cn(
+              "absolute z-10",
+              presentation === "journal"
+                ? "top-4 left-4 sm:top-6 sm:left-6"
+                : "top-3 left-3",
+            )}
             aria-label="Open notes list"
             title="Open notes list"
             onClick={() => setNotesListOpen(true)}
@@ -418,11 +498,12 @@ export function NoteWorkspace({
         <div
           className={cn(
             "h-full min-h-0 min-w-0 flex-1",
-            !notesListOpen && "md:max-w-[calc(100%-24rem)]",
+            !notesListOpen && presentation === "standard" && "md:max-w-[calc(100%-24rem)]",
           )}
         >
           {derivedSelection.kind === "note" ? (
             <PersistedNotePanel
+              presentation={presentation}
               key={`${selectedCollection.key}:${derivedSelection.uuid}`}
               service={selectedCollection.service}
               queryKeys={selectedCollection.queryKeys}
@@ -442,6 +523,7 @@ export function NoteWorkspace({
             />
           ) : (
             <NoteEditorPanel
+              presentation={presentation}
               key={`draft-${derivedSelection.collectionKey}-${derivedSelection.key}`}
               service={selectedCollection.service}
               queryKeys={selectedCollection.queryKeys}
@@ -450,6 +532,7 @@ export function NoteWorkspace({
               initialTitle=""
               initialContent={EMPTY_NOTE_DOCUMENT}
               initialPinned={false}
+              focusTitle={presentation === "journal" && derivedSelection.key > 0}
               persistedUuid={derivedSelection.uuid}
               noteOptions={selectedNotes}
               onCreated={(note) => {
@@ -529,9 +612,19 @@ export function NoteWorkspace({
       </Dialog>
     </div>
   );
+
+  return (
+    <NoteWorkspaceFrame
+      presentation={presentation}
+      onNew={createCollection ? startDraft : undefined}
+    >
+      {workspace}
+    </NoteWorkspaceFrame>
+  );
 }
 
 function PersistedNotePanel({
+  presentation,
   service,
   queryKeys,
   noteUuid,
@@ -541,6 +634,7 @@ function PersistedNotePanel({
   onOpenNote,
   onTreeChanged,
 }: {
+  presentation: NoteWorkspacePresentation;
   service: NoteWorkspaceService;
   queryKeys: NoteWorkspaceQueryKeys;
   noteUuid: string;
@@ -571,6 +665,7 @@ function PersistedNotePanel({
   const note = noteQuery.data.data;
   return (
     <NoteEditorPanel
+      presentation={presentation}
       service={service}
       queryKeys={queryKeys}
       archived={archived}
@@ -589,6 +684,7 @@ function PersistedNotePanel({
 }
 
 function NoteEditorPanel({
+  presentation,
   service,
   queryKeys,
   archived,
@@ -603,6 +699,7 @@ function NoteEditorPanel({
   onOpenNote,
   onTreeChanged,
 }: {
+  presentation: NoteWorkspacePresentation;
   service: NoteWorkspaceService;
   queryKeys: NoteWorkspaceQueryKeys;
   archived: boolean;
@@ -618,6 +715,8 @@ function NoteEditorPanel({
   onTreeChanged: () => Promise<void>;
 }) {
   const queryClient = useQueryClient();
+  const { resolvedTheme } = useTheme();
+  const journalStyle = presentation === "journal";
   const [title, setTitle] = useState(initialTitle);
   const [saveStatus, setSaveStatus] = useState<
     "idle" | "dirty" | "saving" | "saved" | "error"
@@ -627,6 +726,8 @@ function NoteEditorPanel({
     canUndo: false,
     canRedo: false,
   });
+  const [formattingToolbarContainer, setFormattingToolbarContainer] =
+    useState<HTMLDivElement | null>(null);
   const uuidRef = useRef(persistedUuid);
   const titleInputRef = useRef<HTMLInputElement>(null);
   const editorControlsRef = useRef<NoteRichTextEditorControls | null>(null);
@@ -774,21 +875,98 @@ function NoteEditorPanel({
     [],
   );
 
+  const editor = (
+    <NoteRichTextEditor
+      theme={journalStyle && resolvedTheme === "dark" ? "dark" : "light"}
+      formattingToolbarMode={journalStyle ? "persistent" : "floating"}
+      formattingToolbarContainer={
+        journalStyle ? formattingToolbarContainer : undefined
+      }
+      documentId={documentId}
+      content={initialContent}
+      editable={!archived}
+      noteOptions={editorOptions}
+      onEditorReady={handleEditorReady}
+      onHistoryStateChange={setHistoryState}
+      onChange={(content) => {
+        contentRef.current = content;
+        scheduleSave();
+      }}
+      onUploadFile={async (file) => {
+        try {
+          if (file.size >= MAX_NOTE_MEDIA_REQUEST_BYTES) {
+            const mediaType = file.type.startsWith("image/")
+              ? "Images"
+              : "Files";
+            throw new Error(`${mediaType} must be smaller than 8 MB.`);
+          }
+
+          const uuid = await ensureNote(currentInput());
+          const response = await service.uploadMedia(uuid, file);
+          const uploadResponse = response as
+            | NoteApiResponse<NoteMedia>
+            | NoteMedia
+            | undefined;
+          const media =
+            uploadResponse && "data" in uploadResponse
+              ? uploadResponse.data
+              : uploadResponse;
+
+          if (!media?.url) {
+            throw new Error("The upload response did not include a media URL.");
+          }
+
+          return media.url;
+        } catch (error) {
+          const uploadError = parseApiError(error);
+          const description = uploadError.message.includes(
+            "POST Content-Length",
+          )
+            ? `${file.type.startsWith("image/") ? "Images" : "Files"} must be smaller than 8 MB.`
+            : uploadError.message;
+          toast.add({ type: "error", description });
+          throw uploadError;
+        }
+      }}
+      onCreateChild={async () => {
+        const parentUuid = await ensureNote(currentInput());
+        const response = await service.create({
+          title: "Untitled",
+          content: EMPTY_NOTE_DOCUMENT,
+          is_pinned: false,
+          parent_uuid: parentUuid,
+        });
+        queryClient.setQueryData(
+          queryKeys.detail(response.data.uuid),
+          response,
+        );
+        void onTreeChanged().catch(() => undefined);
+        return { uuid: response.data.uuid, title: response.data.title };
+      }}
+      onOpenNote={onOpenNote}
+    />
+  );
+
   return (
     <div className="flex h-full min-h-0 w-full min-w-0 flex-col gap-4">
-      <div className="relative w-full">
+      <div className={cn("w-full", journalStyle ? "grid shrink-0 gap-3" : "relative")}>
         {notePath.length > 1 && (
           <NoteBreadcrumbs
             path={notePath}
             currentTitle={title}
             onOpenNote={onOpenNote}
+            presentation={presentation}
           />
         )}
-        <div className="relative">
+        <div className={cn(journalStyle ? "grid gap-2" : "relative")}>
           <Input
             ref={titleInputRef}
             aria-label="Note title"
-            className="h-auto w-full border-0 px-0 py-0 pr-48 pl-13 text-2xl font-bold shadow-none focus-visible:ring-0 md:text-3xl"
+              className={cn(
+                "h-auto w-full border-0 px-0 py-0 text-2xl font-bold shadow-none focus-visible:ring-0 md:text-3xl",
+                journalStyle && "notes-editor-title",
+                !journalStyle && "pr-48 pl-13",
+              )}
             placeholder="Untitled"
             maxLength={120}
             value={title}
@@ -816,26 +994,39 @@ function NoteEditorPanel({
               }
             }}
           />
-          <div className="absolute top-1/2 right-13 flex -translate-y-1/2 items-center gap-1.5">
-            <div className="text-xs whitespace-nowrap text-muted-foreground">
+          <div
+            className={cn(
+              "flex items-center gap-2",
+              journalStyle
+                ? "flex-wrap"
+                : "absolute top-1/2 right-13 -translate-y-1/2 gap-1.5",
+            )}
+          >
+            <span
+              aria-live="polite"
+              className={cn(
+                "text-xs text-muted-foreground",
+                journalStyle ? "mr-auto" : "whitespace-nowrap",
+              )}
+            >
               {archived ? (
                 "Read only"
               ) : saveStatus === "saving" ? (
                 "Saving…"
               ) : saveStatus === "dirty" ? (
-                "Unsaved"
+                journalStyle ? "Unsaved changes" : "Unsaved"
               ) : saveStatus === "saved" ? (
                 "Saved"
               ) : saveStatus === "error" ? (
                 <button
                   type="button"
-                  className="text-destructive underline"
+                  className="text-destructive underline underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   onClick={flush}
                 >
                   Retry save
                 </button>
               ) : null}
-            </div>
+            </span>
             <div className="flex items-center gap-0.5">
               <Button
                 type="button"
@@ -865,70 +1056,25 @@ function NoteEditorPanel({
           </div>
         </div>
       </div>
-      <NoteRichTextEditor
-        documentId={documentId}
-        content={initialContent}
-        editable={!archived}
-        noteOptions={editorOptions}
-        onEditorReady={handleEditorReady}
-        onHistoryStateChange={setHistoryState}
-        onChange={(content) => {
-          contentRef.current = content;
-          scheduleSave();
-        }}
-        onUploadFile={async (file) => {
-          try {
-            if (file.size >= MAX_NOTE_MEDIA_REQUEST_BYTES) {
-              const mediaType = file.type.startsWith("image/")
-                ? "Images"
-                : "Files";
-              throw new Error(`${mediaType} must be smaller than 8 MB.`);
-            }
-
-            const uuid = await ensureNote(currentInput());
-            const response = await service.uploadMedia(uuid, file);
-            const uploadResponse = response as
-              | NoteApiResponse<NoteMedia>
-              | NoteMedia
-              | undefined;
-            const media =
-              uploadResponse && "data" in uploadResponse
-                ? uploadResponse.data
-                : uploadResponse;
-
-            if (!media?.url) {
-              throw new Error("The upload response did not include a media URL.");
-            }
-
-            return media.url;
-          } catch (error) {
-            const uploadError = parseApiError(error);
-            const description = uploadError.message.includes(
-              "POST Content-Length",
-            )
-              ? `${file.type.startsWith("image/") ? "Images" : "Files"} must be smaller than 8 MB.`
-              : uploadError.message;
-            toast.add({ type: "error", description });
-            throw uploadError;
-          }
-        }}
-        onCreateChild={async () => {
-          const parentUuid = await ensureNote(currentInput());
-          const response = await service.create({
-            title: "Untitled",
-            content: EMPTY_NOTE_DOCUMENT,
-            is_pinned: false,
-            parent_uuid: parentUuid,
-          });
-          queryClient.setQueryData(
-            queryKeys.detail(response.data.uuid),
-            response,
-          );
-          void onTreeChanged().catch(() => undefined);
-          return { uuid: response.data.uuid, title: response.data.title };
-        }}
-        onOpenNote={onOpenNote}
-      />
+      {journalStyle ? (
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-lg border bg-card text-card-foreground">
+          {!archived && (
+            <div className="shrink-0 border-b bg-card px-3 py-1.5 sm:px-5">
+              <div
+                ref={setFormattingToolbarContainer}
+                role="toolbar"
+                aria-label="Note formatting"
+                className="notes-formatting-toolbar min-h-10 min-w-0 overflow-x-auto"
+              />
+            </div>
+          )}
+          <div className="notes-writing-canvas flex min-h-0 min-w-0 flex-1 overflow-hidden">
+            {editor}
+          </div>
+        </div>
+      ) : (
+        editor
+      )}
     </div>
   );
 }
@@ -939,10 +1085,12 @@ function NoteBreadcrumbs({
   path,
   currentTitle,
   onOpenNote,
+  presentation,
 }: {
   path: FlatNote[];
   currentTitle: string;
   onOpenNote: (uuid: string) => void;
+  presentation: NoteWorkspacePresentation;
 }) {
   const displayTitle = currentTitle.trim() || "Untitled";
   const isCollapsed = path.length > 3;
@@ -952,7 +1100,10 @@ function NoteBreadcrumbs({
   return (
     <nav
       aria-label="Note breadcrumb"
-      className="mb-2 min-w-0 px-13 text-muted-foreground"
+      className={cn(
+        "min-w-0 text-muted-foreground",
+        presentation === "journal" ? "px-0" : "mb-2 px-13",
+      )}
     >
       <ol className="flex min-w-0 items-center gap-1 text-xs">
         {visibleAncestors.map((note, index) => (
@@ -1064,6 +1215,7 @@ function buildNotePath(notes: FlatNote[], noteUuid?: string) {
 }
 
 function NoteTree({
+  presentation,
   nodes,
   selectedUuid,
   archived,
@@ -1073,6 +1225,7 @@ function NoteTree({
   onPin,
   onDelete,
 }: {
+  presentation: NoteWorkspacePresentation;
   nodes: NoteTreeNode[];
   selectedUuid?: string;
   archived: boolean;
@@ -1114,6 +1267,7 @@ function NoteTree({
 
   return (
     <NoteTreeLevel
+      presentation={presentation}
       nodes={nodes}
       selectedUuid={selectedUuid}
       archived={archived}
@@ -1131,6 +1285,7 @@ function NoteTree({
 }
 
 function NoteTreeLevel({
+  presentation,
   nodes,
   selectedUuid,
   archived,
@@ -1144,6 +1299,7 @@ function NoteTreeLevel({
   onEnsureExpanded,
   depth,
 }: {
+  presentation: NoteWorkspacePresentation;
   nodes: NoteTreeNode[];
   selectedUuid?: string;
   archived: boolean;
@@ -1166,12 +1322,13 @@ function NoteTreeLevel({
       multiple
       value={openUuids}
       onValueChange={(value) => onExpandedChange(nodes, value)}
-      className="grid gap-3"
+      className={cn("grid", presentation === "journal" ? "gap-2" : "gap-3")}
     >
       {nodes.map((node) => (
         <AccordionItem key={node.uuid} value={node.uuid}>
           {depth === 0 ? (
             <RootNoteCard
+              presentation={presentation}
               node={node}
               selectedUuid={selectedUuid}
               archived={archived}
@@ -1187,6 +1344,7 @@ function NoteTreeLevel({
             />
           ) : (
             <ChildNoteRow
+              presentation={presentation}
               node={node}
               selectedUuid={selectedUuid}
               archived={archived}
@@ -1208,6 +1366,7 @@ function NoteTreeLevel({
 }
 
 type NoteTreeItemProps = {
+  presentation: NoteWorkspacePresentation;
   node: NoteTreeNode;
   selectedUuid?: string;
   archived: boolean;
@@ -1223,6 +1382,7 @@ type NoteTreeItemProps = {
 };
 
 function RootNoteCard({
+  presentation,
   node,
   selectedUuid,
   archived,
@@ -1242,9 +1402,14 @@ function RootNoteCard({
     <Card
       size="sm"
       className={cn(
-        "group/note relative min-w-0 gap-0 rounded-lg py-0 shadow-none ring-1 ring-border/90 transition-[background-color,box-shadow] duration-150 hover:bg-muted/25 hover:shadow-xs hover:ring-foreground/15 focus-within:ring-2 focus-within:ring-ring/35",
+        "group/note relative min-w-0 gap-0 rounded-lg py-0 transition-colors duration-150",
+        presentation === "journal"
+          ? "border border-border shadow-none ring-0 hover:bg-background/80 focus-within:ring-2 focus-within:ring-ring/35"
+          : "shadow-none ring-1 ring-border/90 hover:bg-muted/25 hover:shadow-xs hover:ring-foreground/15 focus-within:ring-2 focus-within:ring-ring/35",
         selectedUuid === node.uuid &&
-          "bg-accent/60 shadow-xs ring-foreground/20 hover:bg-accent/70 hover:ring-foreground/25",
+          (presentation === "journal"
+            ? "border-primary/40 bg-background shadow-xs"
+            : "bg-accent/60 shadow-xs ring-foreground/20 hover:bg-accent/70 hover:ring-foreground/25"),
       )}
     >
       <div className="relative min-w-0">
@@ -1274,16 +1439,16 @@ function RootNoteCard({
             ) : (
               <FileText className="size-3.5 shrink-0 text-muted-foreground" />
             )}
-            <span className="min-w-0 flex-1 truncate text-sm font-medium">
+            <span className={cn("min-w-0 flex-1 truncate text-sm", presentation === "journal" ? "font-semibold" : "font-medium")}>
               {node.title || "Untitled"}
             </span>
           </span>
-          <span className="mt-1.5 line-clamp-2 min-h-8 text-xs leading-4 text-muted-foreground">
+          <span className={cn("mt-1.5 line-clamp-2 min-h-8 text-muted-foreground", presentation === "journal" ? "text-sm leading-5" : "text-xs leading-4")}>
             {getNoteDocumentPreview(node.content) || "No content yet"}
           </span>
           <time
             dateTime={node.updated_at}
-            className="mt-2 block truncate text-[0.6875rem] font-medium text-muted-foreground/80"
+            className={cn("mt-2 block truncate font-medium text-muted-foreground/80", presentation === "journal" ? "text-xs" : "text-[0.6875rem]")}
           >
             {formatNoteTimestamp(node.updated_at)}
           </time>
@@ -1296,7 +1461,7 @@ function RootNoteCard({
               deletePending={deletePending}
               onPin={onPin}
               onDelete={onDelete}
-              className="hidden group-hover/note:flex"
+              className={presentation === "journal" ? "flex" : "hidden group-hover/note:flex"}
             />
           )}
           {hasChildren && (
@@ -1312,6 +1477,7 @@ function RootNoteCard({
         <AccordionContent>
           <div className="border-t border-border/60 bg-muted/15 p-2">
             <NoteTreeLevel
+              presentation={presentation}
               nodes={node.children}
               selectedUuid={selectedUuid}
               archived={archived}
@@ -1333,6 +1499,7 @@ function RootNoteCard({
 }
 
 function ChildNoteRow({
+  presentation,
   node,
   selectedUuid,
   archived,
@@ -1354,7 +1521,9 @@ function ChildNoteRow({
         className={cn(
           "group/child relative flex min-w-0 items-center rounded-md ring-1 ring-transparent transition-[background-color,box-shadow,color] duration-150 hover:bg-muted/50 hover:ring-border/80 active:bg-accent/70 focus-within:bg-muted/50 focus-within:ring-ring/30",
           selectedUuid === node.uuid &&
-            "bg-accent/60 text-accent-foreground ring-foreground/15 hover:bg-accent/70 hover:ring-foreground/20",
+            (presentation === "journal"
+              ? "bg-background text-foreground ring-primary/40"
+              : "bg-accent/60 text-accent-foreground ring-foreground/15 hover:bg-accent/70 hover:ring-foreground/20"),
         )}
       >
         <button
@@ -1362,7 +1531,9 @@ function ChildNoteRow({
           aria-current={selectedUuid === node.uuid ? "page" : undefined}
           className={cn(
             "flex min-w-0 flex-1 items-center gap-2 py-2.5 pl-2 text-left",
-            hasChildren ? "pr-10" : "pr-2",
+            presentation === "journal"
+              ? hasChildren ? "pr-28" : "pr-20"
+              : hasChildren ? "pr-10" : "pr-2",
           )}
           onClick={() => {
             onSelect(node.uuid);
@@ -1392,7 +1563,8 @@ function ChildNoteRow({
             onPin={onPin}
             onDelete={onDelete}
             className={cn(
-              "absolute top-1/2 hidden -translate-y-1/2 bg-card/95 group-hover/child:flex",
+              "absolute top-1/2 -translate-y-1/2 bg-card/95",
+              presentation === "journal" ? "flex" : "hidden group-hover/child:flex",
               hasChildren ? "right-9" : "right-1",
             )}
           />
@@ -1409,6 +1581,7 @@ function ChildNoteRow({
         <AccordionContent>
           <div className="ml-3 border-l border-border/60 py-1 pl-2">
             <NoteTreeLevel
+              presentation={presentation}
               nodes={node.children}
               selectedUuid={selectedUuid}
               archived={archived}
