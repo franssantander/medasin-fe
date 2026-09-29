@@ -304,11 +304,41 @@ test("plan details edit the stored timezone and delete to Trash", async ({ page 
 test("the bell marks a reminder read and opens its plan", async ({ page }) => {
   const state = await fixture(page);
   await page.getByRole("button", { name: /Notifications, 1 unread/ }).click();
-  await expect(page.getByRole("dialog").getByText("Meet the team")).toBeVisible();
-  await page.getByRole("button", { name: "View plan" }).click();
+  const sheet = page.getByRole("dialog", { name: "Notifications" });
+  await expect(sheet.getByRole("link", { name: "View plan: Meet the team" })).toBeVisible();
+  await expect(sheet.getByText("New", { exact: true })).toBeVisible();
+  await sheet.locator("[data-slot=card]").click({ position: { x: 20, y: 24 } });
   await expect.poll(state.noticeRead).toBe(true);
   await expect(page).toHaveURL(new RegExp(`/plans\\?plan=${planUuid}`));
   await expect(page.getByRole("dialog").getByText("Bring the agenda")).toBeVisible();
+});
+
+test("notification card opens its plan with the keyboard", async ({ page }) => {
+  const state = await fixture(page);
+  await page.getByRole("button", { name: /Notifications, 1 unread/ }).click();
+  const link = page.getByRole("dialog", { name: "Notifications" }).getByRole("link", { name: "View plan: Meet the team" });
+  await link.focus();
+  await page.keyboard.press("Enter");
+  await expect.poll(state.noticeRead).toBe(true);
+  await expect(page).toHaveURL(new RegExp(`/plans\\?plan=${planUuid}`));
+});
+
+test("notification cards fit and mark read independently on a narrow dark screen", async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 812 });
+  await page.addInitScript(() => window.localStorage.setItem("theme", "dark"));
+  const state = await fixture(page);
+  await page.getByRole("button", { name: /Notifications, 1 unread/ }).click();
+  const sheet = page.getByRole("dialog", { name: "Notifications" });
+  const card = sheet.locator("[data-slot=card]");
+  await expect(card).toBeVisible();
+  await expect.poll(() => card.evaluate((element) => {
+    const bounds = element.getBoundingClientRect();
+    return bounds.left >= 0 && bounds.right <= window.innerWidth;
+  })).toBe(true);
+  await sheet.getByRole("button", { name: "Mark read" }).click();
+  await expect.poll(state.noticeRead).toBe(true);
+  await expect(page).toHaveURL(/\/plans$/);
+  await expect(sheet.getByText("New", { exact: true })).toHaveCount(0);
 });
 
 test("the calendar and upcoming list fit a narrow dark screen", async ({ page }) => {

@@ -5,6 +5,7 @@ const planId = "eb0c597d-76a4-49d5-a47f-65b7c815c519";
 
 async function fixture(page: Page, useSocket: boolean) {
   let delivered = false;
+  let read = false;
   let subscribed = false;
   let authorizations = 0;
   const sockets: WebSocketRoute[] = [];
@@ -34,6 +35,7 @@ async function fixture(page: Page, useSocket: boolean) {
     const url = new URL(route.request().url());
     const path = url.pathname.replace("/api-test/v1", "");
     let data: unknown = [];
+    let status = 200;
 
     if (path === "/auth/me") {
       data = { id: 7, first_name: "Test", last_name: "User", username: "tester", roles: [] };
@@ -47,14 +49,20 @@ async function fixture(page: Page, useSocket: boolean) {
         id: noticeId,
         type: "App\\Notifications\\CalendarPlanReminder",
         data: { plan_uuid: planId, title: "Meet the team", date: "2026-09-25", time: "14:30", timezone: "Asia/Manila" },
-        read_at: null,
+        read_at: read ? new Date().toISOString() : null,
         created_at: "2026-09-24T00:00:00.000Z",
       };
       const notices = delivered ? [notice] : [];
       data = { current_page: 1, data: notices, last_page: 1, per_page: 15, total: notices.length };
+    } else if (path === `/notifications/${noticeId}/read`) {
+      read = true;
+      data = { id: noticeId, read_at: new Date().toISOString() };
+    } else if (path === `/calendar/plans/${planId}`) {
+      status = 404;
+      data = null;
     }
 
-    await route.fulfill({ json: { data, status: 200, message: "OK" } });
+    await route.fulfill({ status, json: { data, status, message: status === 404 ? "Plan not found" : "OK" } });
   });
 
   await page.goto("/plans");
@@ -65,6 +73,7 @@ async function fixture(page: Page, useSocket: boolean) {
     getSubscribed: () => subscribed,
     getAuthorizations: () => authorizations,
     deliver: () => { delivered = true; },
+    wasRead: () => read,
   };
 }
 
@@ -84,9 +93,30 @@ test("a Reverb reminder refreshes the bell and open sheet", async ({ page }) => 
   }));
 
   await expect(page.getByText("1 unread notification")).toBeVisible();
-  await expect(page.getByText("Meet the team")).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "Notifications" }).getByRole("link", { name: "View plan: Meet the team" })).toBeVisible();
   await page.getByRole("button", { name: "Close" }).click();
   await expect(page.getByRole("button", { name: /Notifications, 1 unread/ })).toBeVisible();
+});
+
+test("a live reminder toast opens its plan", async ({ page }) => {
+  const state = await fixture(page, true);
+  await expect.poll(state.getSubscribed).toBe(true);
+
+  state.deliver();
+  const frame = JSON.stringify({
+    event: "calendar.plan-reminder.delivered",
+    channel: "private-users.7.notifications",
+    data: JSON.stringify({ notification_id: noticeId }),
+  });
+  state.sockets[0].send(frame);
+  state.sockets[0].send(frame);
+
+  await expect(page.getByText("Plan reminder", { exact: true })).toBeVisible();
+  await expect(page.getByText("Meet the team")).toBeVisible();
+  await expect(page.getByRole("button", { name: "View plan" })).toHaveCount(1);
+  await page.getByRole("button", { name: "View plan" }).click();
+  await expect.poll(state.wasRead).toBe(true);
+  await expect(page).toHaveURL(new RegExp(`/plans\\?plan=${planId}`));
 });
 
 test("reconnecting refreshes reminders missed while offline", async ({ page }) => {
@@ -97,6 +127,7 @@ test("reconnecting refreshes reminders missed while offline", async ({ page }) =
 
   await expect.poll(() => state.sockets.length).toBeGreaterThan(1);
   await expect(page.getByRole("button", { name: /Notifications, 1 unread/ })).toBeVisible();
+  await expect(page.getByText("Plan reminder", { exact: true })).toHaveCount(0);
 });
 
 test("the sheet still loads reminders when Reverb is unavailable", async ({ page }) => {

@@ -1,9 +1,12 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { useEffect } from "react";
+import { useEffect, useEffectEvent } from "react";
 import { notificationKeys } from "./notification-query";
 
-export function usePlanReminderEvents(userId?: number) {
+type ReminderEvent = { notification_id?: string };
+
+export function usePlanReminderEvents(userId?: number, onReminder?: (id: string) => void) {
   const queryClient = useQueryClient();
+  const notify = useEffectEvent((id: string) => onReminder?.(id));
 
   useEffect(() => {
     if (!userId || !process.env.NEXT_PUBLIC_REVERB_APP_KEY || !process.env.NEXT_PUBLIC_REVERB_HOST) {
@@ -12,6 +15,7 @@ export function usePlanReminderEvents(userId?: number) {
 
     let active = true;
     let disconnect: (() => void) | undefined;
+    const seenIds = new Set<string>();
 
     void import("@/lib/reverb/client")
       .then(({ createReverbClient }) => {
@@ -25,7 +29,13 @@ export function usePlanReminderEvents(userId?: number) {
           void queryClient.invalidateQueries({ queryKey: notificationKeys.all });
         };
 
-        echo.private(channel).listen(".calendar.plan-reminder.delivered", refresh);
+        echo.private(channel).listen(".calendar.plan-reminder.delivered", (event: ReminderEvent) => {
+          refresh();
+          const id = event.notification_id;
+          if (!id || seenIds.has(id)) return;
+          seenIds.add(id);
+          notify(id);
+        });
 
         let wasConnected = false;
         const unsubscribe = echo.connector.onConnectionChange((status) => {
