@@ -1,6 +1,7 @@
 "use client";
 
 import { ChevronLeft, ChevronRight, Plus, RefreshCw } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import PageHeader from "@/components/shared/page-header";
 import { Badge } from "@/components/ui/badge";
@@ -42,7 +43,7 @@ const views: { value: HabitCalendarView; label: string }[] = [
   { value: "all", label: "All time" },
 ];
 
-export function HabitsPage() {
+export function HabitsPage({ initialHabitUuid }: { initialHabitUuid?: string }) {
   const [view, setView] = useState<HabitCalendarView>("week");
   const [anchor, setAnchor] = useState(() => new Date());
   const [form, setForm] = useState<{
@@ -55,6 +56,9 @@ export function HabitsPage() {
     () => habitsQuery.data?.data ?? [],
     [habitsQuery.data?.data],
   );
+  const linkedHabit = initialHabitUuid
+    ? habits.find((habit) => habit.uuid === initialHabitUuid)
+    : undefined;
   const range = useMemo(
     () => getCalendarRange(view, anchor, habits),
     [anchor, habits, view],
@@ -241,6 +245,18 @@ export function HabitsPage() {
           onSubmit={submitHabit}
         />
       )}
+      {linkedHabit && (
+        <LinkedHabitDialog
+          key={initialHabitUuid}
+          habit={linkedHabit}
+          isPending={updateMutation.isPending}
+          onSubmit={(input) =>
+            updateMutation
+              .mutateAsync({ habitUuid: linkedHabit.uuid, input })
+              .then(() => undefined)
+          }
+        />
+      )}
       <Dialog
         open={Boolean(deleteHabit)}
         onOpenChange={(open) =>
@@ -273,6 +289,34 @@ export function HabitsPage() {
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+function LinkedHabitDialog({
+  habit,
+  isPending,
+  onSubmit,
+}: {
+  habit: Habit;
+  isPending: boolean;
+  onSubmit: (input: HabitInput) => Promise<void>;
+}) {
+  const router = useRouter();
+  const [open, setOpen] = useState(true);
+
+  return (
+    <HabitFormDialog
+      open={open}
+      habit={habit}
+      isPending={isPending}
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen) {
+          setOpen(false);
+          router.replace("/habits", { scroll: false });
+        }
+      }}
+      onSubmit={onSubmit}
+    />
   );
 }
 

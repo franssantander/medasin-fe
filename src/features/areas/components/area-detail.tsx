@@ -24,6 +24,7 @@ import { HabitLinkDialog } from "@/features/habits/components/habit-link-dialog"
 import { useHabitsQuery } from "@/features/habits/queries/habit-query";
 import type { Habit as GlobalHabit } from "@/features/habits/type";
 import {
+  useAreaGoalQuery,
   useAreaHabitLinkMutation,
   useAreaMutation,
   useAreaQuery,
@@ -64,12 +65,14 @@ type AreaDetailRouteContext = "areas" | "archives" | "projects";
 export function AreaDetail({
   initialTab = "projects",
   initialNoteUuid,
+  initialGoalUuid,
   routeContext = "areas",
   areaUuid,
   sourceProjectUuid,
 }: {
   initialTab?: AreaTab;
   initialNoteUuid?: string;
+  initialGoalUuid?: string;
   routeContext?: AreaDetailRouteContext;
   areaUuid?: string;
   sourceProjectUuid?: string;
@@ -91,6 +94,8 @@ export function AreaDetail({
   const [linkHabitOpen, setLinkHabitOpen] = useState(false);
   const areaQuery = useAreaQuery(uuid);
   const area = areaQuery.data?.data;
+  const linkedGoalQuery = useAreaGoalQuery(uuid, initialGoalUuid, Boolean(area));
+  const linkedGoal = linkedGoalQuery.data?.data;
   const archived = Boolean(area?.archived_at);
   const updateArea = useAreaMutation("update", uuid);
   const archiveArea = useAreaMutation("archive", uuid);
@@ -108,9 +113,9 @@ export function AreaDetail({
   });
 
   const goalMutation = useMutation({
-    mutationFn: (input: GoalInput) =>
-      goalForm?.value
-        ? areaService.updateGoal(uuid, goalForm.value.uuid, input)
+    mutationFn: ({ input, goalUuid }: { input: GoalInput; goalUuid?: string }) =>
+      goalUuid
+        ? areaService.updateGoal(uuid, goalUuid, input)
         : areaService.createGoal(uuid, input),
     onSuccess: (response) => invalidate(response.message),
   });
@@ -248,6 +253,15 @@ export function AreaDetail({
           ))}
         </TabsList>
       </Tabs>
+      {initialGoalUuid && linkedGoalQuery.isError && (
+        <Card className="items-center gap-3 py-5 text-center">
+          <CardTitle>Goal could not be loaded</CardTitle>
+          <Button variant="outline" onClick={() => void linkedGoalQuery.refetch()}>
+            <RefreshCw />
+            Try again
+          </Button>
+        </Card>
+      )}
       <div className="flex h-[48rem] min-h-0 min-w-0">
         {activeTab === "notes" ? (
           <AreaNotesWorkspace
@@ -328,9 +342,23 @@ export function AreaDetail({
         goal={goalForm?.value}
         isPending={goalMutation.isPending}
         onSubmit={(input) =>
-          goalMutation.mutateAsync(input).then(() => undefined)
+          goalMutation
+            .mutateAsync({ input, goalUuid: goalForm?.value?.uuid })
+            .then(() => undefined)
         }
       />
+      {initialGoalUuid && linkedGoal && (
+        <LinkedGoalDialog
+          key={initialGoalUuid}
+          goal={linkedGoal}
+          isPending={goalMutation.isPending}
+          onSubmit={(input) =>
+            goalMutation
+              .mutateAsync({ input, goalUuid: linkedGoal.uuid })
+              .then(() => undefined)
+          }
+        />
+      )}
       <HabitFormDialog
         open={Boolean(recordForm)}
         habit={recordForm?.value}
@@ -361,5 +389,39 @@ export function AreaDetail({
         }}
       />
     </div>
+  );
+}
+
+function LinkedGoalDialog({
+  goal,
+  isPending,
+  onSubmit,
+}: {
+  goal: Goal;
+  isPending: boolean;
+  onSubmit: (input: GoalInput) => Promise<void>;
+}) {
+  const router = useRouter();
+  const [open, setOpen] = useState(true);
+
+  return (
+    <GoalFormDialog
+      open={open}
+      goal={goal}
+      isPending={isPending}
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen) {
+          setOpen(false);
+          const params = new URLSearchParams(window.location.search);
+          params.delete("goal");
+          const query = params.toString();
+          router.replace(
+            `${window.location.pathname}${query ? `?${query}` : ""}`,
+            { scroll: false },
+          );
+        }
+      }}
+      onSubmit={onSubmit}
+    />
   );
 }

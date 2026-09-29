@@ -1,11 +1,12 @@
 "use client";
 
+import Image from "next/image";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   LoaderCircle,
   LogOut,
   Menu,
-  SearchIcon,
   Settings,
   UserRound,
 } from "lucide-react";
@@ -18,15 +19,10 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  InputGroup,
-  InputGroupAddon,
-  InputGroupInput,
-} from "@/components/ui/input-group";
-import { Kbd } from "@/components/ui/kbd";
 import { toast } from "@/components/ui/toast";
 import { useLogoutMutation } from "@/features/auth/queries/auth-query";
 import { PlanNotifications } from "@/features/plans/notifications/plan-notifications";
+import { GlobalSearch } from "@/features/search/global-search";
 import type { CurrentUser } from "@/features/auth/type";
 
 type AppHeaderProps = {
@@ -111,8 +107,8 @@ export function AppHeader({
   onOpenMobileNav,
 }: AppHeaderProps) {
   return (
-    <header className="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-border bg-background px-2 sm:px-6">
-      <div className="w-full flex items-center">
+    <header className="flex h-14 shrink-0 items-center gap-2 border-b border-border bg-background px-2 sm:px-6">
+      <div className="flex min-w-0 flex-1 items-center">
         <Button
           type="button"
           variant="ghost"
@@ -124,20 +120,25 @@ export function AppHeader({
         >
           <Menu />
         </Button>
-        <div className="flex w-full md:max-w-xs flex-col gap-6">
-          <InputGroup>
-            <InputGroupInput placeholder="Search..." />
-            <InputGroupAddon>
-              <SearchIcon />
-            </InputGroupAddon>
-            <InputGroupAddon align="inline-end">
-              <Kbd>⌘</Kbd>
-              <Kbd>K</Kbd>
-            </InputGroupAddon>
-          </InputGroup>
-        </div>
+        <Link
+          href="/home"
+          aria-label="Medasin home"
+          className="ml-1 flex min-w-0 items-center gap-1 rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring md:hidden"
+        >
+          <Image
+            src="/images/medasin-logo.svg"
+            alt=""
+            width={28}
+            height={28}
+            className="size-7 shrink-0"
+          />
+          <span className="hidden truncate font-garamond text-lg font-semibold min-[400px]:inline">
+            Medasin
+          </span>
+        </Link>
       </div>
-      <div className="flex shrink-0 items-center gap-3">
+      <GlobalSearch userId={currentUser?.id} />
+      <div className="flex min-w-0 flex-1 items-center justify-end gap-3">
         <PlanNotifications userId={currentUser?.id} />
         <ProfileMenu user={currentUser} />
       </div>

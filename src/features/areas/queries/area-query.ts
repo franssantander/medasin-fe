@@ -7,6 +7,8 @@ export const areaKeys = {
   all: ["areas"] as const,
   list: (status: AreaStatusFilter) => ["areas", "list", status] as const,
   detail: (uuid: string) => ["areas", "detail", uuid] as const,
+  goalDetail: (uuid: string, goalUuid: string) =>
+    ["areas", "detail", uuid, "goals", goalUuid] as const,
   noteTree: (uuid: string) => ["areas", "detail", uuid, "notes", "tree"] as const,
   noteDetail: (uuid: string, noteUuid: string) =>
     ["areas", "detail", uuid, "notes", noteUuid] as const,
@@ -20,6 +22,14 @@ export function useAreasQuery(status: AreaStatusFilter = "active") {
 
 export function useAreaQuery(uuid: string) {
   return useQuery({ queryKey: areaKeys.detail(uuid), queryFn: () => areaService.show(uuid), enabled: Boolean(uuid) });
+}
+
+export function useAreaGoalQuery(areaUuid: string, goalUuid?: string, enabled = true) {
+  return useQuery({
+    queryKey: areaKeys.goalDetail(areaUuid, goalUuid ?? ""),
+    queryFn: ({ signal }) => areaService.goal(areaUuid, goalUuid!, signal),
+    enabled: enabled && Boolean(areaUuid && goalUuid),
+  });
 }
 
 export function useAreaHabitLinkMutation(areaUuid: string) {

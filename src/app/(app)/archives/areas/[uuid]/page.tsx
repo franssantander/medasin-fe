@@ -15,6 +15,7 @@ export default async function ArchivedAreaDetailPage({
   searchParams: Promise<{
     tab?: string | string[];
     note?: string | string[];
+    goal?: string | string[];
   }>;
 }) {
   const params = await searchParams;
@@ -24,11 +25,14 @@ export default async function ArchivedAreaDetailPage({
     : "projects";
   const initialNoteUuid =
     typeof params.note === "string" ? params.note : undefined;
+  const initialGoalUuid =
+    typeof params.goal === "string" ? params.goal : undefined;
 
   return (
     <AreaDetail
       initialTab={initialTab}
       initialNoteUuid={initialNoteUuid}
+      initialGoalUuid={initialGoalUuid}
       routeContext="archives"
     />
   );

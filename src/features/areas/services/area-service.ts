@@ -59,6 +59,9 @@ export const areaService = {
   goals(areaUuid: string, page = 1, filter: GoalFilter = "all") {
     return unwrap(axiosClient.get<ApiResponse<GoalTrackerData>>(`/area/${areaUuid}/goals`, { params: { page, filter } }));
   },
+  goal(areaUuid: string, goalUuid: string, signal?: AbortSignal) {
+    return unwrap(axiosClient.get<ApiResponse<Goal>>(`/area/${areaUuid}/goals/${goalUuid}`, { signal }));
+  },
   createGoal(areaUuid: string, input: GoalInput) {
     return unwrap(axiosClient.post<ApiResponse<Goal>>(`/area/${areaUuid}/goals`, input));
   },
