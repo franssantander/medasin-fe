@@ -455,7 +455,7 @@ export function PlanFormDialog({
                 <Bell className="mt-0.5 size-4 text-muted-foreground" aria-hidden="true" />
                 <div className="grid gap-0.5">
                   <h3 id="plan-reminder-heading" className="text-sm font-semibold">Reminder</h3>
-                  <p className="text-xs text-muted-foreground">Get a notification before this plan starts.</p>
+                  <p className="text-xs text-muted-foreground">Choose when a reminder appears in Notifications.</p>
                 </div>
               </div>
               <FieldGroup className="gap-4">

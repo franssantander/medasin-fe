@@ -2,7 +2,17 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "@/components/ui/toast";
 import { trashKeys } from "@/features/settings/queries/settings-query";
 import { planService } from "../services/plan-service";
-import type { CalendarRange, PlanInput } from "../type";
+import type { ApiResponse, CalendarPlan, CalendarRange, PlanInput } from "../type";
+
+function showPlanSavedToast(response: ApiResponse<CalendarPlan>) {
+  const reminderSkipped = response.data.reminder_status === "skipped";
+  toast.add({
+    type: reminderSkipped ? "warning" : "success",
+    description: reminderSkipped
+      ? "Plan saved. Reminder time has passed, so no notification will be sent."
+      : response.message,
+  });
+}
 
 export const planKeys = {
   all: ["calendar-plans"] as const,
@@ -55,7 +65,7 @@ export function useCreatePlan() {
     mutationFn: (input: PlanInput) => planService.create(input),
     onSuccess: async (response) => {
       await invalidate();
-      toast.add({ type: "success", description: response.message });
+      showPlanSavedToast(response);
     },
     onError: (error) => toast.add({ type: "error", description: error.message }),
   });
@@ -68,7 +78,7 @@ export function useUpdatePlan() {
       planService.update(uuid, input),
     onSuccess: async (response) => {
       await invalidate();
-      toast.add({ type: "success", description: response.message });
+      showPlanSavedToast(response);
     },
     onError: (error) => toast.add({ type: "error", description: error.message }),
   });

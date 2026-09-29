@@ -185,6 +185,20 @@ test("create form shows link and reminder labels while sending their stored valu
   expect(state.writes[0].input).not.toHaveProperty("project_uuid");
 });
 
+test("creating a plan with a passed reminder warns that no notification will be sent", async ({ page }) => {
+  const state = await fixture(page, { plan: { reminder_status: "skipped", remind_at: null } });
+  await page.getByRole("button", { name: "New plan" }).click();
+  const dialog = page.getByRole("dialog", { name: "New plan" });
+  await dialog.getByPlaceholder("What are you planning?").fill("Late reminder");
+  await dialog.getByRole("combobox", { name: "Reminder" }).click();
+  await page.getByRole("option", { name: "1 day before" }).click();
+  await dialog.getByRole("button", { name: "Create plan" }).click();
+
+  await expect.poll(() => state.writes.length).toBe(1);
+  expect(state.writes[0].input?.reminder_offset_minutes).toBe(1440);
+  await expect(page.getByText("Plan saved. Reminder time has passed, so no notification will be sent.")).toBeVisible();
+});
+
 test("create form saves a calendar date and a selected quarter-hour time", async ({ page }) => {
   const state = await fixture(page);
   const today = new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Manila" });
@@ -229,6 +243,16 @@ test("edit form preserves a stored time outside the quarter-hour choices", async
 
   await expect.poll(() => state.writes.length).toBe(1);
   expect(state.writes[0]).toMatchObject({ method: "PUT", input: { time: "14:37" } });
+});
+
+test("updating a plan with a passed reminder shows the warning", async ({ page }) => {
+  const state = await fixture(page, { plan: { reminder_status: "skipped", remind_at: null, reminder_offset_minutes: 43_200 } });
+  await page.getByRole("region", { name: "Plans calendar" }).getByText("Meet the team").click();
+  await page.getByRole("button", { name: "Edit" }).click();
+  await page.getByRole("button", { name: "Save changes" }).click();
+
+  await expect.poll(() => state.writes.length).toBe(1);
+  await expect(page.getByText("Plan saved. Reminder time has passed, so no notification will be sent.")).toBeVisible();
 });
 
 test("edit form shows labels for a linked project missing from active choices", async ({ page }) => {
