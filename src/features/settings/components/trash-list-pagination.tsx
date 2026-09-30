@@ -1,4 +1,5 @@
 import { Button } from "@/components/ui/button";
+import { CardFooter } from "@/components/ui/card";
 
 type TrashListPaginationProps = {
   currentPage: number;
@@ -14,7 +15,7 @@ export function TrashListPagination({
   if (lastPage <= 1) return null;
 
   return (
-    <div className="flex items-center justify-between gap-3 border-t p-4 sm:px-5">
+    <CardFooter className="shrink-0 flex-wrap justify-between gap-3 border-t p-5 sm:p-6">
       <Button
         variant="outline"
         size="sm"
@@ -34,6 +35,6 @@ export function TrashListPagination({
       >
         Next
       </Button>
-    </div>
+    </CardFooter>
   );
 }

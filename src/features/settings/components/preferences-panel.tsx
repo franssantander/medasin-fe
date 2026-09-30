@@ -3,8 +3,14 @@
 import { Check, Laptop, Moon, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useSyncExternalStore } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { cn } from "@/lib/utils";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 
 const themes = [
   { value: "light", label: "Light", description: "Use a bright appearance.", icon: Sun },
@@ -21,42 +27,52 @@ export function PreferencesPanel() {
   );
 
   return (
-    <Card>
-      <CardHeader className="border-b">
-        <CardTitle>Appearance</CardTitle>
+    <Card className="min-h-0 gap-0 py-0 md:flex-1">
+      <CardHeader className="shrink-0 border-b p-5 sm:p-6">
+        <CardTitle>
+          <h2>Appearance</h2>
+        </CardTitle>
         <CardDescription>
           Choose how Medasin looks on this device.
         </CardDescription>
       </CardHeader>
-      <CardContent className="grid gap-3 sm:grid-cols-3">
-        {themes.map((option) => {
-          const Icon = option.icon;
-          const active = mounted && theme === option.value;
+      <CardContent className="@container min-h-0 p-5 sm:p-6 md:flex-1 md:overflow-y-auto">
+        <ToggleGroup
+          aria-label="Appearance theme"
+          variant="outline"
+          value={mounted && theme ? [theme] : []}
+          className="grid w-full grid-cols-1 gap-3 @min-[36rem]:grid-cols-3"
+          onValueChange={(values) => {
+            const nextTheme = values[0];
+            if (nextTheme) setTheme(nextTheme);
+          }}
+        >
+          {themes.map((option) => {
+            const Icon = option.icon;
+            const active = mounted && theme === option.value;
 
-          return (
-            <button
-              key={option.value}
-              type="button"
-              aria-pressed={active}
-              className={cn(
-                "relative grid min-h-36 gap-3 rounded-xl border bg-background p-4 text-left transition hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
-                active && "border-foreground ring-1 ring-foreground",
-              )}
-              onClick={() => setTheme(option.value)}
-            >
-              <span className="flex size-9 items-center justify-center rounded-lg bg-muted">
-                <Icon className="size-4" />
-              </span>
-              <span>
-                <span className="block font-semibold">{option.label}</span>
-                <span className="mt-1 block text-xs text-muted-foreground">
-                  {option.description}
+            return (
+              <ToggleGroupItem
+                key={option.value}
+                value={option.value}
+                className="relative h-auto min-h-36 w-full flex-col items-start justify-start gap-3 whitespace-normal p-4 text-left"
+              >
+                <span className="flex size-9 items-center justify-center rounded-lg bg-muted">
+                  <Icon aria-hidden="true" />
                 </span>
-              </span>
-              {active && <Check className="absolute right-3 top-3 size-4" />}
-            </button>
-          );
-        })}
+                <span>
+                  <span className="block font-semibold">{option.label}</span>
+                  <span className="mt-1 block text-xs text-muted-foreground">
+                    {option.description}
+                  </span>
+                </span>
+                {active && (
+                  <Check className="absolute right-4 top-4" aria-hidden="true" />
+                )}
+              </ToggleGroupItem>
+            );
+          })}
+        </ToggleGroup>
       </CardContent>
     </Card>
   );

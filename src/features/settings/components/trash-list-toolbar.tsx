@@ -1,19 +1,31 @@
-import { Search, Trash2 } from "lucide-react";
+import { Search } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import {
+  CardAction,
   CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+} from "@/components/ui/input-group";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
 import type { TrashItemType } from "../types";
 import { trashTypeOptions } from "./trash-item-config";
+
+const trashFilterItems = [
+  { value: "all", label: "All content types" },
+  ...trashTypeOptions,
+];
 
 type TrashListToolbarProps = {
   searchInput: string;
@@ -32,42 +44,38 @@ export function TrashListToolbar({
 }: TrashListToolbarProps) {
   return (
     <>
-      <CardHeader className="border-b p-5 sm:p-6">
-        <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <div className="mb-2 flex items-center gap-2.5">
-              <span className="flex size-9 items-center justify-center rounded-lg bg-muted">
-                <Trash2 className="size-4" />
-              </span>
-              <CardTitle className="text-lg font-bold">Trash</CardTitle>
-            </div>
-            <CardDescription className="max-w-2xl leading-6">
-              Deleted items are permanently removed after 30 days. Restore
-              anything you want to keep before its expiry date.
-            </CardDescription>
-          </div>
-          {total !== undefined && (
-            <div className="rounded-lg border bg-muted/50 px-3 py-2 sm:text-right">
-              <p className="text-2xl font-bold tabular-nums">{total}</p>
-              <p className="text-xs text-muted-foreground">items in Trash</p>
-            </div>
-          )}
-        </div>
+      <CardHeader className="shrink-0 border-b p-5 sm:p-6">
+        <CardTitle>
+          <h2>Trash</h2>
+        </CardTitle>
+        <CardDescription>
+          Deleted items stay here for 30 days. Restore them before they expire.
+        </CardDescription>
+        {total !== undefined && (
+          <CardAction>
+            <Badge variant="secondary">
+              <span className="tabular-nums">{total}</span>
+              {total === 1 ? "item" : "items"}
+            </Badge>
+          </CardAction>
+        )}
       </CardHeader>
 
-      <div className="flex flex-col gap-3 border-b p-4 sm:flex-row sm:p-5">
-        <label className="relative min-w-0 flex-1">
-          <span className="sr-only">Search Trash</span>
-          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
+      <div className="flex shrink-0 flex-col gap-3 border-b p-5 sm:p-6 @min-[30rem]/trash:flex-row">
+        <InputGroup className="min-w-0 flex-1">
+          <InputGroupInput
             type="search"
+            aria-label="Search Trash"
             value={searchInput}
-            className="pl-9"
             placeholder="Search deleted items…"
             onChange={(event) => onSearchChange(event.target.value)}
           />
-        </label>
+          <InputGroupAddon>
+            <Search aria-hidden="true" />
+          </InputGroupAddon>
+        </InputGroup>
         <Select
+          items={trashFilterItems}
           value={type ?? "all"}
           onValueChange={(value) =>
             onTypeChange(
@@ -75,17 +83,22 @@ export function TrashListToolbar({
             )
           }
         >
-          <SelectTrigger className="w-full sm:w-48" aria-label="Filter by type">
+          <SelectTrigger
+            className="w-full @min-[30rem]/trash:w-48"
+            aria-label="Filter by type"
+          >
             <SelectValue />
           </SelectTrigger>
           <SelectContent align="start">
-            <SelectItem value="all">All content types</SelectItem>
-            {trashTypeOptions.map((option) => (
-              <SelectItem key={option.value} value={option.value}>
-                <option.icon />
-                {option.label}
-              </SelectItem>
-            ))}
+            <SelectGroup>
+              <SelectItem value="all">All content types</SelectItem>
+              {trashTypeOptions.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  <option.icon aria-hidden="true" />
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectGroup>
           </SelectContent>
         </Select>
       </div>

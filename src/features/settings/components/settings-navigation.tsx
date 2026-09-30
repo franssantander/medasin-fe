@@ -32,13 +32,13 @@ export function SettingsNavigation() {
             href={item.href}
             aria-current={active ? "page" : undefined}
             className={cn(
-              "flex h-10 items-center justify-center gap-2.5 rounded-lg px-3 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 md:justify-start",
+              "flex min-h-11 min-w-0 items-center justify-center gap-2 rounded-lg px-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 md:justify-start md:px-3",
               active &&
                 "bg-muted font-semibold text-foreground hover:bg-muted",
             )}
           >
-            <Icon className="size-4" />
-            {item.label}
+            <Icon className="size-4 shrink-0" aria-hidden="true" />
+            <span className="truncate">{item.label}</span>
           </Link>
         );
       })}

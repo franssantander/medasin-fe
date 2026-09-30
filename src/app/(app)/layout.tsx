@@ -26,7 +26,7 @@ function AppLoadingSkeleton() {
         <div className="flex h-14 shrink-0 items-center border-b border-border px-4 sm:px-6">
           <Skeleton className="h-5 w-24" />
         </div>
-        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4 sm:p-6">
+        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto bg-app-content p-4 sm:p-6">
           <Skeleton className="h-24 w-full" />
           <Skeleton className="h-24 w-full" />
           <Skeleton className="h-24 w-full" />
@@ -66,7 +66,7 @@ export default function AppLayout({
           isMobileNavOpen={isMobileNavOpen}
           onOpenMobileNav={() => setIsMobileNavOpen(true)}
         />
-        <main className="min-h-0 flex-1 overflow-y-auto bg-muted/20 p-4 sm:p-6">
+        <main className="min-h-0 flex-1 overflow-y-auto bg-app-content p-4 sm:p-6">
           {children}
         </main>
       </div>
