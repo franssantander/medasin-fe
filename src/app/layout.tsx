@@ -1,11 +1,13 @@
 import type { Metadata } from "next";
-import { EB_Garamond, Spectral, Manrope } from "next/font/google";
+import { EB_Garamond, Geist, Inter, Spectral, Manrope } from "next/font/google";
 import "./globals.css";
 import { QueryProvider } from "@/providers/query-provider";
 import { ThemeProvider } from "@/providers/theme-provider";
 import { Toaster } from "@/components/ui/toast";
 
-const manrope = Manrope({ subsets: ["latin"], variable: "--font-sans" });
+const manrope = Manrope({ subsets: ["latin"], variable: "--font-manrope" });
+const geist = Geist({ subsets: ["latin"], variable: "--font-geist", preload: false });
+const inter = Inter({ subsets: ["latin"], variable: "--font-inter", preload: false });
 
 const ebGaramond = EB_Garamond({
   variable: "--font-garamond-sans",
@@ -43,7 +45,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${ebGaramond.variable}  ${spectral.variable} ${manrope.variable}`}
+      className={`${ebGaramond.variable} ${spectral.variable} ${manrope.variable} ${geist.variable} ${inter.variable}`}
       suppressHydrationWarning
     >
       <body>

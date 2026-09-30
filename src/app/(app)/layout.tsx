@@ -9,6 +9,7 @@ import { AppHeader } from "@/features/app-shell/components/app-header";
 import { appNavigationItems } from "@/features/app-shell/components/app-navigation";
 import { AppSidebar } from "@/features/app-shell/components/app-sidebar";
 import { useSidebar } from "@/features/app-shell/hooks/use-sidebar";
+import { useAppFont } from "@/features/settings/hooks/use-app-font";
 
 function AppLoadingSkeleton() {
   return (
@@ -43,6 +44,7 @@ export default function AppLayout({
 }>) {
   const pathname = usePathname();
   const { isReady, currentUser } = useRoleGate();
+  useAppFont(currentUser?.id, currentUser?.font_family);
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const { isCollapsed, toggleSidebar } = useSidebar();
 

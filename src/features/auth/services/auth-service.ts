@@ -8,9 +8,9 @@ export const authService = {
   logout() {
     return axiosClient.post("/auth/logout");
   },
-  getCurrentUser() {
+  getCurrentUser(signal?: AbortSignal) {
     return axiosClient
-      .get<CurrentUserResponse>("/auth/me")
+      .get<CurrentUserResponse>("/auth/me", { signal })
       .then((res) => res.data);
   },
 };

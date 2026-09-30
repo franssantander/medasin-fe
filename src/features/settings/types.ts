@@ -1,5 +1,11 @@
 import type { ApiResponse, Paginated } from "@/features/areas/type";
 
+export type AppFontFamily = "manrope" | "geist" | "inter";
+
+export type UserPreferences = {
+  font_family: AppFontFamily;
+};
+
 export type TrashItemType =
   | "area"
   | "project"
