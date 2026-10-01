@@ -18,6 +18,11 @@ export type AuthResponse<T> = {
 
 export type CurrentUserResponse = AuthResponse<CurrentUser>;
 export type AuthMessageResponse = AuthResponse<null>;
+export type LoginRequest = {
+  username: string;
+  password: string;
+  remember_me: boolean;
+};
 export type RegisterRequest = {
   first_name: string;
   last_name: string;
@@ -34,6 +39,7 @@ export type EmailVerificationChallenge = {
 };
 export type RegisterResponse = AuthResponse<EmailVerificationChallenge>;
 export type VerificationRequest = { email: string; otp: string };
+export type EmailVerificationRequest = VerificationRequest & { remember_me?: boolean };
 export type PasswordResetVerificationResponse = AuthResponse<{
   reset_token: string;
   expires_in: number;

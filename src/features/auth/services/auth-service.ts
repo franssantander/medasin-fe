@@ -2,6 +2,8 @@ import { axiosClient } from "@/lib/axios";
 import type {
   AuthMessageResponse,
   CurrentUserResponse,
+  EmailVerificationRequest,
+  LoginRequest,
   PasswordResetVerificationResponse,
   RegisterRequest,
   RegisterResponse,
@@ -10,7 +12,7 @@ import type {
 } from "../type";
 
 export const authService = {
-  login(data: { username: string; password: string }) {
+  login(data: LoginRequest) {
     return axiosClient.post<CurrentUserResponse>("/auth/login", data).then((res) => res.data);
   },
   logout() {
@@ -19,7 +21,7 @@ export const authService = {
   register(data: RegisterRequest) {
     return axiosClient.post<RegisterResponse>("/auth/register", data).then((res) => res.data);
   },
-  verifyEmail(data: VerificationRequest) {
+  verifyEmail(data: EmailVerificationRequest) {
     return axiosClient.post<CurrentUserResponse>("/auth/verify-email", data).then((res) => res.data);
   },
   resendVerification(data: { email: string }) {

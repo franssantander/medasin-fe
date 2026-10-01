@@ -42,6 +42,21 @@ The frontend uses the existing `NEXT_PUBLIC_API_URL` and cookie authentication.
 Laravel's mail configuration and queue worker must be running to deliver codes.
 Recovery state is held in memory, so reloading restarts the flow.
 
+The login page's unchecked “Remember me” option uses browser-session cookies.
+Checking it retains the existing seven-day access cookie and rolling thirty-day
+refresh cookie. The choice carries through email verification and token refresh.
+After a successful remembered login, the username is saved on this browser and
+pre-filled with the checkbox checked when returning to login, including after
+logout. Unchecking the option immediately clears the saved username; otherwise
+it remains until browser data is cleared. Failed logins and incomplete email
+verification do not replace a saved username. Passwords are never saved by the
+app; the login fields support your browser's password manager for autofill.
+Protected pages check the session through the app layout, which can refresh an
+expired access cookie before showing account content.
+Deploy the backend `remember_me` refresh-token migration before the updated API.
+Older clients that omit `remember_me`, including signup verification, retain
+persistent cookies. Browser session restoration can retain session cookies.
+
 Run `npm test -- src/features/auth/auth.browser.test.ts` for auth regression
 tests. These mock API responses and do not create accounts or send real emails.
 

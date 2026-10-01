@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useLoginMutation } from "../queries/auth-query";
@@ -7,6 +7,10 @@ import { loginSchema, type LoginFormValues } from "../schemas/login-schema";
 import { ApiError } from "@/lib/axios";
 import type { EmailVerificationChallenge } from "../type";
 import { applyAuthFormErrors } from "../utils/form-errors";
+import { getRememberedUsername, setRememberedUsername } from "../utils/remembered-username";
+
+type LoginPreference = Pick<LoginFormValues, "username" | "remember_me">;
+type LoginVerificationChallenge = EmailVerificationChallenge & LoginPreference;
 
 function getVerificationChallenge(error: unknown): EmailVerificationChallenge | undefined {
   if (
@@ -52,14 +56,51 @@ function getVerificationChallenge(error: unknown): EmailVerificationChallenge | 
 export function useLogin() {
   const router = useRouter();
   const submissionInFlight = useRef(false);
-  const [verificationChallenge, setVerificationChallenge] = useState<EmailVerificationChallenge>();
+  const usernameInput = useRef<HTMLInputElement | null>(null);
+  const rememberChoiceChanged = useRef(false);
+  const [verificationChallenge, setVerificationChallenge] = useState<LoginVerificationChallenge>();
 
   const login = useLoginMutation();
 
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
-    defaultValues: { username: "", password: "" },
+    defaultValues: { username: "", password: "", remember_me: false },
   });
+  const { getValues, getFieldState, setValue } = form;
+  const usernameRegistration = form.register("username");
+
+  useEffect(() => {
+    const username = getRememberedUsername();
+    if (!username) {
+      return;
+    }
+
+    const usernameState = getFieldState("username");
+    const rememberState = getFieldState("remember_me");
+
+    if (
+      !usernameState.isDirty && !usernameState.isTouched &&
+      !getValues("username") && !usernameInput.current?.value
+    ) {
+      setValue("username", username);
+    }
+
+    if (!rememberChoiceChanged.current && !rememberState.isDirty && !rememberState.isTouched) {
+      setValue("remember_me", true);
+    }
+  }, [getFieldState, getValues, setValue]);
+
+  function completeLogin({ username, remember_me }: LoginPreference) {
+    setRememberedUsername(remember_me ? username : null);
+    router.replace("/home");
+  }
+
+  function changeRememberMe(checked: boolean) {
+    rememberChoiceChanged.current = true;
+    if (!checked) {
+      setRememberedUsername(null);
+    }
+  }
 
   const onSubmit: SubmitHandler<LoginFormValues> = async (data) => {
     if (submissionInFlight.current) {
@@ -73,15 +114,15 @@ export function useLogin() {
     try {
       await login.mutateAsync(data);
       login.reset();
-      router.replace("/home");
+      completeLogin(data);
     } catch (error) {
       const challenge = getVerificationChallenge(error);
       if (challenge) {
         form.resetField("password");
         login.reset();
-        setVerificationChallenge(challenge);
+        setVerificationChallenge({ ...challenge, username: data.username, remember_me: data.remember_me });
       } else {
-        applyAuthFormErrors(error, form, ["username", "password"]);
+        applyAuthFormErrors(error, form, ["username", "password", "remember_me"]);
       }
     } finally {
       submissionInFlight.current = false;
@@ -100,9 +141,24 @@ export function useLogin() {
     onSubmit,
     handleSubmit: form.handleSubmit,
     register: form.register,
+    usernameRegistration: {
+      ...usernameRegistration,
+      ref: (element: HTMLInputElement | null) => {
+        // Registration can replace a value filled by the browser before hydration.
+        const existingUsername = element?.value;
+        usernameInput.current = element;
+        usernameRegistration.ref(element);
+        if (existingUsername && element?.value !== existingUsername) {
+          setValue("username", existingUsername);
+        }
+      },
+    },
+    control: form.control,
     errors: form.formState.errors,
     isPendingLogin: login.isPending || form.formState.isSubmitting,
     verificationChallenge,
     restartLogin,
+    completeLogin,
+    changeRememberMe,
   };
 }

@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { Controller } from "react-hook-form";
 
 import { Button } from "@/components/ui/button";
-import { FieldGroup } from "@/components/ui/field";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Field, FieldContent, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { useLogin } from "../hooks/use-login";
 import { useResendVerificationMutation, useVerifyEmailMutation } from "../queries/auth-query";
 import { AuthCard } from "./auth-card";
@@ -13,17 +14,20 @@ import { AuthInputField } from "./auth-input-field";
 import { OtpForm } from "./otp-form";
 
 export default function LoginForm() {
-  const router = useRouter();
   const verification = useVerifyEmailMutation();
   const resend = useResendVerificationMutation();
   const {
     onSubmit,
     handleSubmit,
     register,
+    usernameRegistration,
+    control,
     errors,
     isPendingLogin,
     verificationChallenge,
     restartLogin,
+    completeLogin,
+    changeRememberMe,
   } = useLogin();
 
   return (
@@ -46,9 +50,13 @@ export default function LoginForm() {
           expiresIn={verificationChallenge.otp_expires_in}
           resendAfter={verificationChallenge.resend_after}
           onVerify={async (otp) => {
-            await verification.mutateAsync({ email: verificationChallenge.email, otp });
+            await verification.mutateAsync({
+              email: verificationChallenge.email,
+              otp,
+              remember_me: verificationChallenge.remember_me,
+            });
             verification.reset();
-            router.replace("/home");
+            completeLogin(verificationChallenge);
           }}
           onResend={async () => {
             const response = await resend.mutateAsync({ email: verificationChallenge.email });
@@ -72,7 +80,7 @@ export default function LoginForm() {
               autoComplete="username"
               autoCapitalize="none"
               spellCheck={false}
-              registration={register("username")}
+              registration={usernameRegistration}
               error={errors.username}
               disabled={isPendingLogin}
               required
@@ -94,6 +102,33 @@ export default function LoginForm() {
                   Forgot password?
                 </Link>
               }
+            />
+            <Controller
+              control={control}
+              name="remember_me"
+              render={({ field, fieldState }) => (
+                <Field orientation="horizontal" className="gap-2" data-disabled={isPendingLogin} data-invalid={fieldState.invalid}>
+                  <Checkbox
+                    id="login-remember-me"
+                    name={field.name}
+                    ref={field.ref}
+                    checked={field.value}
+                    onCheckedChange={(checked) => {
+                      field.onChange(checked);
+                      changeRememberMe(checked);
+                    }}
+                    onBlur={field.onBlur}
+                    disabled={isPendingLogin}
+                    aria-invalid={fieldState.invalid}
+                    aria-describedby={fieldState.error ? "login-remember-me-error" : undefined}
+                    className="self-center"
+                  />
+                  <FieldContent>
+                    <FieldLabel htmlFor="login-remember-me" className="min-h-11 cursor-pointer md:min-h-5">Remember me</FieldLabel>
+                    {fieldState.error ? <FieldError id="login-remember-me-error" errors={[fieldState.error]} /> : null}
+                  </FieldContent>
+                </Field>
+              )}
             />
           </FieldGroup>
           <Button type="submit" size="default" disabled={isPendingLogin} className="h-11 w-full md:h-9">
