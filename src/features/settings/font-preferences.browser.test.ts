@@ -178,9 +178,9 @@ for (const failSave of [false, true]) {
     await page.getByRole("menuitem", { name: "Log out" }).click();
     await expect(page).toHaveURL(/\/login$/);
     await expect(page.locator("html")).not.toHaveAttribute("data-app-font");
-    await expect(page.getByPlaceholder("Username")).toHaveCSS("font-family", /manrope/i);
-    await page.getByPlaceholder("Username").fill("other");
-    await page.getByPlaceholder("Password").fill("password");
+    await expect(page.getByLabel("Username", { exact: true })).toHaveCSS("font-family", /manrope/i);
+    await page.getByLabel("Username", { exact: true }).fill("other");
+    await page.getByLabel("Password", { exact: true }).fill("password");
     await page.getByRole("button", { name: "Sign in", exact: true }).click();
     await expect(page).toHaveURL(/\/home$/, { timeout: 60_000 });
     await page.getByRole("button", { name: "Open account menu for Test User" }).click();

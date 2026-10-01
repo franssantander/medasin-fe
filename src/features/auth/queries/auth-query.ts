@@ -3,6 +3,15 @@ import { authService } from "../services/auth-service";
 
 export const currentUserKey = ["current-user"] as const;
 
+function useSessionCleanup() {
+  const queryClient = useQueryClient();
+
+  return async () => {
+    await queryClient.cancelQueries();
+    queryClient.removeQueries();
+  };
+}
+
 export function useCurrentUserQuery() {
   return useQuery({
     queryKey: currentUserKey,
@@ -13,33 +22,46 @@ export function useCurrentUserQuery() {
 }
 
 export function useLoginMutation() {
-  const queryClient = useQueryClient();
+  const clearSessionQueries = useSessionCleanup();
 
   return useMutation({
     mutationFn: authService.login,
-    onSuccess: async () => {
-      await queryClient.cancelQueries({ queryKey: currentUserKey });
-      queryClient.removeQueries({ queryKey: currentUserKey });
-      queryClient.removeQueries({ queryKey: ["home"] });
-      queryClient.removeQueries({ queryKey: ["resources"] });
-      queryClient.removeQueries({ queryKey: ["calendar-plans"] });
-      queryClient.removeQueries({ queryKey: ["notifications"] });
-    },
+    gcTime: 0,
+    onSuccess: clearSessionQueries,
   });
 }
 
 export function useLogoutMutation() {
-  const queryClient = useQueryClient();
+  const clearSessionQueries = useSessionCleanup();
 
   return useMutation({
     mutationFn: authService.logout,
-    onSuccess: async () => {
-      await queryClient.cancelQueries({ queryKey: currentUserKey });
-      queryClient.removeQueries({ queryKey: currentUserKey });
-      queryClient.removeQueries({ queryKey: ["home"] });
-      queryClient.removeQueries({ queryKey: ["resources"] });
-      queryClient.removeQueries({ queryKey: ["calendar-plans"] });
-      queryClient.removeQueries({ queryKey: ["notifications"] });
-    },
+    onSuccess: clearSessionQueries,
   });
+}
+
+export function useRegisterMutation() {
+  return useMutation({ mutationFn: authService.register, gcTime: 0 });
+}
+
+export function useVerifyEmailMutation() {
+  const clearSessionQueries = useSessionCleanup();
+  return useMutation({ mutationFn: authService.verifyEmail, gcTime: 0, onSuccess: clearSessionQueries });
+}
+
+export function useResendVerificationMutation() {
+  return useMutation({ mutationFn: authService.resendVerification, gcTime: 0 });
+}
+
+export function useForgotPasswordMutation() {
+  return useMutation({ mutationFn: authService.forgotPassword, gcTime: 0 });
+}
+
+export function useVerifyPasswordResetMutation() {
+  return useMutation({ mutationFn: authService.verifyPasswordReset, gcTime: 0 });
+}
+
+export function useResetPasswordMutation() {
+  const clearSessionQueries = useSessionCleanup();
+  return useMutation({ mutationFn: authService.resetPassword, gcTime: 0, onSuccess: clearSessionQueries });
 }

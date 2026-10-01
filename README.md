@@ -28,6 +28,23 @@ modify real letters. They exercise the actual page renderer, text-size reflow,
 content preservation, and the ten-page limit. Run `npm run lint` and
 `npm run build` for static checks.
 
+## Signup and password recovery
+
+Signup at `/register` requires matching password confirmation and an emailed
+six-digit verification code before signing in. Unverified users who enter valid
+credentials at `/login` continue directly to verification using their existing
+code. They can resend an expired code, or resume verification at `/verify-email`.
+Email verification codes expire after sixty minutes, with a sixty-second resend
+cooldown. Password recovery at `/forgot-password` uses a ten-minute emailed code,
+then a new password and confirmation; users sign in after a successful reset.
+
+The frontend uses the existing `NEXT_PUBLIC_API_URL` and cookie authentication.
+Laravel's mail configuration and queue worker must be running to deliver codes.
+Recovery state is held in memory, so reloading restarts the flow.
+
+Run `npm test -- src/features/auth/auth.browser.test.ts` for auth regression
+tests. These mock API responses and do not create accounts or send real emails.
+
 ## Plan reminder updates
 
 Set the public Reverb variables in `.env.example` for the browser's reachable

@@ -1,14 +1,7 @@
 import Link from "next/link";
 
-import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-
-const stats = [
-  { label: "Occupied", value: "24/26" },
-  { label: "Rent collected", value: "$18,400" },
-  { label: "Open requests", value: "2" },
-];
 
 export function HeroSection() {
   return (

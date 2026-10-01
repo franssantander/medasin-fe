@@ -39,7 +39,11 @@ function getInitials(user?: CurrentUser) {
 function ProfileMenu({ user }: { user?: CurrentUser }) {
   const router = useRouter();
   const { mutate: logout, isPending } = useLogoutMutation();
-  const displayName = user?.full_name || user?.username || "User";
+  const displayName =
+    user?.full_name ||
+    [user?.first_name, user?.last_name].filter(Boolean).join(" ") ||
+    user?.username ||
+    "User";
 
   const handleLogout = () => {
     logout(undefined, {

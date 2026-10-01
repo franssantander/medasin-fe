@@ -16,6 +16,11 @@ let isRedirectingToLogin = false;
 let isRefreshingToken = false;
 let refreshQueue: QueuedRequest[] = [];
 
+const publicAuthEndpoints = new Set([
+  "login", "register", "verify-email", "resend-verification",
+  "forgot-password", "verify-password-reset", "reset-password",
+]);
+
 function redirectToLogin() {
   if (
     typeof window !== "undefined" &&
@@ -27,7 +32,7 @@ function redirectToLogin() {
       type: "error",
       description: "Your session has expired. Please log in again.",
     });
-    window.location.assign("/login");
+    window.location.assign(new URL("/login", window.location.origin).href);
   }
 }
 
@@ -50,12 +55,13 @@ axiosClient.interceptors.response.use(
     const apiError = parseApiError(error);
     const originalRequest = error?.config as RetryableRequestConfig | undefined;
     const requestUrl: string = originalRequest?.url ?? "";
-    const isLoginRequest = requestUrl.includes("/auth/login");
+    const authEndpoint = requestUrl.split("?")[0].replace(/\/$/, "").match(/\/auth\/([^/]+)$/)?.[1];
+    const isPublicAuthRequest = publicAuthEndpoints.has(authEndpoint ?? "");
     const isRefreshRequest = requestUrl.includes("/auth/refresh");
 
     const shouldAttemptRefresh =
       apiError.status === 401 &&
-      !isLoginRequest &&
+      !isPublicAuthRequest &&
       !isRefreshRequest &&
       originalRequest &&
       !originalRequest._retry;
@@ -90,8 +96,7 @@ axiosClient.interceptors.response.use(
 
     switch (apiError.status) {
       case 401:
-        if (isLoginRequest) {
-          console.warn("Login attempt failed.");
+        if (isPublicAuthRequest) {
           break;
         }
 
