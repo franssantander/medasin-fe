@@ -60,6 +60,32 @@ persistent cookies. Browser session restoration can retain session cookies.
 Run `npm test -- src/features/auth/auth.browser.test.ts` for auth regression
 tests. These mock API responses and do not create accounts or send real emails.
 
+## Profile and account management
+
+Open **Profile** from the account menu to manage your photo, password, or account
+at `/profile`. Photos support JPEG, PNG, and WebP up to 5 MiB, with a square crop
+before upload. Drag the photo or use positioning buttons, adjust zoom, and reset
+the crop in the circular preview. The saved photo appears in the account menu;
+removing it restores the initials fallback.
+
+Changing your password requires your current password and matching confirmation.
+It ends other sessions and password-recovery proofs, while issuing fresh cookies
+for this browser with its existing Remember me choice. Account deletion requires
+an authenticated, verified account and typing exactly `DELETE`. It permanently
+removes owned content, including archived and trashed items, clears this browser's
+sign-in and remembered username, and returns to login.
+
+Deploy the backend profile-image migration before enabling uploads. Use the
+existing public storage link and `/storage` proxy. Permanent file deletion runs
+through the `database` queue using the application's database connection: the
+cleanup job is persisted in the account-deletion transaction before database
+records disappear. Keep that queue worker running, restart workers after deploying
+the new job, and monitor failed cleanup jobs for retries. No new public environment
+variables are needed.
+
+Run `npm test -- src/features/profile/profile.browser.test.ts` for profile
+regressions. These mock API responses and never change or delete real accounts.
+
 ## Plan reminder updates
 
 Set the public Reverb variables in `.env.example` for the browser's reachable

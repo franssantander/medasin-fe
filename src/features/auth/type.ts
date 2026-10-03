@@ -8,6 +8,7 @@ export type CurrentUser = {
   email: string;
   username: string;
   font_family?: AppFontFamily;
+  profile_image_url?: string | null;
 };
 
 export type AuthResponse<T> = {

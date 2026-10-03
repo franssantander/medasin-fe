@@ -24,6 +24,8 @@ import { useLogoutMutation } from "@/features/auth/queries/auth-query";
 import { PlanNotifications } from "@/features/plans/notifications/plan-notifications";
 import { GlobalSearch } from "@/features/search/global-search";
 import type { CurrentUser } from "@/features/auth/type";
+import { UserAvatar } from "@/features/profile/components/user-avatar";
+import { useProfileAccountPending } from "@/features/profile/queries/profile-query";
 
 type AppHeaderProps = {
   currentUser?: CurrentUser;
@@ -31,14 +33,10 @@ type AppHeaderProps = {
   onOpenMobileNav: () => void;
 };
 
-function getInitials(user?: CurrentUser) {
-  const initials = `${user?.first_name?.[0] ?? ""}${user?.last_name?.[0] ?? ""}`;
-  return initials || user?.username?.[0]?.toUpperCase() || "U";
-}
-
 function ProfileMenu({ user }: { user?: CurrentUser }) {
   const router = useRouter();
   const { mutate: logout, isPending } = useLogoutMutation();
+  const isAccountPending = useProfileAccountPending(user?.id);
   const displayName =
     user?.full_name ||
     [user?.first_name, user?.last_name].filter(Boolean).join(" ") ||
@@ -46,6 +44,7 @@ function ProfileMenu({ user }: { user?: CurrentUser }) {
     "User";
 
   const handleLogout = () => {
+    if (isPending || isAccountPending) return;
     logout(undefined, {
       onSuccess: () => {
         toast.add({
@@ -70,7 +69,7 @@ function ProfileMenu({ user }: { user?: CurrentUser }) {
         aria-label={`Open account menu for ${displayName}`}
         className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground outline-none transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-ring data-popup-open:opacity-90"
       >
-        {getInitials(user)}
+        <UserAvatar user={user} className="size-8" />
       </DropdownMenuTrigger>
       <DropdownMenuContent className="w-56">
         <div className="min-w-0 px-2.5 py-2">
@@ -82,7 +81,7 @@ function ProfileMenu({ user }: { user?: CurrentUser }) {
           )}
         </div>
         <DropdownMenuSeparator />
-        <DropdownMenuItem>
+        <DropdownMenuItem onClick={() => router.push("/profile")}>
           <UserRound />
           Profile
         </DropdownMenuItem>
@@ -93,7 +92,7 @@ function ProfileMenu({ user }: { user?: CurrentUser }) {
         <DropdownMenuSeparator />
         <DropdownMenuItem
           destructive
-          disabled={isPending}
+          disabled={isPending || isAccountPending}
           closeOnClick={false}
           onClick={handleLogout}
         >

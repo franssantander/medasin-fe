@@ -35,6 +35,7 @@ export function useLogoutMutation() {
   const clearSessionQueries = useSessionCleanup();
 
   return useMutation({
+    mutationKey: ["auth", "logout"],
     mutationFn: authService.logout,
     onSuccess: clearSessionQueries,
   });
