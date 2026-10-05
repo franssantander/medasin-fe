@@ -8,6 +8,8 @@ import {
 } from "../queries/resource-query";
 import type { Resource, ResourceType } from "../type";
 
+const DESKTOP_MEDIA_QUERY = "(min-width: 64rem)";
+
 export function useResourceList() {
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -17,6 +19,7 @@ export function useResourceList() {
   const [selected, setSelected] = useState<Resource>();
   const [archiving, setArchiving] = useState<Resource>();
   const loadMoreRef = useRef<HTMLDivElement>(null);
+  const resultsScrollRef = useRef<HTMLDivElement>(null);
   const archiveResource = useArchiveResource();
   const tagsQuery = useResourceTagsQuery();
   const resourcesQuery = useResourcesQuery({
@@ -33,10 +36,16 @@ export function useResourceList() {
     return () => window.clearTimeout(timer);
   }, [search]);
 
+  useEffect(() => {
+    if (window.matchMedia(DESKTOP_MEDIA_QUERY).matches) {
+      resultsScrollRef.current?.scrollTo({ top: 0 });
+    }
+  }, [debouncedSearch, type, tag]);
+
   const {
     fetchNextPage,
     hasNextPage,
-    isFetchingNextPage,
+    isFetching,
     isFetchNextPageError,
   } = resourcesQuery;
 
@@ -45,21 +54,37 @@ export function useResourceList() {
     if (
       !loadMoreElement ||
       !hasNextPage ||
-      isFetchingNextPage ||
+      isFetching ||
       isFetchNextPageError
     ) {
       return;
     }
 
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) void fetchNextPage();
-      },
-      { root: loadMoreElement.closest("main"), rootMargin: "200px" },
-    );
-    observer.observe(loadMoreElement);
-    return () => observer.disconnect();
-  }, [fetchNextPage, hasNextPage, isFetchingNextPage, isFetchNextPageError]);
+    const desktopMedia = window.matchMedia(DESKTOP_MEDIA_QUERY);
+    let observer: IntersectionObserver;
+    const observe = () => {
+      observer?.disconnect();
+      observer = new IntersectionObserver(
+        ([entry]) => {
+          if (entry.isIntersecting) void fetchNextPage();
+        },
+        {
+          root: desktopMedia.matches
+            ? resultsScrollRef.current
+            : loadMoreElement.closest("main"),
+          rootMargin: "200px 0px",
+        },
+      );
+      observer.observe(loadMoreElement);
+    };
+
+    observe();
+    desktopMedia.addEventListener("change", observe);
+    return () => {
+      observer.disconnect();
+      desktopMedia.removeEventListener("change", observe);
+    };
+  }, [fetchNextPage, hasNextPage, isFetching, isFetchNextPageError]);
 
   const resources = useMemo(
     () => [
@@ -98,6 +123,7 @@ export function useResourceList() {
     creating,
     isFiltered,
     loadMoreRef,
+    resultsScrollRef,
     resources,
     resourcesQuery,
     search,

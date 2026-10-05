@@ -1,14 +1,24 @@
 "use client";
 
+import { Menu as MenuPrimitive } from "@base-ui/react/menu";
 import { useQuery } from "@tanstack/react-query";
 import {
   useResourceQuery,
   useResourcesQuery,
 } from "@/features/resources/queries/resource-query";
 import {
+  AlignLeft,
+  Archive,
+  ArrowUpRight,
   CalendarDays,
   Check,
+  CheckCircle2,
+  ChevronDown,
+  ChevronRight,
+  CircleAlert,
+  CircleDashed,
   Clock3,
+  Cloud,
   FileText,
   Link2,
   LoaderCircle,
@@ -18,7 +28,8 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useTheme } from "next-themes";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -36,11 +47,19 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Input } from "@/components/ui/input";
+import { Empty, EmptyDescription, EmptyMedia } from "@/components/ui/empty";
+import {
+  Field,
+  FieldDescription,
+  FieldGroup,
+  FieldLabel,
+  FieldTitle,
+} from "@/components/ui/field";
 import { NoteRichTextEditor } from "@/components/ui/note-rich-text-editor";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
   SelectTrigger,
 } from "@/components/ui/select";
@@ -53,10 +72,13 @@ import {
   DrawerHeader,
   DrawerTitle,
 } from "@/components/ui/drawer";
+import { Separator } from "@/components/ui/separator";
+import { Textarea } from "@/components/ui/textarea";
 import { areaKeys } from "@/features/areas/queries/area-query";
 import { areaService } from "@/features/areas/services/area-service";
 import { useNotesTreeQuery } from "@/features/notes/queries/note-query";
 import { ResourceDetailDialog } from "@/features/resources/components/resource-detail-dialog";
+import { cn } from "@/lib/utils";
 import type {
   BoardLabel,
   BoardStage,
@@ -133,6 +155,8 @@ export function TaskDetailsSheet({
   onDelete: () => void;
 }) {
   const router = useRouter();
+  const { resolvedTheme } = useTheme();
+  const fieldId = useId();
   const taskUuid = task?.uuid;
   const initialDraft = createTaskDraft(task);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -375,6 +399,26 @@ export function TaskDetailsSheet({
     ? (labels.find((label) => label.uuid === draft.label_uuids[0]) ??
       task?.labels.find((label) => label.uuid === draft.label_uuids[0]))
     : undefined;
+  const saving = saveState === "saving" || isSaving;
+  const saveError = saveState === "error" && !saving;
+  const SaveIcon = saving
+    ? LoaderCircle
+    : saveError
+      ? CircleAlert
+      : saveState === "dirty"
+        ? CircleDashed
+        : saveState === "saved"
+          ? CheckCircle2
+          : Cloud;
+  const saveMessage = saving
+    ? "Saving…"
+    : saveError
+      ? "Couldn’t save changes"
+      : saveState === "dirty"
+        ? "Unsaved changes"
+        : saveState === "saved"
+          ? "Saved"
+          : "Changes save automatically";
 
   return (
     <Drawer
@@ -389,147 +433,298 @@ export function TaskDetailsSheet({
         if (!open) onOpenChange(false);
       }}
     >
-      <DrawerContent className="w-full md:w-[46rem] ">
+      <DrawerContent className="w-full max-w-full md:w-[46rem]">
         {task && (
           <>
-            <DrawerHeader className="shrink-0 gap-1.5 border-b p-4">
-              <DrawerTitle className="leading-tight">
-                {archived ? (
-                  <span className="text-2xl font-semibold leading-tight sm:text-3xl">
-                    {task.title}
+            <DrawerHeader className="gap-3 border-b p-4 sm:p-6">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex min-w-0 flex-wrap items-center gap-2">
+                  <span className="text-sm font-medium text-muted-foreground">
+                    Task details
                   </span>
-                ) : (
-                  <Input
-                    value={draft.title}
-                    onChange={(event) =>
-                      updateDraft({ title: event.target.value })
-                    }
-                    onBlur={() => {
-                      const nextTitle = draftRef.current.title.trim();
-                      updateDraft({
-                        title: nextTitle || savedDraftRef.current.title,
-                      });
-                      void flushDraftRef.current();
-                    }}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") event.currentTarget.blur();
-                    }}
-                    maxLength={120}
-                    aria-label="Task title"
-                    className="h-auto border-0 px-0 text-2xl font-semibold leading-tight shadow-none focus-visible:ring-0 sm:text-3xl md:text-3xl"
-                  />
-                )}
-              </DrawerTitle>
-              <DrawerDescription className="sr-only">
-                View and update the task details.
-              </DrawerDescription>
-              <DrawerClose
-                render={
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-sm"
-                    className="absolute top-4 right-4"
-                    aria-label="Close task details"
-                  />
-                }
-              >
-                <XIcon />
-              </DrawerClose>
-              <div className="flex items-center gap-4">
-                {archived ? (
-                  <Badge
-                    variant="secondary"
-                    className="w-fit gap-1.5 capitalize"
-                  >
-                    <StatusDot color={stageDotColors[task.stage]} />
-                    {stages.find((item) => item.key === task.stage)?.name ??
-                      task.stage.replace("_", " ")}
-                  </Badge>
-                ) : (
-                  <Select
-                    value={draft.stage}
-                    onValueChange={(value) => {
-                      const nextStage = value as BoardStageKey;
-                      updateDraft({ stage: nextStage });
-                    }}
-                  >
-                    <SelectTrigger className="bg-background">
-                      <StatusValue
-                        color={stageDotColors[draft.stage]}
-                        label={
-                          stages.find((item) => item.key === draft.stage)
-                            ?.name ?? draft.stage.replace("_", " ")
-                        }
-                      />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {stages.map((item) => (
-                        <SelectItem key={item.key} value={item.key}>
-                          <StatusValue
-                            color={stageDotColors[item.key]}
-                            label={item.name}
-                          />
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
-
-                {archived ? (
-                  <Badge
-                    className={`w-fit gap-1.5 capitalize ${priorityStyles[task.priority]}`}
-                  >
-                    <StatusDot color={priorityDotColors[task.priority]} />
-                    {task.priority}
-                  </Badge>
-                ) : (
-                  <Select
-                    value={draft.priority}
-                    onValueChange={(value) => {
-                      const nextPriority = value as BoardTask["priority"];
-                      updateDraft({ priority: nextPriority });
-                    }}
-                  >
-                    <SelectTrigger className="bg-background">
-                      <StatusValue
-                        color={priorityDotColors[draft.priority]}
-                        label={
-                          draft.priority.charAt(0).toUpperCase() +
-                          draft.priority.slice(1)
-                        }
-                      />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="low">
-                        <StatusValue
-                          color={priorityDotColors.low}
-                          label="Low"
-                        />
-                      </SelectItem>
-                      <SelectItem value="medium">
-                        <StatusValue
-                          color={priorityDotColors.medium}
-                          label="Medium"
-                        />
-                      </SelectItem>
-                      <SelectItem value="high">
-                        <StatusValue
-                          color={priorityDotColors.high}
-                          label="High"
-                        />
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                )}
+                  {archived && (
+                    <Badge variant="secondary">
+                      <Archive aria-hidden="true" data-icon="inline-start" />
+                      Read only
+                    </Badge>
+                  )}
+                </div>
+                <DrawerClose
+                  render={
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="size-11 sm:size-9"
+                      aria-label="Close task details"
+                    />
+                  }
+                >
+                  <XIcon aria-hidden="true" />
+                </DrawerClose>
               </div>
+              {archived ? (
+                <DrawerTitle className="project-task-title [overflow-wrap:anywhere]">
+                  {task.title}
+                </DrawerTitle>
+              ) : (
+                <>
+                  <DrawerTitle className="sr-only">
+                    {draft.title || task.title}
+                  </DrawerTitle>
+                  <Field className="gap-0">
+                    <FieldLabel htmlFor={`${fieldId}-title`} className="sr-only">
+                      Task title
+                    </FieldLabel>
+                    <Textarea
+                      id={`${fieldId}-title`}
+                      rows={1}
+                      value={draft.title}
+                      onChange={(event) =>
+                        updateDraft({
+                          title: event.target.value.replace(/[\r\n]+/g, " "),
+                        })
+                      }
+                      onBlur={() => {
+                        const nextTitle = draftRef.current.title.trim();
+                        updateDraft({
+                          title: nextTitle || savedDraftRef.current.title,
+                        });
+                        void flushDraftRef.current();
+                      }}
+                      onKeyDown={(event) => {
+                        if (
+                          event.key === "Enter" &&
+                          !event.nativeEvent.isComposing
+                        ) {
+                          event.preventDefault();
+                          event.currentTarget.blur();
+                        }
+                      }}
+                      maxLength={120}
+                      className="project-task-title -mx-2 min-h-0 w-[calc(100%+1rem)] resize-none border-transparent px-2 py-1 shadow-none"
+                    />
+                  </Field>
+                </>
+              )}
+              <DrawerDescription className="sr-only">
+                {archived
+                  ? "View this archived task. Task details are read only."
+                  : "Update task details. Changes save automatically."}
+              </DrawerDescription>
             </DrawerHeader>
 
-            <div className="grid min-h-0 flex-1 content-start gap-6 overflow-y-auto p-4">
-              <TaskDetailSection title="Description">
-                <div className="h-[26rem] min-h-64 overflow-hidden rounded-lg">
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-6 overflow-y-auto overscroll-contain p-4 sm:p-6">
+              <FieldGroup className="grid grid-cols-2 gap-3 rounded-xl bg-muted/40 p-3 sm:grid-cols-3 sm:gap-4 sm:p-4">
+                <Field className="min-w-0 gap-2">
+                  {archived ? (
+                    <FieldTitle>Status</FieldTitle>
+                  ) : (
+                    <FieldLabel htmlFor={`${fieldId}-status`}>Status</FieldLabel>
+                  )}
+                  {archived ? (
+                    <Badge
+                      variant="secondary"
+                      className="w-fit gap-1.5 capitalize"
+                    >
+                      <StatusDot color={stageDotColors[task.stage]} />
+                      {stages.find((item) => item.key === task.stage)?.name ??
+                        task.stage.replace("_", " ")}
+                    </Badge>
+                  ) : (
+                    <Select
+                      value={draft.stage}
+                      onValueChange={(value) => {
+                        const nextStage = value as BoardStageKey;
+                        updateDraft({ stage: nextStage });
+                      }}
+                    >
+                      <SelectTrigger
+                        id={`${fieldId}-status`}
+                        className="min-h-11 w-full min-w-0 sm:min-h-9"
+                      >
+                        <StatusValue
+                          color={stageDotColors[draft.stage]}
+                          label={
+                            stages.find((item) => item.key === draft.stage)
+                              ?.name ?? draft.stage.replace("_", " ")
+                          }
+                        />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectGroup>
+                          {stages.map((item) => (
+                            <SelectItem key={item.key} value={item.key}>
+                              <StatusValue
+                                color={stageDotColors[item.key]}
+                                label={item.name}
+                              />
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                  )}
+                </Field>
+
+                <Field className="min-w-0 gap-2">
+                  {archived ? (
+                    <FieldTitle>Priority</FieldTitle>
+                  ) : (
+                    <FieldLabel htmlFor={`${fieldId}-priority`}>
+                      Priority
+                    </FieldLabel>
+                  )}
+                  {archived ? (
+                    <Badge
+                      className={cn(
+                        "w-fit gap-1.5 capitalize",
+                        priorityStyles[task.priority],
+                      )}
+                    >
+                      <StatusDot color={priorityDotColors[task.priority]} />
+                      {task.priority}
+                    </Badge>
+                  ) : (
+                    <Select
+                      value={draft.priority}
+                      onValueChange={(value) => {
+                        const nextPriority = value as BoardTask["priority"];
+                        updateDraft({ priority: nextPriority });
+                      }}
+                    >
+                      <SelectTrigger
+                        id={`${fieldId}-priority`}
+                        className="min-h-11 w-full min-w-0 sm:min-h-9"
+                      >
+                        <StatusValue
+                          color={priorityDotColors[draft.priority]}
+                          label={
+                            draft.priority.charAt(0).toUpperCase() +
+                            draft.priority.slice(1)
+                          }
+                        />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectGroup>
+                          <SelectItem value="low">
+                            <StatusValue
+                              color={priorityDotColors.low}
+                              label="Low"
+                            />
+                          </SelectItem>
+                          <SelectItem value="medium">
+                            <StatusValue
+                              color={priorityDotColors.medium}
+                              label="Medium"
+                            />
+                          </SelectItem>
+                          <SelectItem value="high">
+                            <StatusValue
+                              color={priorityDotColors.high}
+                              label="High"
+                            />
+                          </SelectItem>
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                  )}
+                </Field>
+
+                <Field className="col-span-2 min-w-0 gap-2 sm:col-span-1">
+                  {archived ? (
+                    <FieldTitle>Label</FieldTitle>
+                  ) : (
+                    <FieldLabel htmlFor={`${fieldId}-label`}>Label</FieldLabel>
+                  )}
+                  {archived ? (
+                    task.labels[0] ? (
+                      <span className="min-w-0 [&_[data-slot=badge]]:block [&_[data-slot=badge]]:max-w-full [&_[data-slot=badge]]:truncate">
+                        <LabelBadge label={task.labels[0]} />
+                      </span>
+                    ) : (
+                      <span className="text-sm text-muted-foreground">
+                        No label
+                      </span>
+                    )
+                  ) : (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger
+                        render={
+                          <Button
+                            type="button"
+                            variant="outline"
+                            id={`${fieldId}-label`}
+                            className="h-11 w-full min-w-0 justify-between sm:h-9"
+                            disabled={labels.length === 0 && !selectedLabel}
+                            aria-label={
+                              selectedLabel ? "Update label" : "Add label"
+                            }
+                          />
+                        }
+                      >
+                        {selectedLabel ? (
+                          <span className="min-w-0 [&_[data-slot=badge]]:block [&_[data-slot=badge]]:max-w-full [&_[data-slot=badge]]:truncate">
+                            <LabelBadge label={selectedLabel} />
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground">No label</span>
+                        )}
+                        <ChevronDown
+                          aria-hidden="true"
+                          data-icon="inline-end"
+                        />
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent
+                        side="bottom"
+                        align="start"
+                        className="max-w-[calc(100vw-2rem)]"
+                      >
+                        <MenuPrimitive.Group>
+                          {labels.map((label) => (
+                            <DropdownMenuItem
+                              key={label.uuid}
+                              onClick={() => updateLabel(label.uuid)}
+                            >
+                              <span className="min-w-0 flex-1 [&_[data-slot=badge]]:block [&_[data-slot=badge]]:max-w-full [&_[data-slot=badge]]:truncate">
+                                <LabelBadge label={label} />
+                              </span>
+                              {label.uuid === draft.label_uuids[0] && (
+                                <Check aria-hidden="true" />
+                              )}
+                            </DropdownMenuItem>
+                          ))}
+                        </MenuPrimitive.Group>
+                        {selectedLabel && (
+                          <>
+                            <DropdownMenuSeparator />
+                            <MenuPrimitive.Group>
+                              <DropdownMenuItem
+                                destructive
+                                onClick={() => updateLabel()}
+                              >
+                                <Trash2 aria-hidden="true" />
+                                Remove label
+                              </DropdownMenuItem>
+                            </MenuPrimitive.Group>
+                          </>
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  )}
+                  {!archived && labels.length === 0 && !selectedLabel && (
+                    <FieldDescription>
+                      No labels available for this board.
+                    </FieldDescription>
+                  )}
+                </Field>
+              </FieldGroup>
+
+              <TaskDetailSection title="Description" icon={<AlignLeft />}>
+                <div className="task-description-editor rounded-xl">
                   <NoteRichTextEditor
                     mode="task"
+                    theme={resolvedTheme === "dark" ? "dark" : "light"}
                     documentId={`task-description-${task.uuid}`}
                     content={draft.description ?? ""}
                     editable={!archived}
@@ -555,79 +750,21 @@ export function TaskDetailsSheet({
                 </div>
               </TaskDetailSection>
 
-              <TaskDetailSection title="Labels">
-                {archived ? (
-                  task.labels[0] ? (
-                    <LabelBadge label={task.labels[0]} />
-                  ) : (
-                    <EmptyTaskDetail>No labels assigned.</EmptyTaskDetail>
-                  )
-                ) : (
-                  <div className="flex items-center gap-2">
-                    {selectedLabel ? (
-                      <LabelBadge label={selectedLabel} />
-                    ) : (
-                      <EmptyTaskDetail>No label assigned.</EmptyTaskDetail>
-                    )}
-                    <DropdownMenu>
-                      <DropdownMenuTrigger
-                        render={
-                          <Button
-                            type="button"
-                            size="icon-sm"
-                            variant="outline"
-                            disabled={labels.length === 0}
-                            aria-label={
-                              selectedLabel ? "Update label" : "Add label"
-                            }
-                          />
-                        }
-                      >
-                        <Plus />
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent side="bottom" align="start">
-                        {labels.map((label) => (
-                          <DropdownMenuItem
-                            key={label.uuid}
-                            onClick={() => updateLabel(label.uuid)}
-                          >
-                            <span className="flex-1">
-                              <LabelBadge label={label} />
-                            </span>
-                            {label.uuid === draft.label_uuids[0] && <Check />}
-                          </DropdownMenuItem>
-                        ))}
-                        {selectedLabel && (
-                          <>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem
-                              destructive
-                              onClick={() => updateLabel()}
-                            >
-                              <Trash2 />
-                              Remove label
-                            </DropdownMenuItem>
-                          </>
-                        )}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-                )}
-              </TaskDetailSection>
-
               <TaskDetailSection
                 title="Resources"
+                count={task.resources.length}
                 icon={<Link2 />}
                 action={
                   !archived ? (
                     <Button
                       type="button"
-                      size="icon-sm"
-                      variant="outline"
-                      aria-label="Link resources"
+                      size="sm"
+                      variant="ghost"
+                      className="h-11 sm:h-8"
                       onClick={() => setLinkPicker("resources")}
                     >
-                      <Plus />
+                      <Plus aria-hidden="true" data-icon="inline-start" />
+                      Link resources
                     </Button>
                   ) : undefined
                 }
@@ -641,23 +778,27 @@ export function TaskDetailsSheet({
                     onSelect={handleOpenResource}
                   />
                 ) : (
-                  <EmptyTaskDetail>No resources linked.</EmptyTaskDetail>
+                  <EmptyTaskDetail icon={<Link2 />}>
+                    No resources linked yet.
+                  </EmptyTaskDetail>
                 )}
               </TaskDetailSection>
 
               <TaskDetailSection
                 title="Notes"
+                count={task.notes.length}
                 icon={<FileText />}
                 action={
                   !archived ? (
                     <Button
                       type="button"
-                      size="icon-sm"
-                      variant="outline"
-                      aria-label="Link notes"
+                      size="sm"
+                      variant="ghost"
+                      className="h-11 sm:h-8"
                       onClick={() => setLinkPicker("notes")}
                     >
-                      <Plus />
+                      <Plus aria-hidden="true" data-icon="inline-start" />
+                      Link notes
                     </Button>
                   ) : undefined
                 }
@@ -665,51 +806,88 @@ export function TaskDetailsSheet({
                 {task.notes.length > 0 ? (
                   <TaskNoteList items={task.notes} />
                 ) : (
-                  <EmptyTaskDetail>No notes linked.</EmptyTaskDetail>
+                  <EmptyTaskDetail icon={<FileText />}>
+                    No notes linked yet.
+                  </EmptyTaskDetail>
                 )}
               </TaskDetailSection>
 
               {(task.created_at || task.updated_at) && (
-                <TaskDetailSection title="Activity" icon={<Clock3 />}>
-                  <div className="grid gap-1 text-sm text-muted-foreground">
+                <div className="flex flex-col gap-4">
+                  <Separator />
+                  <dl className="grid gap-3 text-xs text-muted-foreground sm:grid-cols-2">
                     {task.created_at && (
-                      <p>Created {formatTaskTimestamp(task.created_at)}</p>
+                      <div className="flex flex-col gap-1.5">
+                        <dt className="flex items-center gap-1.5">
+                          <Clock3 aria-hidden="true" className="size-3.5" />
+                          Created
+                        </dt>
+                        <dd>
+                          <time dateTime={task.created_at}>
+                            {formatTaskTimestamp(task.created_at)}
+                          </time>
+                        </dd>
+                      </div>
                     )}
                     {task.updated_at && (
-                      <p>Updated {formatTaskTimestamp(task.updated_at)}</p>
+                      <div className="flex flex-col gap-1.5">
+                        <dt className="flex items-center gap-1.5">
+                          <Clock3 aria-hidden="true" className="size-3.5" />
+                          Updated
+                        </dt>
+                        <dd>
+                          <time dateTime={task.updated_at}>
+                            {formatTaskTimestamp(task.updated_at)}
+                          </time>
+                        </dd>
+                      </div>
                     )}
-                  </div>
-                </TaskDetailSection>
+                  </dl>
+                </div>
               )}
             </div>
 
             {!archived && (
-              <DrawerFooter className="shrink-0 border-t p-4 sm:flex-row sm:justify-end">
-                {saveState === "error" ? (
-                  <button
-                    type="button"
-                    className="mr-auto self-center text-sm text-destructive underline underline-offset-4"
-                    onClick={() => void flushDraftRef.current()}
+              <DrawerFooter className="flex-row items-center justify-between gap-3 border-t px-4 py-3 sm:px-6 sm:py-4">
+                <div className="flex min-w-0 flex-1 flex-col items-start gap-1">
+                  <p
+                    role="status"
+                    aria-live="polite"
+                    className={cn(
+                      "flex items-center gap-2 text-sm text-muted-foreground",
+                      saveError && "text-destructive",
+                    )}
                   >
-                    Retry save
-                  </button>
-                ) : saveState !== "idle" ? (
-                  <span className="mr-auto self-center text-sm text-muted-foreground">
-                    {saveState === "dirty"
-                      ? "Unsaved changes"
-                      : saveState === "saving" || isSaving
-                        ? "Saving…"
-                        : "Saved"}
-                  </span>
-                ) : null}
+                    <SaveIcon
+                      aria-hidden="true"
+                      className={cn(
+                        "size-4 shrink-0",
+                        saving && "animate-spin motion-reduce:animate-none",
+                      )}
+                    />
+                    <span>{saveMessage}</span>
+                  </p>
+                  {saveError && (
+                    <Button
+                      type="button"
+                      variant="link"
+                      size="sm"
+                      className="-ml-2.5 h-11 sm:h-8"
+                      onClick={() => void flushDraftRef.current()}
+                    >
+                      Retry save
+                    </Button>
+                  )}
+                </div>
                 <Button
                   type="button"
-                  variant="destructive"
+                  variant="outline"
+                  className="h-11 sm:h-9"
                   disabled={isDeleting || isSaving}
                   onClick={() => setDeleteConfirmationOpen(true)}
                 >
-                  <Trash2 />
-                  {isDeleting ? "Deleting…" : "Delete"}
+                  <Trash2 aria-hidden="true" data-icon="inline-start" />
+                  {isDeleting ? "Deleting…" : "Delete task"}
                 </Button>
               </DrawerFooter>
             )}
@@ -876,21 +1054,43 @@ export function TaskDetailsSheet({
 
 function TaskDetailSection({
   title,
+  count,
   icon,
   action,
   children,
 }: {
   title: string;
+  count?: number;
   icon?: React.ReactNode;
   action?: React.ReactNode;
   children: React.ReactNode;
 }) {
+  const titleId = useId();
+
   return (
-    <section className="grid gap-2">
+    <section
+      aria-labelledby={titleId}
+      className="flex min-w-0 shrink-0 flex-col gap-3"
+    >
       <div className="flex min-h-8 items-center justify-between gap-3">
-        <h3 className="flex items-center gap-2 text-sm font-semibold">
-          {icon && <span className="[&_svg]:size-4">{icon}</span>}
+        <h3 id={titleId} className="flex items-center gap-2 text-sm font-semibold">
+          {icon && (
+            <span
+              aria-hidden="true"
+              className="text-muted-foreground [&_svg]:size-4"
+            >
+              {icon}
+            </span>
+          )}
           {title}
+          {count !== undefined && (
+            <Badge
+              variant="secondary"
+              className="min-w-5 justify-center tabular-nums"
+            >
+              {count}
+            </Badge>
+          )}
         </h3>
         {action}
       </div>
@@ -899,8 +1099,23 @@ function TaskDetailSection({
   );
 }
 
-function EmptyTaskDetail({ children }: { children: React.ReactNode }) {
-  return <p className="text-sm text-muted-foreground">{children}</p>;
+function EmptyTaskDetail({
+  icon,
+  children,
+}: {
+  icon?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <Empty className="flex-row justify-start gap-3 border p-4 text-left">
+      {icon && (
+        <EmptyMedia variant="icon" aria-hidden="true" className="mb-0">
+          {icon}
+        </EmptyMedia>
+      )}
+      <EmptyDescription>{children}</EmptyDescription>
+    </Empty>
+  );
 }
 
 function TaskResourceList({
@@ -947,7 +1162,7 @@ function TaskNoteList({ items }: { items: BoardTaskNoteLink[] }) {
           }
           icon={<FileText />}
           title={item.title}
-          areas={item.area ? [item.area.name] : ["Standalone Notes"]}
+          areas={item.area ? [item.area.name] : ["Standalone notes"]}
           date={item.updated_at ?? item.created_at}
         />
       ))}
@@ -974,39 +1189,63 @@ function LinkedItemCard({
   error?: boolean;
   onClick?: () => void;
 }) {
+  const itemClassName =
+    "flex w-full min-w-0 items-center gap-3 rounded-xl border bg-card p-3 text-left text-sm transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50";
   const content = (
-    <div className="flex items-start gap-3 rounded-lg border bg-card p-3 text-sm transition-colors hover:bg-muted/40">
-      <span className="mt-0.5 rounded-md bg-muted p-2 text-muted-foreground [&_svg]:size-4">
+    <>
+      <span
+        aria-hidden="true"
+        className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground [&_svg]:size-4"
+      >
         {icon}
       </span>
       <span className="min-w-0 flex-1">
         <span className="block truncate font-medium">{title}</span>
         <span className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-          <span>{areas.length > 0 ? areas.join(", ") : "No Area"}</span>
+          <span className="min-w-0 [overflow-wrap:anywhere]">
+            {areas.length > 0 ? areas.join(", ") : "No area"}
+          </span>
           {date && (
             <span className="flex items-center gap-1">
-              <CalendarDays className="size-3" />
-              {formatTaskDate(date)}
+              <CalendarDays aria-hidden="true" className="size-3" />
+              <time dateTime={date}>{formatTaskDate(date)}</time>
             </span>
           )}
-          {loading && (
-            <span className="flex items-center gap-1">
-              <LoaderCircle className="size-3 animate-spin" />
-              Loading…
+          {loading && <span>Loading…</span>}
+          {error && (
+            <span className="text-destructive">
+              Couldn’t load resource. Retry
             </span>
           )}
-          {error && <span className="text-destructive">Retry</span>}
         </span>
       </span>
-    </div>
+      {loading ? (
+        <LoaderCircle
+          aria-hidden="true"
+          className="size-4 shrink-0 animate-spin text-muted-foreground motion-reduce:animate-none"
+        />
+      ) : href ? (
+        <ArrowUpRight
+          aria-hidden="true"
+          className="size-4 shrink-0 text-muted-foreground"
+        />
+      ) : (
+        <ChevronRight
+          aria-hidden="true"
+          className="size-4 shrink-0 text-muted-foreground"
+        />
+      )}
+    </>
   );
 
-  if (href) return <Link href={href}>{content}</Link>;
+  if (href) {
+    return <Link href={href} className={itemClassName}>{content}</Link>;
+  }
   if (onClick) {
     return (
       <button
         type="button"
-        className="w-full text-left"
+        className={itemClassName}
         aria-busy={loading}
         onClick={onClick}
       >
@@ -1014,7 +1253,7 @@ function LinkedItemCard({
       </button>
     );
   }
-  return content;
+  return <div className={itemClassName}>{content}</div>;
 }
 
 function LinkPickerItem({
@@ -1033,15 +1272,21 @@ function LinkPickerItem({
   return (
     <Button
       type="button"
-      variant="outline"
-      className="h-auto min-h-10 justify-start py-2 text-left"
+      variant={selected ? "secondary" : "outline"}
+      className="h-auto min-h-11 justify-start py-2 text-left"
       aria-pressed={selected}
       disabled={disabled}
       onClick={onClick}
     >
-      <span className="text-muted-foreground [&_svg]:size-4">{icon}</span>
+      <span aria-hidden="true" className="text-muted-foreground [&_svg]:size-4">
+        {icon}
+      </span>
       <span className="min-w-0 flex-1 truncate">{title}</span>
-      <Check className={selected ? "opacity-100" : "opacity-0"} />
+      <Check
+        aria-hidden="true"
+        data-icon="inline-end"
+        className={cn(!selected && "opacity-0")}
+      />
     </Button>
   );
 }

@@ -1,5 +1,8 @@
+import { Check, Hash, Library, Tags } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { cn } from "@/lib/utils";
 import type { ResourceTag, ResourceType } from "../type";
 import { resourceTypeOptions } from "./resource-list-options";
@@ -10,6 +13,7 @@ type ResourceListFiltersProps = {
   tags?: ResourceTag[];
   tagsError: boolean;
   tagsLoading: boolean;
+  presentation?: "panel" | "sheet";
   className?: string;
   onRetryTags: () => void;
   onTagChange: (tag?: string) => void;
@@ -22,76 +26,148 @@ export function ResourceListFilters({
   tags,
   tagsError,
   tagsLoading,
+  presentation = "panel",
   className,
   onRetryTags,
   onTagChange,
   onTypeChange,
 }: ResourceListFiltersProps) {
+  const isPanel = presentation === "panel";
+
   return (
     <aside
       className={cn(
-        "grid h-fit w-full self-start content-start gap-5 rounded-xl border bg-card p-4",
+        "flex w-full min-w-0 flex-col",
+        isPanel && "h-full min-h-0 overflow-hidden rounded-xl border bg-card",
         className,
       )}
       aria-label="Resource filters"
     >
-      <div className="grid gap-2">
-        <h2 className="text-sm font-semibold">Types</h2>
-        <Button
-          variant={!selectedType ? "secondary" : "ghost"}
-          className="w-full justify-start"
-          aria-pressed={!selectedType}
-          onClick={() => onTypeChange(undefined)}
-        >
-          All resources
-        </Button>
-        {resourceTypeOptions.map(({ value, label, icon: Icon }) => (
-          <Button
-            key={value}
-            variant={selectedType === value ? "secondary" : "ghost"}
-            className="w-full justify-start"
-            aria-pressed={selectedType === value}
-            onClick={() => onTypeChange(value)}
+      {isPanel && (
+        <>
+          <div className="flex shrink-0 items-center gap-2 px-4 py-3.5">
+            <Library className="size-4 text-muted-foreground" aria-hidden="true" />
+            <h2 className="text-sm font-semibold">Filters</h2>
+          </div>
+          <Separator />
+        </>
+      )}
+      <div
+        className={cn(
+          "flex min-w-0 flex-col gap-5",
+          isPanel &&
+            "workspace-list-scrollbar min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain p-3",
+        )}
+      >
+        <section className="grid gap-2" aria-label="Resource types">
+          <h3 className="px-2.5 text-xs font-medium text-muted-foreground">
+            Types
+          </h3>
+          <ToggleGroup
+            orientation="vertical"
+            className="w-full min-w-0"
+            aria-label="Filter by resource type"
+            value={[selectedType ?? "all"]}
+            onValueChange={(values) => {
+              const option = resourceTypeOptions.find(
+                (item) => item.value === values[0],
+              );
+              onTypeChange(option?.value);
+            }}
           >
-            <Icon />
-            {label}
-          </Button>
-        ))}
-      </div>
-      <div className="grid gap-2">
-        <h2 className="text-sm font-semibold">Tags</h2>
-        <Button
-          variant={!selectedTag ? "secondary" : "ghost"}
-          className="w-full justify-start"
-          aria-pressed={!selectedTag}
-          onClick={() => onTagChange(undefined)}
-        >
-          All tags
-        </Button>
-        {tagsLoading && <Skeleton className="h-16" />}
-        {tagsError && (
-          <Button variant="outline" className="w-full" onClick={onRetryTags}>
-            Retry tags
-          </Button>
-        )}
-        <div className="grid gap-2">
-          {tags?.map((item) => (
-            <Button
-              key={item.uuid}
-              variant={selectedTag === item.uuid ? "secondary" : "ghost"}
-              className="w-full justify-start overflow-hidden"
-              aria-pressed={selectedTag === item.uuid}
-              onClick={() => onTagChange(item.uuid)}
+            <ToggleGroupItem
+              value="all"
+              className="h-11 w-full justify-start gap-2.5 lg:h-9"
             >
-              <span className="truncate">{item.name}</span>
-            </Button>
-          ))}
-        </div>
-        {tags?.length === 0 && (
-          <p className="text-xs text-muted-foreground">
-            Tags you create will appear here.
-          </p>
-        )}
+              <Library data-icon="inline-start" aria-hidden="true" />
+              <span className="min-w-0 flex-1 truncate text-left">
+                All resources
+              </span>
+              {!selectedType && (
+                <Check data-icon="inline-end" aria-hidden="true" />
+              )}
+            </ToggleGroupItem>
+            {resourceTypeOptions.map(({ value, label, icon: Icon }) => (
+              <ToggleGroupItem
+                key={value}
+                value={value}
+                className="h-11 w-full justify-start gap-2.5 lg:h-9"
+              >
+                <Icon data-icon="inline-start" aria-hidden="true" />
+                <span className="min-w-0 flex-1 truncate text-left">{label}</span>
+                {selectedType === value && (
+                  <Check data-icon="inline-end" aria-hidden="true" />
+                )}
+              </ToggleGroupItem>
+            ))}
+          </ToggleGroup>
+        </section>
+        <Separator />
+        <section className="grid gap-2" aria-label="Resource tags">
+          <h3 className="px-2.5 text-xs font-medium text-muted-foreground">
+            Tags
+          </h3>
+          <ToggleGroup
+            orientation="vertical"
+            className="w-full min-w-0"
+            aria-label="Filter by tag"
+            value={[selectedTag ?? "all"]}
+            onValueChange={(values) =>
+              onTagChange(values[0] === "all" ? undefined : values[0])
+            }
+          >
+            <ToggleGroupItem
+              value="all"
+              className="h-11 w-full justify-start gap-2.5 lg:h-9"
+            >
+              <Tags data-icon="inline-start" aria-hidden="true" />
+              <span className="min-w-0 flex-1 truncate text-left">All tags</span>
+              {!selectedTag && (
+                <Check data-icon="inline-end" aria-hidden="true" />
+              )}
+            </ToggleGroupItem>
+            {tags?.map((item) => (
+              <ToggleGroupItem
+                key={item.uuid}
+                value={item.uuid}
+                title={item.name}
+                className="h-11 w-full min-w-0 justify-start gap-2.5 lg:h-9"
+              >
+                <Hash data-icon="inline-start" aria-hidden="true" />
+                <span className="min-w-0 flex-1 truncate text-left">{item.name}</span>
+                {selectedTag === item.uuid && (
+                  <Check data-icon="inline-end" aria-hidden="true" />
+                )}
+              </ToggleGroupItem>
+            ))}
+          </ToggleGroup>
+          {tagsLoading && (
+            <div className="grid gap-2" role="status" aria-label="Loading tags">
+              {[1, 2, 3].map((item) => (
+                <Skeleton key={item} className="h-11 lg:h-9" />
+              ))}
+            </div>
+          )}
+          {tagsError && (
+            <div className="grid gap-2 px-2.5">
+              <p className="text-xs text-muted-foreground" role="alert">
+                Tags could not be loaded.
+              </p>
+              <Button
+                variant="outline"
+                className="h-11 w-full lg:h-9"
+                onClick={onRetryTags}
+              >
+                Retry tags
+              </Button>
+            </div>
+          )}
+          {!tagsLoading && !tagsError && tags?.length === 0 && (
+            <p className="px-2.5 py-2 text-xs leading-relaxed text-muted-foreground">
+              Tags you create will appear here.
+            </p>
+          )}
+        </section>
       </div>
     </aside>
   );

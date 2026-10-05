@@ -399,6 +399,62 @@ html[data-app-font="inter"] {
   background-clip: padding-box;
 }
 
+.project-task-title {
+  background: transparent;
+  font-size: 1.5rem;
+  font-weight: 600;
+  line-height: 1.4;
+  letter-spacing: -0.025em;
+}
+
+/* Size BlockNote's document and auxiliary UI root to their content so the
+   drawer can own scrolling without an extra blank document below the editor. */
+.task-description-editor .note-rich-text,
+.task-description-editor .note-rich-text > div,
+.task-description-editor .bn-root,
+.task-description-editor .bn-container,
+.task-description-editor .bn-editor,
+.task-description-editor .ProseMirror {
+  height: auto;
+  overflow: visible;
+  background: transparent;
+  color: var(--card-foreground);
+}
+
+.task-description-editor .note-rich-text {
+  border-radius: inherit;
+  background: var(--card);
+}
+
+.task-description-editor .bn-root {
+  --bn-colors-editor-background: transparent;
+  --bn-colors-editor-text: var(--card-foreground);
+}
+
+.task-description-editor .bn-editor {
+  min-height: 12rem;
+  padding-block: 1rem;
+  padding-inline: 2.5rem 1rem;
+  font-size: 1rem;
+  line-height: 1.625;
+}
+
+.task-description-editor [data-slot="skeleton"] {
+  min-height: 12rem;
+  border-radius: inherit;
+  background: var(--muted);
+}
+
+@media (min-width: 640px) {
+  .project-task-title {
+    font-size: 1.75rem;
+  }
+
+  .task-description-editor .bn-editor {
+    padding-inline: 3.25rem;
+  }
+}
+
 .notes-editor-title {
   background: transparent;
 }
