@@ -113,15 +113,17 @@ export function AppHeader({
     <header className="relative z-20 flex h-14 shrink-0 items-center gap-2 border-b border-border bg-background px-2 sm:px-6">
       <div className="flex min-w-0 flex-1 items-center gap-2">
         <Button
+          id="app-navigation-trigger"
           type="button"
           variant="ghost"
           size="icon"
-          className="md:hidden"
+          className="size-11 md:hidden"
           onClick={onOpenMobileNav}
           aria-label="Open navigation"
           aria-expanded={isMobileNavOpen}
+          aria-controls="app-mobile-navigation"
         >
-          <Menu />
+          <Menu aria-hidden="true" />
         </Button>
         <Link
           href="/home"
@@ -134,6 +136,7 @@ export function AppHeader({
             width={28}
             height={28}
             className="size-7 shrink-0"
+            loading="eager"
           />
           <span className="hidden truncate font-garamond text-lg font-semibold min-[400px]:inline">
             Medasin
