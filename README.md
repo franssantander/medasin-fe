@@ -60,6 +60,46 @@ persistent cookies. Browser session restoration can retain session cookies.
 Run `npm test -- src/features/auth/auth.browser.test.ts` for auth regression
 tests. These mock API responses and do not create accounts or send real emails.
 
+## Google sign-in
+
+“Continue with Google” at `/login` opens Google's account chooser in the same
+tab. It uses the login form's Remember me choice for session or persistent
+cookies, without submitting the username or password or changing the saved
+password-login username. New Google accounts and accounts already linked to
+Google can sign in. Existing unlinked password accounts must sign in with their
+password before linking Google; account-linking UI is not included here.
+
+Configure these variables on the Laravel backend, using your public URLs:
+
+```dotenv
+GOOGLE_CLIENT_ID=<Google OAuth web client ID>
+GOOGLE_CLIENT_SECRET=<Google OAuth web client secret>
+GOOGLE_REDIRECT_URI=http://localhost:82/api/v1/auth/google/callback
+GOOGLE_FRONTEND_REDIRECT_URI=http://localhost:3000/login
+```
+
+Register the exact `GOOGLE_REDIRECT_URI` as an authorized redirect URI for the
+Google OAuth web client. Initiation and callback must use the same public API
+host, including any API proxy: when `NEXT_PUBLIC_API_URL` points to the frontend's
+`/api/v1` proxy, the Google callback must also point to that frontend host's
+`/api/v1/auth/google/callback`. Use HTTPS in production and apply the backend
+Google ID migration before enabling sign-in. No new frontend environment
+variables or Google SDK are needed; credentials stay on the backend.
+
+The backend returns to `/login?google=success` or
+`/login?google=error&code=...`. The frontend removes these callback parameters,
+confirms successful sign-in through `/auth/me`, and opens `/home` only after
+the session is verified. Callback errors appear in the login form with a retry
+or password-sign-in option. Initiation errors, including missing backend
+credentials, retain the backend's existing response; browser Back returns to
+the login page. Verify a real Google round trip after configuring the backend.
+
+The Google icon is Google's official asset from
+[its sign-in branding guidance](https://developers.google.com/identity/branding-guidelines).
+Google auth coverage is included in `src/features/auth/auth.browser.test.ts`;
+these tests mock redirects and cookies and never contact Google or create real
+accounts.
+
 ## Profile and account management
 
 Open **Profile** from the account menu to manage your photo, password, or account

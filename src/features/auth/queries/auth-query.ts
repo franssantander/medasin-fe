@@ -31,6 +31,26 @@ export function useLoginMutation() {
   });
 }
 
+export function useCompleteGoogleLoginMutation() {
+  const queryClient = useQueryClient();
+  const clearSessionQueries = useSessionCleanup();
+
+  return useMutation({
+    mutationFn: async () => {
+      const response = await authService.getCurrentUser();
+      if (!response.data || !Number.isInteger(response.data.id) || response.data.id <= 0) {
+        throw new Error("Google sign-in did not return an authenticated user.");
+      }
+      return response;
+    },
+    gcTime: 0,
+    onSuccess: async (response) => {
+      await clearSessionQueries();
+      queryClient.setQueryData(currentUserKey, response);
+    },
+  });
+}
+
 export function useLogoutMutation() {
   const clearSessionQueries = useSessionCleanup();
 

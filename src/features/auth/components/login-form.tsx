@@ -1,34 +1,40 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { Controller } from "react-hook-form";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Field, FieldContent, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { Field, FieldContent, FieldError, FieldGroup, FieldLabel, FieldSeparator } from "@/components/ui/field";
 import { useLogin } from "../hooks/use-login";
 import { useResendVerificationMutation, useVerifyEmailMutation } from "../queries/auth-query";
+import type { GoogleAuthResult } from "../type";
 import { AuthCard } from "./auth-card";
 import { AuthFormError } from "./auth-form-error";
 import { AuthInputField } from "./auth-input-field";
 import { OtpForm } from "./otp-form";
 
-export default function LoginForm() {
+export default function LoginForm({ googleResult }: { googleResult?: GoogleAuthResult }) {
   const verification = useVerifyEmailMutation();
   const resend = useResendVerificationMutation();
   const {
     onSubmit,
+    onGoogleSignIn,
     handleSubmit,
     register,
     usernameRegistration,
     control,
     errors,
+    googleError,
     isPendingLogin,
+    isPendingSignIn,
+    googleSignInLabel,
     verificationChallenge,
     restartLogin,
     completeLogin,
     changeRememberMe,
-  } = useLogin();
+  } = useLogin(googleResult);
 
   return (
     <AuthCard
@@ -71,8 +77,8 @@ export default function LoginForm() {
           backLabel="Back to sign in"
         />
       ) : (
-        <form onSubmit={handleSubmit(onSubmit)} noValidate className="flex flex-col gap-5" aria-busy={isPendingLogin}>
-          <AuthFormError message={errors.root?.server?.message} />
+        <form onSubmit={handleSubmit(onSubmit)} noValidate className="flex flex-col gap-5" aria-busy={isPendingSignIn}>
+          <AuthFormError message={errors.root?.server?.message ?? googleError} />
           <FieldGroup className="gap-4">
             <AuthInputField
               id="login-username"
@@ -82,7 +88,7 @@ export default function LoginForm() {
               spellCheck={false}
               registration={usernameRegistration}
               error={errors.username}
-              disabled={isPendingLogin}
+              disabled={isPendingSignIn}
               required
             />
             <AuthInputField
@@ -92,7 +98,7 @@ export default function LoginForm() {
               autoComplete="current-password"
               registration={register("password")}
               error={errors.password}
-              disabled={isPendingLogin}
+              disabled={isPendingSignIn}
               required
               labelAction={
                 <Link
@@ -107,7 +113,7 @@ export default function LoginForm() {
               control={control}
               name="remember_me"
               render={({ field, fieldState }) => (
-                <Field orientation="horizontal" className="gap-2" data-disabled={isPendingLogin} data-invalid={fieldState.invalid}>
+                <Field orientation="horizontal" className="gap-2" data-disabled={isPendingSignIn} data-invalid={fieldState.invalid}>
                   <Checkbox
                     id="login-remember-me"
                     name={field.name}
@@ -118,7 +124,7 @@ export default function LoginForm() {
                       changeRememberMe(checked);
                     }}
                     onBlur={field.onBlur}
-                    disabled={isPendingLogin}
+                    disabled={isPendingSignIn}
                     aria-invalid={fieldState.invalid}
                     aria-describedby={fieldState.error ? "login-remember-me-error" : undefined}
                     className="self-center"
@@ -131,8 +137,13 @@ export default function LoginForm() {
               )}
             />
           </FieldGroup>
-          <Button type="submit" size="default" disabled={isPendingLogin} className="h-11 w-full md:h-9">
+          <Button type="submit" size="default" disabled={isPendingSignIn} className="h-11 w-full md:h-9">
             {isPendingLogin ? "Signing in..." : "Sign in"}
+          </Button>
+          <FieldSeparator>or</FieldSeparator>
+          <Button type="button" variant="outline" onClick={onGoogleSignIn} disabled={isPendingSignIn} className="h-11 w-full md:h-9" aria-live="polite">
+            <Image src="/images/google-g.png" alt="" width={200} height={204} className="h-auto w-5" sizes="20px" data-icon="inline-start" />
+            {googleSignInLabel}
           </Button>
         </form>
       )}

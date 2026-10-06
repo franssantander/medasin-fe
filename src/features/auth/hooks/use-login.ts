@@ -1,16 +1,19 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useLoginMutation } from "../queries/auth-query";
+import { useCompleteGoogleLoginMutation, useLoginMutation } from "../queries/auth-query";
 import { useForm, type SubmitHandler } from "react-hook-form";
 import { loginSchema, type LoginFormValues } from "../schemas/login-schema";
 import { ApiError } from "@/lib/axios";
-import type { EmailVerificationChallenge } from "../type";
+import type { EmailVerificationChallenge, GoogleAuthResult } from "../type";
+import { authService } from "../services/auth-service";
 import { applyAuthFormErrors } from "../utils/form-errors";
+import { getGoogleAuthErrorMessage } from "../utils/google-auth";
 import { getRememberedUsername, setRememberedUsername } from "../utils/remembered-username";
 
 type LoginPreference = Pick<LoginFormValues, "username" | "remember_me">;
 type LoginVerificationChallenge = EmailVerificationChallenge & LoginPreference;
+type GoogleLoginStage = "idle" | "redirecting" | "verifying";
 
 function getVerificationChallenge(error: unknown): EmailVerificationChallenge | undefined {
   if (
@@ -53,14 +56,22 @@ function getVerificationChallenge(error: unknown): EmailVerificationChallenge | 
   };
 }
 
-export function useLogin() {
+export function useLogin(googleResult?: GoogleAuthResult) {
   const router = useRouter();
   const submissionInFlight = useRef(false);
+  const googleCallbackHandled = useRef(false);
   const usernameInput = useRef<HTMLInputElement | null>(null);
   const rememberChoiceChanged = useRef(false);
   const [verificationChallenge, setVerificationChallenge] = useState<LoginVerificationChallenge>();
+  const [googleStage, setGoogleStage] = useState<GoogleLoginStage>(
+    googleResult?.status === "success" ? "verifying" : "idle",
+  );
+  const [googleError, setGoogleError] = useState<string | undefined>(
+    googleResult?.status === "error" ? getGoogleAuthErrorMessage(googleResult.code) : undefined,
+  );
 
   const login = useLoginMutation();
+  const { mutate: completeGoogleLogin } = useCompleteGoogleLoginMutation();
 
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
@@ -68,6 +79,48 @@ export function useLogin() {
   });
   const { getValues, getFieldState, setValue } = form;
   const usernameRegistration = form.register("username");
+
+  useEffect(() => {
+    if (!googleResult || googleCallbackHandled.current) {
+      return;
+    }
+
+    googleCallbackHandled.current = true;
+    const url = new URL(window.location.href);
+    url.searchParams.delete("google");
+    url.searchParams.delete("code");
+    window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+
+    if (googleResult.status !== "success") {
+      return;
+    }
+
+    submissionInFlight.current = true;
+    completeGoogleLogin(undefined, {
+      onSuccess: () => router.replace("/home"),
+      onError: (error) => {
+        submissionInFlight.current = false;
+        setGoogleStage("idle");
+        setGoogleError(
+          error instanceof ApiError && error.code
+            ? getGoogleAuthErrorMessage(error.code)
+            : "We couldn't confirm your Google sign-in. Please try again or sign in with your password.",
+        );
+      },
+    });
+  }, [googleResult, completeGoogleLogin, router]);
+
+  useEffect(() => {
+    function restoreLogin(event: PageTransitionEvent) {
+      if (event.persisted) {
+        submissionInFlight.current = false;
+        setGoogleStage("idle");
+      }
+    }
+
+    window.addEventListener("pageshow", restoreLogin);
+    return () => window.removeEventListener("pageshow", restoreLogin);
+  }, []);
 
   useEffect(() => {
     const username = getRememberedUsername();
@@ -109,6 +162,7 @@ export function useLogin() {
 
     submissionInFlight.current = true;
     form.clearErrors();
+    setGoogleError(undefined);
     setVerificationChallenge(undefined);
 
     try {
@@ -129,6 +183,30 @@ export function useLogin() {
     }
   };
 
+  function onGoogleSignIn() {
+    if (submissionInFlight.current || form.formState.isSubmitting) {
+      return;
+    }
+
+    submissionInFlight.current = true;
+    form.clearErrors();
+    setGoogleError(undefined);
+
+    try {
+      const redirectUrl = new URL(authService.getGoogleRedirectUrl(getValues("remember_me")), window.location.origin);
+      if (!["http:", "https:"].includes(redirectUrl.protocol) || redirectUrl.username || redirectUrl.password) {
+        throw new Error("The API URL is invalid.");
+      }
+
+      setGoogleStage("redirecting");
+      window.location.assign(redirectUrl.href);
+    } catch {
+      submissionInFlight.current = false;
+      setGoogleStage("idle");
+      setGoogleError(getGoogleAuthErrorMessage("GOOGLE_AUTH_UNAVAILABLE"));
+    }
+  }
+
   function restartLogin() {
     setVerificationChallenge(undefined);
     form.clearErrors();
@@ -139,6 +217,7 @@ export function useLogin() {
 
   return {
     onSubmit,
+    onGoogleSignIn,
     handleSubmit: form.handleSubmit,
     register: form.register,
     usernameRegistration: {
@@ -155,7 +234,12 @@ export function useLogin() {
     },
     control: form.control,
     errors: form.formState.errors,
+    googleError,
     isPendingLogin: login.isPending || form.formState.isSubmitting,
+    isPendingSignIn: login.isPending || form.formState.isSubmitting || googleStage !== "idle",
+    googleSignInLabel: googleStage === "redirecting"
+      ? "Opening Google..."
+      : googleStage === "verifying" ? "Checking Google sign-in..." : "Continue with Google",
     verificationChallenge,
     restartLogin,
     completeLogin,

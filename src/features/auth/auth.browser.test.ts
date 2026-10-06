@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { createServer } from "node:http";
 
 type ApiReply = {
   data?: unknown;
@@ -164,6 +165,181 @@ function deferredReply(reply: ApiReply) {
   let release = () => {};
   const response = new Promise<ApiReply>((resolve) => { release = () => resolve(reply); });
   return { handler: () => response, release: () => release() };
+}
+
+for (const rememberMe of [false, true]) {
+  test(`Google sign-in works without password credentials and passes remember_me=${rememberMe ? 1 : 0}`, async ({ page }) => {
+    const api = await mockApi(page, {
+      "/auth/google/redirect": () => {
+        const reply = authenticatedReply({ path: "/auth/google/redirect", method: "GET", body: null }, rememberMe);
+        return { ...reply, status: 302, headers: { ...reply.headers, location: "/login?google=success" } };
+      },
+    });
+    await page.goto("/login");
+    await expect(page.getByLabel("Username", { exact: true })).toHaveValue("");
+    await expect(page.getByLabel("Password", { exact: true })).toHaveValue("");
+    if (rememberMe) await page.getByRole("checkbox", { name: "Remember me", exact: true }).check();
+
+    const navigation = page.waitForRequest((request) => new URL(request.url()).pathname.endsWith("/auth/google/redirect"));
+    await page.getByRole("button", { name: "Continue with Google", exact: true }).click();
+    const request = await navigation;
+    expect(request.isNavigationRequest()).toBe(true);
+    expect(new URL(request.url()).searchParams.get("remember_me")).toBe(rememberMe ? "1" : "0");
+    expect([...new URL(request.url()).searchParams.keys()]).toEqual(["remember_me"]);
+    await expect(page).toHaveURL(/\/home$/);
+    expect(api.forPath("/auth/google/redirect")).toEqual([{ path: "/auth/google/redirect", method: "GET", body: null }]);
+    expect(api.forPath("/auth/login")).toHaveLength(0);
+    expect(api.forPath("/auth/me")).toHaveLength(1);
+    expect(await storedUsername(page)).toBeNull();
+    const cookie = (await page.context().cookies()).find((item) => item.name === "auth_token");
+    expect(cookie?.httpOnly).toBe(true);
+    if (rememberMe) {
+      expect(cookie?.expires).toBeGreaterThan(Date.now() / 1000);
+    } else {
+      expect(cookie?.expires).toBe(-1);
+    }
+  });
+}
+
+test("Google sign-in waits for the cookie session before showing private content and preserves the saved password username", async ({ page }) => {
+  const session = deferredReply({ data: { ...currentUser, username: "google_new_account" } });
+  const api = await mockApi(page, { "/auth/me": session.handler });
+  await page.addInitScript((key) => localStorage.setItem(key, "previous_password_account"), rememberedUsernameKey);
+  await page.context().addCookies([{
+    name: "auth_token", value: "google-test-session", domain: "127.0.0.1", path: "/", httpOnly: true, sameSite: "Strict",
+  }]);
+  await page.goto("/login?google=success");
+  await expect.poll(() => api.forPath("/auth/me").length).toBe(1);
+  await expect(page.getByRole("button", { name: "Checking Google sign-in...", exact: true })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Sign in", exact: true })).toBeDisabled();
+  await expect(page.getByRole("checkbox", { name: "Remember me", exact: true })).toBeDisabled();
+  await expect(page.getByLabel("Username", { exact: true })).toBeDisabled();
+  await expect(page.getByLabel("Password", { exact: true })).toBeDisabled();
+  await expect(page.locator("form")).toHaveAttribute("aria-busy", "true");
+  await expect(page.locator("#app-shell")).toHaveCount(0);
+  await expect(page).toHaveURL(/\/login$/);
+  session.release();
+  await expect(page).toHaveURL(/\/home$/);
+  expect(api.forPath("/auth/me")).toHaveLength(1);
+  expect(api.forPath("/auth/login")).toHaveLength(0);
+  expect(await storedUsername(page)).toBe("previous_password_account");
+});
+
+for (const invalidSession of ["missing cookies", "empty user response"] as const) {
+  test(`a Google success marker with ${invalidSession} stays on login and allows password sign-in`, async ({ page }) => {
+    const api = await mockApi(page, invalidSession === "empty user response" ? { "/auth/me": () => ({ data: null }) } : {});
+    await page.goto("/login?google=success");
+    const error = page.getByRole("alert").filter({ hasText: "We couldn't confirm your Google sign-in." });
+    await expect(error).toBeVisible();
+    await expect(error).toBeFocused();
+    await expect(page).toHaveURL(/\/login$/);
+    await expect(page.getByRole("button", { name: "Continue with Google", exact: true })).toBeEnabled();
+    await expect(page.locator("#app-shell")).toHaveCount(0);
+    expect(api.forPath("/auth/me")).toHaveLength(1);
+    expect(api.forPath("/auth/refresh")).toHaveLength(invalidSession === "missing cookies" ? 1 : 0);
+    expect(api.forPath("/home")).toHaveLength(0);
+    await page.getByLabel("Username", { exact: true }).fill(registration.username);
+    await page.getByLabel("Password", { exact: true }).fill(registration.password);
+    await page.getByRole("button", { name: "Sign in", exact: true }).click();
+    await expect(page).toHaveURL(/\/home$/);
+    expect(api.forPath("/auth/login")).toHaveLength(1);
+  });
+}
+
+for (const [code, message] of [
+  ["GOOGLE_OAUTH_CANCELLED", "Google sign-in was cancelled."],
+  ["GOOGLE_OAUTH_INVALID_STATE", "Your Google sign-in request has expired or is invalid."],
+  ["GOOGLE_OAUTH_INVALID_CALLBACK", "Google sign-in could not be completed."],
+  ["GOOGLE_AUTH_UNAVAILABLE", "Google sign-in is temporarily unavailable."],
+  ["GOOGLE_OAUTH_BUSY", "Another Google sign-in request is still processing."],
+  ["GOOGLE_PROFILE_INVALID", "Google must provide a verified email address."],
+  ["GOOGLE_ACCOUNT_LINK_REQUIRED", "An account with this email already exists."],
+  ["EMAIL_VERIFICATION_REQUIRED", "Please sign in with your password and verify your email"],
+  ["__proto__", "Google sign-in could not be completed."],
+]) {
+  test(`Google callback ${code} shows a focused error and consumes only callback parameters`, async ({ page }) => {
+    const api = await mockApi(page);
+    await page.goto(`/login?google=error&code=${code}&from=login#continue`);
+    const error = page.getByRole("alert").filter({ hasText: message });
+    await expect(error).toBeVisible();
+    await expect(error).toBeFocused();
+    await expect(page).toHaveURL(/\/login\?from=login#continue$/);
+    await expect(page.getByRole("button", { name: "Continue with Google", exact: true })).toBeEnabled();
+    expect(api.forPath("/auth/me")).toHaveLength(0);
+    expect(api.forPath("/auth/refresh")).toHaveLength(0);
+    await page.reload();
+    await expect(error).toHaveCount(0);
+  });
+}
+
+for (const query of ["google=unexpected", "google=success&google=error", "google=error&code=GOOGLE_OAUTH_CANCELLED&code=GOOGLE_AUTH_UNAVAILABLE"]) {
+  test(`malformed Google callback ${query} fails safely without checking a session`, async ({ page }) => {
+    const api = await mockApi(page);
+    await page.goto(`/login?${query}`);
+    await expect(page.getByRole("alert").filter({ hasText: "Google sign-in could not be completed." })).toBeVisible();
+    await expect(page).toHaveURL(/\/login$/);
+    expect(api.forPath("/auth/me")).toHaveLength(0);
+    expect(api.forPath("/auth/refresh")).toHaveLength(0);
+  });
+}
+
+test("Google redirect prevents duplicate requests and browser Back restores both sign-in methods", async ({ page }) => {
+  // Redirect destinations bypass page.route(), so serve the mock provider locally.
+  const provider = createServer((_, response) => {
+    response.writeHead(200, { "Content-Type": "text/html" });
+    response.end("<!doctype html><html><body><h1>Google account chooser</h1></body></html>");
+  });
+  await new Promise<void>((resolve) => provider.listen(0, "127.0.0.1", resolve));
+
+  try {
+    const address = provider.address();
+    if (!address || typeof address === "string") throw new Error("The mock Google provider did not start.");
+    const pending = deferredReply({ status: 302, headers: { location: `http://127.0.0.1:${address.port}` } });
+    const api = await mockApi(page, { "/auth/google/redirect": pending.handler });
+    await page.goto("/login?google=error&code=GOOGLE_OAUTH_CANCELLED");
+    await page.getByLabel("Username", { exact: true }).fill(registration.username);
+    await page.getByLabel("Password", { exact: true }).fill(registration.password);
+    await page.getByRole("button", { name: "Continue with Google", exact: true }).evaluate((button: HTMLButtonElement) => {
+      button.click();
+      button.click();
+      button.form?.requestSubmit();
+    });
+    await expect.poll(() => api.forPath("/auth/google/redirect").length).toBe(1);
+    expect(api.forPath("/auth/login")).toHaveLength(0);
+    pending.release();
+    await expect(page.getByRole("heading", { name: "Google account chooser", exact: true })).toBeVisible();
+    await page.goBack();
+    await expect(page).toHaveURL(/\/login$/);
+    await expect(page.getByRole("button", { name: "Continue with Google", exact: true })).toBeEnabled();
+    await expect(page.getByRole("button", { name: "Sign in", exact: true })).toBeEnabled();
+    await expect(page.locator("form").getByRole("alert")).toHaveCount(0);
+  } finally {
+    await new Promise<void>((resolve, reject) => provider.close((error) => error ? reject(error) : resolve()));
+  }
+});
+
+for (const theme of ["light", "dark"] as const) {
+  test(`mobile ${theme} Google sign-in supports the keyboard and has no horizontal overflow`, async ({ page }, testInfo) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.addInitScript((value) => localStorage.setItem("theme", value), theme);
+    const api = await mockApi(page, {
+      "/auth/google/redirect": () => ({ status: 302, headers: { location: "/login?google=error&code=GOOGLE_OAUTH_CANCELLED" } }),
+    });
+    await page.goto("/login");
+    const google = page.getByRole("button", { name: "Continue with Google", exact: true });
+    await expect(google).toBeVisible();
+    expect((await google.boundingBox())?.height).toBeGreaterThanOrEqual(44);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(1);
+    await page.getByRole("button", { name: "Sign in", exact: true }).focus();
+    await page.keyboard.press("Tab");
+    await expect(google).toBeFocused();
+    await page.screenshot({ path: testInfo.outputPath(`login-google-mobile-${theme}.png`), fullPage: true });
+    await page.keyboard.press("Enter");
+    await expect(page.getByRole("alert").filter({ hasText: "Google sign-in was cancelled." })).toBeVisible();
+    await expect(page).toHaveURL(/\/login$/);
+    expect(api.forPath("/auth/google/redirect")).toHaveLength(1);
+    expect(api.forPath("/auth/login")).toHaveLength(0);
+  });
 }
 
 for (const rememberMe of [false, true]) {
@@ -900,10 +1076,12 @@ test("pending unverified login and email verification cannot submit duplicate re
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await expect.poll(() => api.forPath("/auth/login").length).toBe(1);
   await expect(page.getByRole("button", { name: /Signing|Sign in/ })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Continue with Google", exact: true })).toBeDisabled();
   await expect(checkbox).toBeDisabled();
   await expect(checkbox).toBeChecked();
   await page.getByLabel("Password", { exact: true }).press("Enter");
   expect(api.forPath("/auth/login")).toHaveLength(1);
+  expect(api.forPath("/auth/google/redirect")).toHaveLength(0);
   login.release();
   await expect(page.getByLabel("Verification code", { exact: true })).toBeVisible();
   await page.getByLabel("Verification code", { exact: true }).fill("012345");

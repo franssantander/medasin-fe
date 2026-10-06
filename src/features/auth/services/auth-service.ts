@@ -12,6 +12,16 @@ import type {
 } from "../type";
 
 export const authService = {
+  getGoogleRedirectUrl(rememberMe: boolean) {
+    if (!axiosClient.defaults.baseURL?.trim()) {
+      throw new Error("The API URL is not configured.");
+    }
+
+    return axiosClient.getUri({
+      url: "/auth/google/redirect",
+      params: { remember_me: rememberMe ? 1 : 0 },
+    });
+  },
   login(data: LoginRequest) {
     return axiosClient.post<CurrentUserResponse>("/auth/login", data).then((res) => res.data);
   },

@@ -24,6 +24,9 @@ export type LoginRequest = {
   password: string;
   remember_me: boolean;
 };
+export type GoogleAuthResult =
+  | { status: "success" }
+  | { status: "error"; code?: string };
 export type RegisterRequest = {
   first_name: string;
   last_name: string;
