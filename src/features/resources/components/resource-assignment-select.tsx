@@ -1,57 +1,32 @@
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+"use client";
 
-export function ResourceAssignmentSelect({
-  id,
-  label,
-  items,
-  value,
-  loading,
-  disabled,
-  onValueChange,
-}: {
+import { useId } from "react";
+import { Field, FieldError, FieldLabel } from "@/components/ui/field";
+import { ResourceMultiSelect } from "./resource-multi-select";
+
+export function ResourceAssignmentSelect({ id, label, items, value, loading, disabled, error, onValueChange }: {
   id?: string;
   label: "Project" | "Area";
   items: { uuid: string; name: string }[];
   value: string[];
   loading: boolean;
   disabled: boolean;
+  error?: string;
   onValueChange: (value: string[]) => void;
 }) {
-  const selectedNames = value
-    .map((uuid) => items.find((item) => item.uuid === uuid)?.name)
-    .filter((name): name is string => Boolean(name));
+  const generatedId = useId();
+  const controlId = id ?? generatedId;
   const plural = `${label.toLowerCase()}s`;
-  const summary = loading
-    ? `Loading ${plural}…`
-    : selectedNames.length === 0
-      ? `No ${label.toLowerCase()}s`
-      : selectedNames.length === 1
-        ? selectedNames[0]
-        : `${selectedNames.length} ${plural} selected`;
-
+  const known = new Set(items.map((item) => item.uuid));
+  const options = [
+    ...items.map((item) => ({ value: item.uuid, label: item.name })),
+    ...value.filter((uuid) => !known.has(uuid)).map((uuid, index) => ({ value: uuid, label: `${label} ${index + 1}` })),
+  ];
   return (
-    <Select
-      multiple
-      value={value}
-      disabled={disabled}
-      onValueChange={(nextValue) => onValueChange(nextValue ?? [])}
-    >
-      <SelectTrigger id={id} className="w-full" aria-label={label}>
-        <SelectValue>{summary}</SelectValue>
-      </SelectTrigger>
-      <SelectContent align="start">
-        {items.map((item) => (
-          <SelectItem key={item.uuid} value={item.uuid}>
-            {item.name}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
+    <Field data-invalid={Boolean(error)} data-disabled={disabled}>
+      <FieldLabel htmlFor={controlId}>{label}s <span className="font-normal text-muted-foreground">(optional)</span></FieldLabel>
+      <ResourceMultiSelect id={controlId} label={`${label}s`} options={options} value={value} disabled={disabled} placeholder={loading ? `Loading ${plural}…` : `Search ${plural}…`} error={error} onValueChange={onValueChange} />
+      {error ? <FieldError id={`${controlId}-error`}>{error}</FieldError> : null}
+    </Field>
   );
 }

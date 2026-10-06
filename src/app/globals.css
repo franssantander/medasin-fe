@@ -326,6 +326,34 @@ html[data-app-font="inter"] {
   }
 }
 
+/* Resource notes follow the surrounding theme. Keep these scoped rules outside
+   Tailwind's layers to override BlockNote's default editor styles. */
+.resource-note-editor .note-rich-text,
+.resource-note-editor .note-rich-text > div,
+.resource-note-editor .note-rich-text :is(.bn-container, .bn-editor, .ProseMirror) {
+  background: var(--background);
+  color: var(--foreground);
+}
+
+.resource-note-editor .note-rich-text .bn-editor {
+  height: auto;
+  min-height: 18rem;
+  overflow-y: visible;
+  padding-inline: clamp(2.5rem, 4vw, 3.25rem);
+}
+
+.resource-note-editor
+  .note-rich-text
+  .bn-block-content:has(.ProseMirror-trailingBreak:only-child)::after {
+  color: var(--muted-foreground);
+  font-style: normal;
+}
+
+.resource-note-editor [data-slot="skeleton"] {
+  min-height: 18rem;
+  background: var(--background);
+}
+
 /* Keep page-rendering rules outside Tailwind's layers so they can override
    BlockNote's unlayered default editor styles. */
 .letter-composer-document .note-rich-text .bn-editor {

@@ -1,879 +1,203 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import Image from "next/image";
-import { useQuery } from "@tanstack/react-query";
-import {
-  Check,
-  Download,
-  ExternalLink,
-  FileText,
-  Link2,
-  LoaderCircle,
-  Palette,
-  Search,
-  Tag,
-  Trash2,
-  X,
-} from "lucide-react";
+import { AlertCircle, Check, Circle, LoaderCircle } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import {
-  Accordion,
-  AccordionContent,
-  AccordionHeader,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { areaService } from "@/features/areas/services/area-service";
-import { projectService } from "@/features/projects/services/project-service";
-import { ApiError } from "@/lib/axios";
-import {
-  fromResourceDocument,
-  safeResourceUrl,
-  toResourceDocument,
-} from "../resource-document";
-import {
-  useAddResourceAttachments,
-  useDeleteResourceAttachment,
-  useResourceTagsQuery,
-  useUpdateResource,
-} from "../queries/resource-query";
-import { resourceService } from "../services/resource-service";
-import type {
-  Resource,
-  ResourceAttachment,
-  ResourceUpdateInput,
-} from "../type";
-import { ResourceEditor } from "./resource-editor";
-import { ResourceAssignmentSelect } from "./resource-assignment-select";
+import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { useResourceAutosave } from "../hooks/use-resource-autosave";
+import { useResourceFormOptions } from "../hooks/use-resource-form-options";
+import { useAddResourceAttachments, useDeleteResourceAttachment } from "../queries/resource-query";
+import { resourceRequestErrors, type ResourceFormErrors, type ResourceMetadataValues } from "../resource-form-utils";
+import { fromResourceDocument, safeResourceUrl, toResourceDocument } from "../resource-document";
+import type { Resource, ResourceAttachment, ResourceUpdateInput } from "../type";
+import { ResourceAppearanceField } from "./resource-appearance-field";
+import { ResourceAttachmentCard, ResourceImagePreview, ResourceLinkCard, type ResourceImagePreviewValue } from "./resource-attachment-cards";
+import { ResourceLinkInput, ResourceNotesField, ResourceTitleField } from "./resource-content-fields";
+import { resourceFieldIds, ResourceDialogBody, ResourceDialogFooter, ResourceDialogLayout, ResourceDiscardDialog } from "./resource-dialog-layout";
 import { ResourceFileDropzone } from "./resource-file-dropzone";
-import {
-  RESOURCE_BADGE_COLORS,
-  RESOURCE_ICONS,
-  ResourceIcon,
-  resourceBadgeStyle,
-} from "./resource-icons";
+import { ResourceIcon, resourceBadgeStyle } from "./resource-icons";
+import { ResourceOrganizationFields } from "./resource-organization-fields";
 
-type SaveState = "idle" | "saving" | "saved" | "error";
-
-function message(error: unknown) {
-  if (error instanceof ApiError && error.validationErrors) {
-    return Object.values(error.validationErrors).flat().join(" ");
-  }
-  return error instanceof Error ? error.message : "Changes could not be saved.";
-}
-
-function AttachmentCard({
-  resourceUuid,
-  attachment,
-  editable,
-  deleting,
-  onDelete,
-}: {
-  resourceUuid: string;
-  attachment: ResourceAttachment;
-  editable: boolean;
-  deleting: boolean;
-  onDelete: () => void;
-}) {
-  const [preview, setPreview] = useState<string>();
-  const [error, setError] = useState("");
-  const [downloading, setDownloading] = useState(false);
-  const image = attachment.kind === "image";
-
-  useEffect(() => {
-    if (!image) return;
-    const controller = new AbortController();
-    let url: string | undefined;
-    resourceService
-      .attachment(resourceUuid, attachment.uuid, controller.signal)
-      .then((blob) => {
-        if (controller.signal.aborted) return;
-        url = URL.createObjectURL(blob);
-        setPreview(url);
-      })
-      .catch((cause) => {
-        if (!controller.signal.aborted) setError(message(cause));
-      });
-    return () => {
-      controller.abort();
-      if (url) URL.revokeObjectURL(url);
-    };
-  }, [attachment.uuid, image, resourceUuid]);
-
-  async function download() {
-    setDownloading(true);
-    try {
-      const blob = await resourceService.attachment(
-        resourceUuid,
-        attachment.uuid,
-      );
-      const url = URL.createObjectURL(blob);
-      const anchor = document.createElement("a");
-      anchor.href = url;
-      anchor.download = attachment.name || "attachment";
-      anchor.click();
-      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-    } catch (cause) {
-      setError(message(cause));
-    } finally {
-      setDownloading(false);
-    }
-  }
-
-  if (image) {
-    return (
-      <div className="group relative aspect-square overflow-hidden rounded-xl border bg-muted/30">
-        {preview ? (
-          <Image
-            src={preview}
-            alt={attachment.name || "Resource image"}
-            fill
-            unoptimized
-            className="object-cover"
-          />
-        ) : (
-          <div className="flex size-full items-center justify-center p-3 text-center text-xs text-muted-foreground">
-            {error || "Loading image…"}
-          </div>
-        )}
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent px-3 pb-3 pt-10 text-white">
-          <p className="truncate text-xs font-medium">
-            {attachment.name || "Image"}
-          </p>
-        </div>
-        {preview && (
-          <button
-            type="button"
-            className="absolute inset-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
-            aria-label={`View ${attachment.name || "image"}`}
-            onClick={() => window.open(preview, "_blank", "noopener,noreferrer")}
-          />
-        )}
-        {editable && (
-          <Button
-            size="icon-xs"
-            variant="secondary"
-            className="absolute right-2 top-2 z-10"
-            disabled={deleting}
-            aria-label="Remove image"
-            onClick={onDelete}
-          >
-            {deleting ? <LoaderCircle className="animate-spin" /> : <Trash2 />}
-          </Button>
-        )}
-      </div>
-    );
-  }
-
+function ArchivedOrganization({ resource }: { resource: Resource }) {
   return (
-    <div className="flex items-center gap-3 rounded-xl border bg-muted/10 p-3">
-      <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted">
-        <FileText className="size-4" />
+    <FieldGroup className="gap-5">
+      <div className="flex items-center gap-3 rounded-xl border bg-background p-3">
+        <div className="flex size-11 shrink-0 items-center justify-center rounded-lg" style={resourceBadgeStyle(resource.background)}><ResourceIcon name={resource.icon} className="size-5" /></div>
+        <p className="text-sm font-medium">Resource appearance</p>
       </div>
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium">
-          {attachment.name || "Attachment"}
-        </p>
-        {attachment.size !== null && (
-          <p className="text-xs text-muted-foreground">
-            {(attachment.size / 1024 / 1024).toFixed(1)} MB
-          </p>
-        )}
-        {error && <p className="text-xs text-destructive">{error}</p>}
-      </div>
-      <Button
-        variant="ghost"
-        size="icon-sm"
-        disabled={downloading}
-        aria-label="Download attachment"
-        onClick={download}
-      >
-        <Download />
-      </Button>
-      {editable && (
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          disabled={deleting}
-          aria-label="Remove attachment"
-          onClick={onDelete}
-        >
-          {deleting ? <LoaderCircle className="animate-spin" /> : <Trash2 />}
-        </Button>
-      )}
-    </div>
+      {[{ label: "Tags", items: resource.tags }, { label: "Projects", items: resource.projects }, { label: "Areas", items: resource.areas }].map(({ label, items }) => (
+        <Field key={label}>
+          <FieldLabel>{label}</FieldLabel>
+          <div className="flex flex-wrap gap-1.5">{items.length ? items.map((item) => <span key={item.uuid} className="max-w-full break-words rounded-lg border bg-background px-2.5 py-1.5 text-xs">{item.name}</span>) : <p className="text-xs text-muted-foreground">No {label.toLowerCase()}</p>}</div>
+        </Field>
+      ))}
+    </FieldGroup>
   );
 }
 
-export function ResourceDetailDialog({
-  resource,
-  onClose,
-}: {
-  resource: Resource;
-  onClose: () => void;
-}) {
-  const [open, setOpen] = useState(false);
+export function ResourceDetailDialog({ resource, onClose }: { resource: Resource; onClose: () => void }) {
   const editable = resource.archived_at === null;
-  const [current, setCurrent] = useState(resource);
-  const [title, setTitle] = useState(resource.title);
-  const [icon, setIcon] = useState(resource.icon || "BookOpen");
-  const [background, setBackground] = useState(
-    resource.background || "#000000",
-  );
-  const [content, setContent] = useState(
-    fromResourceDocument(resource.content),
-  );
-  const [tagIds, setTagIds] = useState(
-    resource.tags.map((item) => item.uuid),
-  );
-  const [newTags, setNewTags] = useState<string[]>([]);
-  const [projectUuids, setProjectUuids] = useState(
-    resource.projects.map((item) => item.uuid),
-  );
-  const [areaUuids, setAreaUuids] = useState(
-    resource.areas.map((item) => item.uuid),
-  );
+  const [open, setOpen] = useState(false);
+  const [values, setValues] = useState<ResourceMetadataValues>(() => ({
+    title: resource.title, icon: resource.icon || "BookOpen", background: resource.background || "#000000", content: fromResourceDocument(resource.content),
+    tagIds: resource.tags.map((item) => item.uuid), tagNames: [], projectUuids: resource.projects.map((item) => item.uuid), areaUuids: resource.areas.map((item) => item.uuid),
+  }));
+  const [attachments, setAttachments] = useState(resource.attachments);
+  const [failedFiles, setFailedFiles] = useState<File[]>([]);
   const [link, setLink] = useState("");
-  const [tag, setTag] = useState("");
-  const [iconSearch, setIconSearch] = useState("");
-  const [appearanceOpen, setAppearanceOpen] = useState(false);
-  const [saveState, setSaveState] = useState<SaveState>("idle");
-  const [error, setError] = useState("");
+  const [draftTag, setDraftTag] = useState("");
+  const [preview, setPreview] = useState<ResourceImagePreviewValue | null>(null);
+  const [attachmentErrors, setAttachmentErrors] = useState<ResourceFormErrors>({});
+  const [attachmentToDelete, setAttachmentToDelete] = useState<ResourceAttachment | null>(null);
   const [deletingId, setDeletingId] = useState("");
-  const [attachmentToDelete, setAttachmentToDelete] =
-    useState<ResourceAttachment>();
-  const lastSaved = useRef("");
-  const saveSequence = useRef(0);
-  const { mutateAsync: saveResource } = useUpdateResource();
+  const [closing, setClosing] = useState(false);
+  const [discardOpen, setDiscardOpen] = useState(false);
+  const closingRef = useRef(false);
+  const attachmentBusyRef = useRef(false);
+  const cancelDeleteRef = useRef<HTMLButtonElement>(null);
+  const options = useResourceFormOptions(editable, resource);
   const addAttachment = useAddResourceAttachments();
   const removeAttachment = useDeleteResourceAttachment();
-  const tags = useResourceTagsQuery();
-  const projects = useQuery({
-    queryKey: ["projects", "list", "active"],
-    queryFn: () => projectService.list("active"),
-    enabled: editable,
-  });
-  const areas = useQuery({
-    queryKey: ["areas", "list", "active"],
-    queryFn: () => areaService.list("active"),
-    enabled: editable,
-  });
-  const icons = useMemo(() => {
-    const search = iconSearch.trim().toLowerCase();
-    return search
-      ? RESOURCE_ICONS.filter((item) =>
-          item.name.toLowerCase().includes(search),
-        )
-      : RESOURCE_ICONS;
-  }, [iconSearch]);
-  const draft: ResourceUpdateInput = useMemo(
-    () => ({
-      resourceUuid: resource.uuid,
-      title: title.trim(),
-      icon,
-      background,
-      content: toResourceDocument(content),
-      tag_uuids: tagIds,
-      tag_names: newTags,
-      project_uuids: projectUuids,
-      area_uuids: areaUuids,
-    }),
-    [
-      areaUuids,
-      background,
-      content,
-      icon,
-      newTags,
-      projectUuids,
-      resource.uuid,
-      tagIds,
-      title,
-    ],
-  );
-  const signature = JSON.stringify(draft);
+  const draft = useMemo<ResourceUpdateInput>(() => ({
+    resourceUuid: resource.uuid, title: values.title.trim(), icon: values.icon, background: values.background, content: toResourceDocument(values.content),
+    tag_uuids: values.tagIds, tag_names: values.tagNames, project_uuids: values.projectUuids, area_uuids: values.areaUuids,
+  }), [resource.uuid, values]);
+  const autosave = useResourceAutosave(draft, editable && open);
+  const errors = { ...autosave.errors, ...attachmentErrors };
+  const attachmentBusy = addAttachment.isPending || removeAttachment.isPending;
+  const busy = closing || attachmentBusy;
+  const hasUnfinishedDraft = Boolean(link.trim() || draftTag.trim() || failedFiles.length);
+  const images = attachments.filter((item) => item.kind === "image");
+  const files = attachments.filter((item) => item.kind === "file");
+  const links = attachments.filter((item) => item.kind === "link");
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => setOpen(true));
     return () => window.cancelAnimationFrame(frame);
   }, []);
 
-  useEffect(() => {
-    if (!lastSaved.current) {
-      lastSaved.current = signature;
-      return;
-    }
-    if (
-      !editable ||
-      signature === lastSaved.current ||
-      !draft.title ||
-      !/^#[0-9a-f]{6}$/i.test(background)
-    ) {
-      return;
-    }
-    setSaveState("idle");
-    const timer = window.setTimeout(async () => {
-      const sequence = ++saveSequence.current;
-      setSaveState("saving");
-      setError("");
-      try {
-        const response = await saveResource(draft);
-        if (sequence !== saveSequence.current) return;
-        lastSaved.current = signature;
-        setCurrent(response.data);
-        setTagIds(response.data.tags.map((item) => item.uuid));
-        setProjectUuids(response.data.projects.map((item) => item.uuid));
-        setAreaUuids(response.data.areas.map((item) => item.uuid));
-        setNewTags([]);
-        setSaveState("saved");
-      } catch (cause) {
-        if (sequence !== saveSequence.current) return;
-        setError(message(cause));
-        setSaveState("error");
-      }
-    }, 700);
-    return () => window.clearTimeout(timer);
-  }, [background, draft, editable, saveResource, signature]);
+  function update(patch: Partial<ResourceMetadataValues>) { setValues((current) => ({ ...current, ...patch })); }
 
-  function close() {
-    const dirty = signature !== lastSaved.current;
-    if (
-      (dirty || saveState === "saving" || saveState === "error") &&
-      !window.confirm(
-        "Your latest changes may not be saved. Discard them and close?",
-      )
-    ) {
-      return;
-    }
-    setOpen(false);
+  function clearAttachmentError(field: keyof ResourceFormErrors) {
+    setAttachmentErrors((current) => { const next = { ...current }; delete next[field]; return next; });
+  }
+
+  async function close() {
+    if (closingRef.current || attachmentBusyRef.current) return;
+    if (!editable) { setOpen(false); return; }
+    closingRef.current = true;
+    setClosing(true);
+    const saved = await autosave.save();
+    closingRef.current = false;
+    setClosing(false);
+    if (!saved || hasUnfinishedDraft) setDiscardOpen(true);
+    else setOpen(false);
   }
 
   async function addLink() {
+    if (!editable || attachmentBusyRef.current || closingRef.current) return;
     const value = safeResourceUrl(link.trim());
-    if (!value) {
-      setError("Enter a valid HTTP or HTTPS link.");
-      return;
-    }
+    if (!value || value.length > 4096) { setAttachmentErrors((current) => ({ ...current, links: "Enter a valid HTTP or HTTPS link." })); return; }
+    attachmentBusyRef.current = true;
     try {
-      const response = await addAttachment.mutateAsync({
-        resourceUuid: resource.uuid,
-        links: [value],
-      });
-      setCurrent(response.data);
-      setAttachmentToDelete(undefined);
+      const response = await addAttachment.mutateAsync({ resourceUuid: resource.uuid, links: [value] });
+      setAttachments(response.data.attachments);
       setLink("");
-      setError("");
-    } catch (cause) {
-      setError(message(cause));
-    }
+      clearAttachmentError("links");
+    } catch (cause) { setAttachmentErrors((current) => ({ ...current, links: Object.values(resourceRequestErrors(cause)).join(" ") })); }
+    finally { attachmentBusyRef.current = false; }
   }
 
-  async function addFiles(files: File[]) {
-    if (!files.length) return;
-    if (
-      files.length > 10 ||
-      files.some((file) => file.size > 20 * 1024 * 1024)
-    ) {
-      setError("Choose at most 10 files, each 20 MB or smaller.");
+  async function addFiles(selected: File[]) {
+    if (!editable || !selected.length || attachmentBusyRef.current || closingRef.current) return;
+    if (selected.length > 10 || selected.some((file) => file.size > 20 * 1024 * 1024)) {
+      setAttachmentErrors((current) => ({ ...current, files: "Choose at most 10 files per upload, each 20 MB or smaller." }));
       return;
     }
+    attachmentBusyRef.current = true;
     try {
-      const response = await addAttachment.mutateAsync({
-        resourceUuid: resource.uuid,
-        files,
-      });
-      setCurrent(response.data);
-      setError("");
+      const response = await addAttachment.mutateAsync({ resourceUuid: resource.uuid, files: selected });
+      setAttachments(response.data.attachments);
+      setFailedFiles([]);
+      clearAttachmentError("files");
     } catch (cause) {
-      setError(message(cause));
+      setFailedFiles(selected);
+      setAttachmentErrors((current) => ({ ...current, files: Object.values(resourceRequestErrors(cause)).join(" ") }));
     }
+    finally { attachmentBusyRef.current = false; }
   }
 
   async function remove(item: ResourceAttachment) {
+    if (!editable || attachmentBusyRef.current || closingRef.current) return;
+    attachmentBusyRef.current = true;
     setDeletingId(item.uuid);
     try {
-      const response = await removeAttachment.mutateAsync({
-        resourceUuid: resource.uuid,
-        attachmentUuid: item.uuid,
-      });
-      setCurrent(response.data);
-      setAttachmentToDelete(undefined);
-      setError("");
-    } catch (cause) {
-      setError(message(cause));
-    } finally {
-      setDeletingId("");
-    }
+      const response = await removeAttachment.mutateAsync({ resourceUuid: resource.uuid, attachmentUuid: item.uuid });
+      setAttachments(response.data.attachments);
+      setAttachmentToDelete(null);
+      clearAttachmentError("form");
+    } catch (cause) { setAttachmentErrors((current) => ({ ...current, form: Object.values(resourceRequestErrors(cause)).join(" ") })); }
+    finally { attachmentBusyRef.current = false; setDeletingId(""); }
   }
 
-  function addTag() {
-    const value = tag.trim();
-    if (!value) return;
-    const existing = tags.data?.data.find(
-      (item) => item.name.toLowerCase() === value.toLowerCase(),
-    );
-    if (existing) {
-      setTagIds((items) =>
-        items.includes(existing.uuid) ? items : [...items, existing.uuid],
-      );
-    } else {
-      setNewTags((items) =>
-        items.some((item) => item.toLowerCase() === value.toLowerCase())
-          ? items
-          : [...items, value],
-      );
-    }
-    setTag("");
-  }
+  const idleStatus = autosave.status === "Saved" && hasUnfinishedDraft ? "Unsaved changes" : autosave.status;
+  const status = attachmentBusy
+    ? addAttachment.isPending ? "Uploading…" : "Removing attachment…"
+    : closing ? "Saving…" : idleStatus;
 
-  const images = current.attachments.filter((item) => item.kind === "image");
-  const files = current.attachments.filter((item) => item.kind === "file");
-  const links = current.attachments.filter((item) => item.kind === "link");
   return (
-    <>
-    <Dialog
-      open={open}
-      onOpenChange={(nextOpen) => !nextOpen && close()}
-      onOpenChangeComplete={(nextOpen) => !nextOpen && onClose()}
-    >
-      <DialogContent
-        showCloseButton={false}
-        className="max-h-[92vh] w-[calc(100%-1rem)] max-w-6xl overflow-x-hidden overflow-y-auto p-0 sm:w-[calc(100%-2rem)]"
-      >
-        <DialogHeader className="sticky top-0 z-20 border-b bg-background/95 px-6 py-5 backdrop-blur">
-          <div className="flex min-w-0 items-start gap-3">
-            <div
-              className="flex size-11 shrink-0 items-center justify-center rounded-xl shadow-sm"
-              style={resourceBadgeStyle(background)}
-            >
-              <ResourceIcon name={icon} className="size-5" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <DialogTitle className="sr-only">
-                Edit {resource.title}
-              </DialogTitle>
-              {editable ? (
-                <Input
-                  value={title}
-                  maxLength={255}
-                  aria-label="Resource title"
-                  className="h-auto border-0 px-0 text-lg font-semibold shadow-none focus-visible:ring-0"
-                  onChange={(event) => setTitle(event.target.value)}
-                />
-              ) : (
-                <h2 className="break-words text-lg font-semibold">{title}</h2>
-              )}
-              <DialogDescription>
-                {editable
-                  ? "Changes save automatically"
-                  : "Archived resource details"}
-              </DialogDescription>
-            </div>
-            {editable && (
-              <div
-                className="mt-1 flex items-center gap-1.5 whitespace-nowrap text-xs text-muted-foreground"
-                aria-live="polite"
-              >
-                {saveState === "saving" && (
-                  <LoaderCircle className="size-3.5 animate-spin" />
-                )}
-                {saveState === "saved" && (
-                  <Check className="size-3.5 text-emerald-600" />
-                )}
-                {saveState === "error"
-                  ? "Save failed"
-                  : saveState === "saving"
-                    ? "Saving…"
-                    : saveState === "saved"
-                      ? "Saved"
-                      : ""}
-              </div>
-            )}
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              className="shrink-0"
-              aria-label="Close resource details"
-              onClick={close}
-            >
-              <X />
-            </Button>
-          </div>
-        </DialogHeader>
-
-        <div className="grid gap-6 p-6">
-          {error && (
-            <div
-              role="alert"
-              className="flex items-start justify-between gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive"
-            >
-              <span>{error}</span>
-              <Button
-                variant="ghost"
-                size="icon-xs"
-                onClick={() => setError("")}
-              >
-                <X />
-              </Button>
-            </div>
-          )}
-
-          {editable && (
-            <Accordion
-              multiple
-              value={appearanceOpen ? ["appearance"] : []}
-              onValueChange={(value) =>
-                setAppearanceOpen(value.includes("appearance"))
-              }
-            >
-              <AccordionItem
-                value="appearance"
-                className="overflow-hidden rounded-xl border"
-              >
-                <div className="flex items-center gap-3 bg-muted/20 p-3">
-                  <Palette className="size-4" />
-                  <div className="flex-1">
-                    <p className="text-sm font-medium">Appearance</p>
-                    <p className="text-xs text-muted-foreground">
-                      Optional icon and badge color
-                    </p>
-                  </div>
-                  <AccordionHeader>
-                    <AccordionTrigger className="size-auto px-2.5 text-sm">
-                      Customize
-                    </AccordionTrigger>
-                  </AccordionHeader>
+    <ResourceDialogLayout open={open} title={editable ? "Edit resource" : "Resource details"} description={editable ? "Changes save automatically." : "Archived resource"} icon={values.icon} background={values.background} busy={busy} onRequestClose={() => { void close(); }} onClose={onClose}>
+      <ResourceDialogBody
+        summary={errors.form ? <Alert variant="destructive"><AlertCircle aria-hidden="true" /><AlertTitle>Changes could not be saved</AlertTitle><AlertDescription>{errors.form}</AlertDescription></Alert> : null}
+        main={
+          <FieldGroup className="gap-6">
+            <ResourceTitleField value={values.title} disabled={closing} readOnly={!editable} error={errors.title} onChange={(title) => update({ title })} />
+            <ResourceNotesField documentId={resource.uuid} content={values.content} readOnly={!editable || closing} error={errors.notes} onChange={(content) => update({ content })} />
+            <FieldGroup className="gap-3">
+              {editable ? <ResourceLinkInput value={link} disabled={busy} pending={addAttachment.isPending} error={errors.links} onChange={(value) => { setLink(value); clearAttachmentError("links"); }} onAdd={() => { void addLink(); }} /> : <FieldLabel>Links</FieldLabel>}
+              {links.length ? <div className="grid gap-2">{links.map((item) => <ResourceLinkCard key={item.uuid} url={item.url} name={item.name} disabled={busy} deleting={deletingId === item.uuid} onRemove={editable ? () => setAttachmentToDelete(item) : undefined} />)}</div> : !editable ? <p className="text-xs text-muted-foreground">No links</p> : null}
+            </FieldGroup>
+            <Field id={resourceFieldIds.files} tabIndex={-1} data-invalid={Boolean(errors.files)}>
+              <div className="flex items-center justify-between gap-2"><FieldLabel>Images and files</FieldLabel><span className="text-xs tabular-nums text-muted-foreground">{images.length + files.length} attachments</span></div>
+              {editable ? <ResourceFileDropzone id="resource-files" disabled={busy || Boolean(failedFiles.length)} pending={addAttachment.isPending} onFiles={(selected) => { void addFiles(selected); }} /> : null}
+              {errors.files ? <FieldError>{errors.files}</FieldError> : null}
+              {failedFiles.length ? <div className="grid gap-2 rounded-xl border p-3">
+                <p className="text-sm font-medium">Upload didn’t finish</p>
+                <p className="break-words text-xs text-muted-foreground">{failedFiles.map((file) => file.name).join(", ")}</p>
+                <div className="flex gap-2">
+                  <Button type="button" variant="outline" className="h-11" disabled={busy} onClick={() => { void addFiles(failedFiles); }}>Retry upload</Button>
+                  <Button type="button" variant="ghost" className="h-11" disabled={busy} onClick={() => { setFailedFiles([]); clearAttachmentError("files"); }}>Clear files</Button>
                 </div>
-                <AccordionContent>
-                  <div className="grid gap-4 border-t p-4">
-                    <div className="grid grid-cols-[repeat(auto-fill,2rem)] gap-2">
-                      {RESOURCE_BADGE_COLORS.map((color) => (
-                        <button
-                          key={color.value}
-                          type="button"
-                          title={color.name}
-                          aria-pressed={
-                            background.toLowerCase() ===
-                            color.value.toLowerCase()
-                          }
-                          className="flex size-8 items-center justify-center rounded-full border border-black/10 shadow-sm outline-none transition-transform hover:scale-110 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                          style={{ backgroundColor: color.value }}
-                          onClick={() => setBackground(color.value)}
-                        >
-                          {background.toLowerCase() ===
-                            color.value.toLowerCase() && (
-                            <Check
-                              className="size-4"
-                              style={{
-                                color: resourceBadgeStyle(color.value).color,
-                              }}
-                            />
-                          )}
-                        </button>
-                      ))}
-                    </div>
-                    <Input
-                      value={background}
-                      maxLength={7}
-                      aria-label="Custom badge color"
-                      className="font-mono uppercase"
-                      onChange={(event) => setBackground(event.target.value)}
-                    />
-                    <div className="overflow-hidden rounded-xl border">
-                      <div className="relative border-b p-3">
-                        <Search className="absolute left-5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                        <Input
-                          value={iconSearch}
-                          placeholder="Search icons…"
-                          className="pl-9"
-                          onChange={(event) =>
-                            setIconSearch(event.target.value)
-                          }
-                        />
-                      </div>
-                      <div className="grid max-h-40 grid-cols-[repeat(auto-fill,2rem)] justify-between gap-1 overflow-y-auto p-3">
-                        {icons.map(({ name, icon: Icon }) => (
-                          <button
-                            key={name}
-                            type="button"
-                            title={name}
-                            aria-pressed={icon === name}
-                            className="flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted aria-pressed:bg-primary aria-pressed:text-primary-foreground"
-                            onClick={() => setIcon(name)}
-                          >
-                            <Icon className="size-3.5" />
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                </AccordionContent>
-              </AccordionItem>
-            </Accordion>
-          )}
-
-          <section className="grid gap-2">
-            <h3 className="text-sm font-semibold">Notes</h3>
-            <ResourceEditor
-              id={resource.uuid}
-              content={content}
-              onChange={setContent}
-              readOnly={!editable}
-            />
-          </section>
-
-          {editable && (
-            <section className="grid gap-3">
-              <div>
-                <h3 className="text-sm font-semibold">Organize</h3>
-                <p className="text-xs text-muted-foreground">
-                  Connect this resource to your workspace.
-                </p>
-              </div>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <ResourceAssignmentSelect
-                  label="Project"
-                  items={projects.data?.data ?? current.projects}
-                  value={projectUuids}
-                  loading={projects.isLoading}
-                  disabled={projects.isLoading || projects.isError}
-                  onValueChange={setProjectUuids}
-                />
-                <ResourceAssignmentSelect
-                  label="Area"
-                  items={areas.data?.data ?? current.areas}
-                  value={areaUuids}
-                  loading={areas.isLoading}
-                  disabled={areas.isLoading || areas.isError}
-                  onValueChange={setAreaUuids}
-                />
-              </div>
-              <div className="grid gap-2">
-                <label htmlFor="detail-resource-tag" className="text-sm font-medium">
-                  Tags
-                </label>
-                <div className="flex items-center overflow-hidden rounded-lg border bg-background shadow-xs transition-[border-color,box-shadow] focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/30">
-                  <Tag className="ml-3 size-4 shrink-0 text-muted-foreground" />
-                <Input
-                  id="detail-resource-tag"
-                  value={tag}
-                  maxLength={100}
-                  placeholder="Enter a tag name"
-                  className="border-0 shadow-none focus-visible:ring-0"
-                  onChange={(event) => setTag(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") {
-                      event.preventDefault();
-                      addTag();
-                    }
-                  }}
-                />
-                <Button
-                  type="button"
-                  variant="ghost"
-                  className="shrink-0 rounded-none border-l px-4"
-                  onClick={addTag}
-                >
-                  Add tag
-                </Button>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Choose an existing tag below or create a new one.
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {tags.data?.data.map((item) => (
-                  <Button
-                    key={item.uuid}
-                    type="button"
-                    size="sm"
-                    variant={tagIds.includes(item.uuid) ? "default" : "outline"}
-                    onClick={() =>
-                      setTagIds((ids) =>
-                        ids.includes(item.uuid)
-                          ? ids.filter((id) => id !== item.uuid)
-                          : [...ids, item.uuid],
-                      )
-                    }
-                  >
-                    {item.name}
-                  </Button>
-                ))}
-                {newTags.map((name) => (
-                  <Button
-                    key={name}
-                    type="button"
-                    size="sm"
-                    onClick={() =>
-                      setNewTags((items) =>
-                        items.filter((item) => item !== name),
-                      )
-                    }
-                  >
-                    {name}
-                    <X />
-                  </Button>
-                ))}
-              </div>
-            </section>
-          )}
-
-          <section className="grid gap-3">
-            <div>
-              <div>
-                <h3 className="text-sm font-semibold">Images and files</h3>
-                <p className="text-xs text-muted-foreground">
-                  {images.length + files.length} attachments
-                </p>
-              </div>
-            </div>
-            {editable && (
-              <ResourceFileDropzone
-                id={`resource-files-${resource.uuid}`}
-                disabled={addAttachment.isPending}
-                onFiles={(selectedFiles) => void addFiles(selectedFiles)}
-              />
-            )}
-            {images.length > 0 && (
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
-                {images.map((item) => (
-                  <AttachmentCard
-                    key={item.uuid}
-                    resourceUuid={resource.uuid}
-                    attachment={item}
-                    editable={editable}
-                    deleting={deletingId === item.uuid}
-                    onDelete={() => setAttachmentToDelete(item)}
-                  />
-                ))}
-              </div>
-            )}
-            <div className="grid gap-2">
-              {files.map((item) => (
-                <AttachmentCard
-                  key={item.uuid}
-                  resourceUuid={resource.uuid}
-                  attachment={item}
-                  editable={editable}
-                  deleting={deletingId === item.uuid}
-                  onDelete={() => setAttachmentToDelete(item)}
-                />
-              ))}
-            </div>
-            {!images.length && !files.length && (
-              <div className="rounded-xl border border-dashed p-6 text-center text-sm text-muted-foreground">
-                No images or files yet.
-              </div>
-            )}
-          </section>
-
-          <section className="grid gap-3">
-            <div>
-              <h3 className="text-sm font-semibold">Links</h3>
-              <p className="text-xs text-muted-foreground">
-                Add useful websites, documents, or references.
-              </p>
-            </div>
-            {editable && (
-              <div className="flex items-center overflow-hidden rounded-lg border bg-background shadow-xs transition-[border-color,box-shadow] focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/30">
-                <Link2 className="ml-3 size-4 shrink-0 text-muted-foreground" />
-                <Input
-                  type="url"
-                  value={link}
-                  placeholder="Paste a URL"
-                  className="border-0 shadow-none focus-visible:ring-0"
-                  onChange={(event) => setLink(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") {
-                      event.preventDefault();
-                      void addLink();
-                    }
-                  }}
-                />
-                <Button
-                  type="button"
-                  variant="ghost"
-                  className="shrink-0 rounded-none border-l px-4"
-                  disabled={addAttachment.isPending}
-                  onClick={() => void addLink()}
-                >
-                  Add link
-                </Button>
-              </div>
-            )}
-            {links.map((item) => (
-              <div
-                key={item.uuid}
-                className="flex items-center gap-2 rounded-xl border p-3"
-              >
-                <ExternalLink className="size-4 shrink-0" />
-                <a
-                  href={item.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="min-w-0 flex-1 truncate text-sm hover:underline"
-                >
-                  {item.name || item.url}
-                </a>
-                {editable && (
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    disabled={deletingId === item.uuid}
-                    aria-label="Remove link"
-                    onClick={() => setAttachmentToDelete(item)}
-                  >
-                    <Trash2 />
-                  </Button>
-                )}
-              </div>
-            ))}
-          </section>
-        </div>
-      </DialogContent>
-    </Dialog>
-    <Dialog
-      open={Boolean(attachmentToDelete)}
-      onOpenChange={(nextOpen) => {
-        if (!nextOpen && !deletingId) setAttachmentToDelete(undefined);
-      }}
-    >
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Delete attachment?</DialogTitle>
-          <DialogDescription>
-            “{attachmentToDelete?.name || attachmentToDelete?.url || "This attachment"}”
-            will move to Trash for 30 days and can be restored from Settings.
-          </DialogDescription>
-        </DialogHeader>
-        <DialogFooter>
-          <Button
-            variant="outline"
-            disabled={Boolean(deletingId)}
-            onClick={() => setAttachmentToDelete(undefined)}
-          >
-            Cancel
-          </Button>
-          <Button
-            variant="destructive"
-            disabled={Boolean(deletingId) || !attachmentToDelete}
-            onClick={() => attachmentToDelete && void remove(attachmentToDelete)}
-          >
-            {deletingId ? "Deleting…" : "Delete attachment"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-    </>
+              </div> : null}
+              {images.length ? <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">{images.map((item) => <ResourceAttachmentCard key={item.uuid} resourceUuid={resource.uuid} attachment={item} disabled={busy} deleting={deletingId === item.uuid} onPreview={setPreview} onRemove={editable ? () => setAttachmentToDelete(item) : undefined} />)}</div> : null}
+              {files.length ? <div className="grid gap-2">{files.map((item) => <ResourceAttachmentCard key={item.uuid} resourceUuid={resource.uuid} attachment={item} disabled={busy} deleting={deletingId === item.uuid} onPreview={setPreview} onRemove={editable ? () => setAttachmentToDelete(item) : undefined} />)}</div> : null}
+              {!editable && !images.length && !files.length ? <p className="text-xs text-muted-foreground">No images or files</p> : null}
+            </Field>
+          </FieldGroup>
+        }
+        sidebar={editable ? <FieldGroup className="gap-6"><ResourceAppearanceField title={values.title} icon={values.icon} background={values.background} disabled={closing} error={errors.appearance} onIconChange={(icon) => update({ icon })} onBackgroundChange={(background) => update({ background })} /><ResourceOrganizationFields values={values} options={options} disabled={closing} draftTag={draftTag} errors={errors} onDraftTagChange={setDraftTag} onChange={update} /></FieldGroup> : <ArchivedOrganization resource={resource} />}
+      />
+      <ResourceDialogFooter status={editable ? <span role="status" aria-live="polite" className="inline-flex items-center gap-1.5">{status === "Saved" ? <Check className="size-3.5" aria-hidden="true" /> : busy || autosave.saving ? <LoaderCircle className="size-3.5 animate-spin motion-reduce:animate-none" aria-hidden="true" /> : autosave.failed ? <AlertCircle className="size-3.5 text-destructive" aria-hidden="true" /> : <Circle className="size-3" aria-hidden="true" />}{status}</span> : "Archived resources are read-only."}>
+        {editable && autosave.failed ? <Button type="button" variant="outline" disabled={busy} onClick={() => { void autosave.save(); }}>Retry save</Button> : null}
+        <Button type="button" variant="outline" disabled={busy} onClick={() => { void close(); }}>Close</Button>
+      </ResourceDialogFooter>
+      <ResourceImagePreview image={preview} onClose={() => setPreview(null)} />
+      <ResourceDiscardDialog open={discardOpen} editing onOpenChange={setDiscardOpen} onDiscard={() => { setDiscardOpen(false); setOpen(false); }} />
+      <AlertDialog open={Boolean(attachmentToDelete)} onOpenChange={(next) => { if (!next && !deletingId) setAttachmentToDelete(null); }}>
+        <AlertDialogContent initialFocus={cancelDeleteRef}>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete attachment?</AlertDialogTitle>
+            <AlertDialogDescription>“{attachmentToDelete?.name || attachmentToDelete?.url || "This attachment"}” will move to Trash for 30 days and can be restored from Settings.</AlertDialogDescription>
+          </AlertDialogHeader>
+          {attachmentErrors.form ? <p role="alert" className="text-sm text-destructive">{attachmentErrors.form}</p> : null}
+          <AlertDialogFooter>
+            <AlertDialogCancel ref={cancelDeleteRef} disabled={Boolean(deletingId)} className="h-11">Cancel</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" className="h-11" disabled={Boolean(deletingId) || !attachmentToDelete} onClick={() => { if (attachmentToDelete) void remove(attachmentToDelete); }}>{deletingId ? "Deleting…" : "Delete attachment"}</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </ResourceDialogLayout>
   );
 }

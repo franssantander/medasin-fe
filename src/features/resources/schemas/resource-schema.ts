@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 export const resourceSchema = z.object({
-  title: z.string().trim().min(1, "Enter a title.").max(255),
+  title: z.string().trim().min(1, "Enter a title.").max(255, "Use a title of 255 characters or fewer."),
   icon: z.string().trim().max(50).optional(),
   background: z
     .string()
@@ -11,7 +11,7 @@ export const resourceSchema = z.object({
     .array(
       z
         .string()
-        .max(4096)
+        .max(4096, "Use a link of 4096 characters or fewer.")
         .refine((value) => {
           try {
             return ["http:", "https:"].includes(new URL(value).protocol);
@@ -20,7 +20,7 @@ export const resourceSchema = z.object({
           }
         }, "Enter a valid HTTP or HTTPS link."),
     )
-    .max(100),
+    .max(100, "Add at most 100 links."),
   files: z
     .array(
       z
@@ -31,8 +31,8 @@ export const resourceSchema = z.object({
         ),
     )
     .max(10, "Choose at most 10 uploads."),
-  tag_names: z.array(z.string().trim().min(1).max(100)).max(100),
-  tag_uuids: z.array(z.string().uuid()).max(100),
-  project_uuids: z.array(z.string().uuid()).max(100),
-  area_uuids: z.array(z.string().uuid()).max(100),
+  tag_names: z.array(z.string().trim().min(1, "Enter a tag name.").max(100, "Use tag names of 100 characters or fewer.")).max(100, "Add at most 100 new tags."),
+  tag_uuids: z.array(z.string().uuid()).max(100, "Choose at most 100 tags."),
+  project_uuids: z.array(z.string().uuid()).max(100, "Choose at most 100 projects."),
+  area_uuids: z.array(z.string().uuid()).max(100, "Choose at most 100 areas."),
 });

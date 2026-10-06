@@ -1,816 +1,148 @@
 "use client";
 
-import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { useQuery } from "@tanstack/react-query";
-import {
-  Check,
-  Eye,
-  ExternalLink,
-  FileText,
-  Link2,
-  Search,
-  Tag,
-  X,
-} from "lucide-react";
-import {
-  Accordion,
-  AccordionContent,
-  AccordionHeader,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion";
+import { useEffect, useRef, useState, type FormEvent } from "react";
+import { LoaderCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { EMPTY_NOTE_DOCUMENT } from "@/components/ui/note-editor-document";
-import { areaService } from "@/features/areas/services/area-service";
-import { projectService } from "@/features/projects/services/project-service";
-import { ApiError } from "@/lib/axios";
-import {
-  useCreateResource,
-  useResourceTagsQuery,
-} from "../queries/resource-query";
+import { useCreateResource } from "../queries/resource-query";
+import { useResourceFormOptions } from "../hooks/use-resource-form-options";
+import { includeResourceTag, resourceRequestErrors, resourceValidationErrors, type ResourceFormErrors, type ResourceMetadataValues } from "../resource-form-utils";
 import { resourceSchema } from "../schemas/resource-schema";
 import { safeResourceUrl, toResourceDocument } from "../resource-document";
-import { ResourceEditor } from "./resource-editor";
-import { ResourceAssignmentSelect } from "./resource-assignment-select";
+import { ResourceAppearanceField } from "./resource-appearance-field";
+import { ResourceFileCard, ResourceImagePreview, ResourceLinkCard, SelectedResourceImage, type ResourceImagePreviewValue } from "./resource-attachment-cards";
+import { ResourceLinkInput, ResourceNotesField, ResourceTitleField } from "./resource-content-fields";
+import { focusResourceErrors, resourceFieldIds, ResourceDialogBody, ResourceDialogFooter, ResourceDialogLayout, ResourceDiscardDialog, ResourceErrorSummary } from "./resource-dialog-layout";
 import { ResourceFileDropzone } from "./resource-file-dropzone";
-import {
-  RESOURCE_BADGE_COLORS,
-  RESOURCE_ICONS,
-  ResourceIcon,
-  resourceBadgeStyle,
-} from "./resource-icons";
+import { ResourceOrganizationFields } from "./resource-organization-fields";
 
-function formatFileSize(size: number) {
-  return `${(size / 1024 / 1024).toFixed(1)} MB`;
+function draftSignature(values: ResourceMetadataValues) {
+  return JSON.stringify({ ...values, content: toResourceDocument(values.content) });
 }
 
-function useObjectUrl(file: File | null) {
-  const [preview, setPreview] = useState<{
-    file: File;
-    url: string;
-  } | null>(null);
-
-  useEffect(() => {
-    if (!file) return;
-
-    const url = URL.createObjectURL(file);
-    // The URL is a browser resource created by this effect and must be
-    // replaced when React replays effects in development Strict Mode.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setPreview({ file, url });
-
-    return () => URL.revokeObjectURL(url);
-  }, [file]);
-
-  return preview?.file === file ? preview.url : undefined;
-}
-
-function SelectedImageCard({
-  file,
-  onPreview,
-  onRemove,
-}: {
-  file: File;
-  onPreview: () => void;
-  onRemove: () => void;
-}) {
-  const url = useObjectUrl(file);
-
-  return (
-    <div className="group relative aspect-square overflow-hidden rounded-xl border bg-muted/30">
-      {url && (
-        // Local object URLs should be rendered directly by the browser.
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={url}
-          alt={file.name}
-          className="size-full object-cover transition-transform duration-200 group-hover:scale-[1.02]"
-        />
-      )}
-      <button
-        type="button"
-        className="absolute inset-0 flex items-center justify-center bg-black/0 transition-colors hover:bg-black/30 focus-visible:bg-black/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white"
-        onClick={onPreview}
-        aria-label={`View ${file.name}`}
-      >
-        <span className="rounded-full bg-black/65 p-2 text-white opacity-0 shadow-sm transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
-          <Eye className="size-4" />
-        </span>
-      </button>
-      <Button
-        type="button"
-        size="icon-xs"
-        variant="secondary"
-        className="absolute right-2 top-2 z-10 shadow-sm"
-        aria-label={`Remove ${file.name}`}
-        onClick={onRemove}
-      >
-        <X />
-      </Button>
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent px-2 pb-2 pt-8 text-white">
-        <p className="truncate text-xs font-medium">{file.name}</p>
-        <p className="text-[11px] text-white/75">{formatFileSize(file.size)}</p>
-      </div>
-    </div>
-  );
-}
-
-export function ResourceFormDialog({
-  onClose,
-  initialProjectUuids = [],
-}: {
-  onClose: () => void;
-  initialProjectUuids?: string[];
-}) {
+export function ResourceFormDialog({ onClose, initialProjectUuids = [] }: { onClose: () => void; initialProjectUuids?: string[] }) {
+  const [initial] = useState<ResourceMetadataValues>(() => ({
+    title: "", icon: "BookOpen", background: "#000000", content: EMPTY_NOTE_DOCUMENT,
+    tagNames: [], tagIds: [], projectUuids: [...initialProjectUuids], areaUuids: [],
+  }));
+  const [values, setValues] = useState(initial);
   const [open, setOpen] = useState(false);
-  const [title, setTitle] = useState("");
-  const [icon, setIcon] = useState("BookOpen");
-  const [background, setBackground] = useState("#000000");
-  const [iconSearch, setIconSearch] = useState("");
-  const [appearanceOpen, setAppearanceOpen] = useState(false);
-  const [content, setContent] = useState(EMPTY_NOTE_DOCUMENT);
   const [links, setLinks] = useState<string[]>([]);
   const [link, setLink] = useState("");
+  const [draftTag, setDraftTag] = useState("");
   const [files, setFiles] = useState<File[]>([]);
-  const [previewImage, setPreviewImage] = useState<File | null>(null);
-  const [tagNames, setTagNames] = useState<string[]>([]);
-  const [tagIds, setTagIds] = useState<string[]>([]);
-  const [tag, setTag] = useState("");
-  const [projectUuids, setProjectUuids] =
-    useState<string[]>(initialProjectUuids);
-  const [areaUuids, setAreaUuids] = useState<string[]>([]);
-  const [errors, setErrors] = useState<string[]>([]);
-  const previewUrl = useObjectUrl(previewImage);
-  const tags = useResourceTagsQuery();
-  const projects = useQuery({
-    queryKey: ["projects", "list", "active"],
-    queryFn: () => projectService.list("active"),
-  });
-  const areas = useQuery({
-    queryKey: ["areas", "list", "active"],
-    queryFn: () => areaService.list("active"),
-  });
+  const [preview, setPreview] = useState<ResourceImagePreviewValue | null>(null);
+  const [discardOpen, setDiscardOpen] = useState(false);
+  const [errors, setErrors] = useState<ResourceFormErrors>({});
+  const submitting = useRef(false);
+  const options = useResourceFormOptions();
   const create = useCreateResource();
-  const filteredIcons = useMemo(() => {
-    const query = iconSearch.trim().toLowerCase();
-    return query
-      ? RESOURCE_ICONS.filter(({ name }) => name.toLowerCase().includes(query))
-      : RESOURCE_ICONS;
-  }, [iconSearch]);
+  const dirty = draftSignature(values) !== draftSignature(initial) || Boolean(links.length || files.length || link.trim() || draftTag.trim());
+  const imageFiles = files.filter((file) => file.type.startsWith("image/"));
+  const documentFiles = files.filter((file) => !file.type.startsWith("image/"));
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => setOpen(true));
     return () => window.cancelAnimationFrame(frame);
   }, []);
 
+  function clearError(field: keyof ResourceFormErrors) {
+    setErrors((current) => { const next = { ...current }; delete next[field]; return next; });
+  }
+
+  function update(patch: Partial<ResourceMetadataValues>) {
+    setValues((current) => ({ ...current, ...patch }));
+    const field = "title" in patch ? "title" : "icon" in patch || "background" in patch ? "appearance" : "content" in patch ? "notes" : "tagIds" in patch || "tagNames" in patch ? "tags" : "projectUuids" in patch ? "projects" : "areas";
+    clearError(field);
+  }
+
+  function close() {
+    if (submitting.current) return;
+    if (dirty) setDiscardOpen(true);
+    else setOpen(false);
+  }
+
   function addLink() {
     const value = link.trim();
-    if (!safeResourceUrl(value) || value.length > 4096) {
-      setErrors(["Enter a valid HTTP or HTTPS link, up to 4096 characters."]);
-      return;
-    }
-    if (links.length >= 100) {
-      setErrors(["Add at most 100 links."]);
-      return;
-    }
-    setLinks((current) =>
-      current.includes(value) ? current : [...current, value],
-    );
+    if (!safeResourceUrl(value) || value.length > 4096) { setErrors((current) => ({ ...current, links: "Enter a valid HTTP or HTTPS link." })); return; }
+    const next = [...new Set([...links, value])];
+    if (next.length > 100) { setErrors((current) => ({ ...current, links: "Add at most 100 links." })); return; }
+    setLinks(next);
     setLink("");
-    setErrors([]);
+    clearError("links");
   }
-  function addTag() {
-    const value = tag.trim();
-    if (!value || value.length > 100) {
-      setErrors(["Tag names must contain 1–100 characters."]);
-      return;
-    }
-    const existing = tags.data?.data.find(
-      (item) => item.name.toLowerCase() === value.toLowerCase(),
-    );
-    if (existing)
-      setTagIds((current) =>
-        current.includes(existing.uuid) ? current : [...current, existing.uuid],
-      );
-    else
-      setTagNames((current) =>
-        current.some((name) => name.toLowerCase() === value.toLowerCase())
-          ? current
-          : [...current, value],
-      );
-    setTag("");
-    setErrors([]);
-  }
-  function addFiles(nextFiles: File[]) {
-    const next = [...files, ...nextFiles];
-    if (
-      next.length > 10 ||
-      next.some((selectedFile) => selectedFile.size > 20 * 1024 * 1024)
-    ) {
-      setErrors(["Choose at most 10 uploads, each 20 MB or smaller."]);
+
+  function addFiles(selected: File[]) {
+    const next = [...files, ...selected];
+    if (next.length > 10 || next.some((file) => file.size > 20 * 1024 * 1024)) {
+      setErrors((current) => ({ ...current, files: "Choose at most 10 files, each 20 MB or smaller." }));
       return;
     }
     setFiles(next);
-    setErrors([]);
+    clearError("files");
   }
-  function removeFile(file: File) {
-    setFiles((current) => current.filter((item) => item !== file));
-    setPreviewImage((current) => (current === file ? null : current));
-  }
+
   async function submit(event: FormEvent) {
     event.preventDefault();
-    if (create.isPending) return;
-    if (link.trim() || tag.trim()) {
-      setErrors([
-        "Add or clear the link and tag you have entered before saving.",
-      ]);
-      return;
-    }
+    if (submitting.current) return;
+    const tags = includeResourceTag(draftTag, values.tagIds, values.tagNames, options.tagItems);
     const parsed = resourceSchema.safeParse({
-      title,
-      icon,
-      background,
-      links,
-      files,
-      tag_names: tagNames,
-      tag_uuids: tagIds,
-      project_uuids: projectUuids,
-      area_uuids: areaUuids,
+      title: values.title, icon: values.icon, background: values.background,
+      links: [...new Set([...links, ...(link.trim() ? [link.trim()] : [])])], files,
+      tag_names: tags.names, tag_uuids: tags.ids, project_uuids: values.projectUuids, area_uuids: values.areaUuids,
     });
-    if (!parsed.success) {
-      if (
-        parsed.error.issues.some(
-          (issue) => issue.path[0] === "icon" || issue.path[0] === "background",
-        )
-      ) {
-        setAppearanceOpen(true);
-      }
-      setErrors(
-        parsed.error.issues.map(
-          (issue) => `${issue.path.join(".")}: ${issue.message}`,
-        ),
-      );
-      return;
-    }
-    setErrors([]);
+    if (!parsed.success) { setErrors(resourceValidationErrors(parsed.error.issues)); focusResourceErrors(); return; }
+    submitting.current = true;
+    setErrors({});
     try {
-      await create.mutateAsync({
-        ...parsed.data,
-        content: toResourceDocument(content),
-      });
+      await create.mutateAsync({ ...parsed.data, content: toResourceDocument(values.content) });
       setOpen(false);
     } catch (error) {
-      if (
-        error instanceof ApiError &&
-        error.validationErrors &&
-        (error.validationErrors.icon || error.validationErrors.background)
-      ) {
-        setAppearanceOpen(true);
-      }
-      setErrors(
-        error instanceof ApiError && error.validationErrors
-          ? Object.entries(error.validationErrors).flatMap(
-              ([field, messages]) =>
-                messages.map((message) => `${field}: ${message}`),
-            )
-          : [
-              error instanceof Error
-                ? error.message
-                : "Resource could not be created. Try again.",
-            ],
-      );
-    }
+      setErrors(resourceRequestErrors(error, "Resource could not be created. Try again."));
+      focusResourceErrors();
+    } finally { submitting.current = false; }
   }
-  const imageFiles = files.filter((file) => file.type.startsWith("image/"));
-  const documentFiles = files.filter((file) => !file.type.startsWith("image/"));
-  return (
-    <>
-      <Dialog
-        open={open}
-        onOpenChange={(nextOpen) => {
-          if (!nextOpen && !create.isPending) setOpen(false);
-        }}
-        onOpenChangeComplete={(nextOpen) => !nextOpen && onClose()}
-      >
-        <DialogContent className="w-full max-w-4xl overflow-x-hidden">
-          <DialogHeader>
-            <DialogTitle>New resource</DialogTitle>
-            <DialogDescription>
-              Keep notes, links, images, and files together.
-            </DialogDescription>
-          </DialogHeader>
-          <form id="resource-form" onSubmit={submit} className="grid gap-5">
-            <fieldset
-              disabled={create.isPending}
-              className="grid min-w-0 gap-5"
-            >
-              <div className="grid gap-2">
-                <label htmlFor="resource-title" className="text-sm font-medium">
-                  Title{" "}
-                  <span className="text-muted-foreground">(required)</span>
-                </label>
-                <Input
-                  id="resource-title"
-                  value={title}
-                  onChange={(event) => setTitle(event.target.value)}
-                  maxLength={255}
-                  required
-                  autoFocus
-                  placeholder="Give your resource a title"
-                />
-              </div>
-              <Accordion
-                multiple
-                value={appearanceOpen ? ["appearance"] : []}
-                onValueChange={(value) =>
-                  setAppearanceOpen(value.includes("appearance"))
-                }
-              >
-                <AccordionItem
-                  value="appearance"
-                  className="overflow-hidden rounded-xl border"
-                >
-                  <div className="flex items-center gap-3 bg-muted/20 p-3">
-                    <div
-                      className="flex size-10 shrink-0 items-center justify-center rounded-xl shadow-sm"
-                      style={resourceBadgeStyle(background)}
-                    >
-                      <ResourceIcon name={icon} className="size-5" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium">
-                        Customize appearance
-                      </p>
-                      <p className="truncate text-xs text-muted-foreground">
-                        Optional · {icon} · {background.toUpperCase()}
-                      </p>
-                    </div>
-                    <AccordionHeader>
-                      <AccordionTrigger
-                        className="size-auto gap-1.5 px-2.5"
-                        aria-label="Customize resource appearance"
-                      >
-                        <span className="hidden text-sm sm:inline">
-                          {appearanceOpen ? "Hide" : "Customize"}
-                        </span>
-                      </AccordionTrigger>
-                    </AccordionHeader>
-                  </div>
-                  <AccordionContent>
-                    <div className="grid gap-5 border-t p-4">
-                      <div className="flex items-center gap-4 rounded-xl border bg-muted/30 p-4">
-                        <div
-                          className="flex size-14 shrink-0 items-center justify-center rounded-xl shadow-sm"
-                          style={resourceBadgeStyle(background)}
-                        >
-                          <ResourceIcon name={icon} className="size-6" />
-                        </div>
-                        <div className="min-w-0">
-                          <p className="truncate font-medium">
-                            {title.trim() || "Resource preview"}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            Preview of the resource badge and title.
-                          </p>
-                        </div>
-                      </div>
-                      <div className="grid gap-3">
-                        <div>
-                          <p className="text-sm font-medium">Badge color</p>
-                          <p className="text-xs text-muted-foreground">
-                            Icon contrast adjusts automatically.
-                          </p>
-                        </div>
-                        <div className="grid grid-cols-[repeat(auto-fill,2rem)] gap-2">
-                          {RESOURCE_BADGE_COLORS.map((color) => {
-                            const isSelected =
-                              background.toLowerCase() ===
-                              color.value.toLowerCase();
 
-                            return (
-                              <button
-                                key={color.value}
-                                type="button"
-                                title={color.name}
-                                aria-label={`Use ${color.name} (${color.value})`}
-                                aria-pressed={isSelected}
-                                className="flex size-8 items-center justify-center rounded-full border border-black/10 shadow-sm outline-none transition-transform hover:scale-110 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                                style={{ backgroundColor: color.value }}
-                                onClick={() => setBackground(color.value)}
-                              >
-                                {isSelected && (
-                                  <Check
-                                    className="size-4 drop-shadow-sm"
-                                    strokeWidth={3}
-                                    style={{
-                                      color: resourceBadgeStyle(color.value)
-                                        .color,
-                                    }}
-                                  />
-                                )}
-                              </button>
-                            );
-                          })}
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <div
-                            className="flex size-10 shrink-0 items-center justify-center rounded-xl shadow-sm"
-                            style={resourceBadgeStyle(background)}
-                          >
-                            <ResourceIcon name={icon} className="size-5" />
-                          </div>
-                          <div className="grid min-w-0 flex-1 gap-1.5">
-                            <label
-                              htmlFor="resource-badge-color"
-                              className="text-xs font-medium"
-                            >
-                              Custom hex color
-                            </label>
-                            <Input
-                              id="resource-badge-color"
-                              value={background}
-                              onChange={(event) =>
-                                setBackground(event.target.value)
-                              }
-                              maxLength={7}
-                              placeholder="#000000"
-                              spellCheck={false}
-                              aria-invalid={!/^#[0-9a-f]{6}$/i.test(background)}
-                              className="font-mono uppercase"
-                            />
-                          </div>
-                        </div>
-                      </div>
-                      <div className="grid gap-2">
-                        <p className="text-sm font-medium">Icon</p>
-                        <div className="overflow-hidden rounded-xl border">
-                          <div className="relative border-b p-3">
-                            <Search className="absolute left-5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                            <Input
-                              value={iconSearch}
-                              onChange={(event) =>
-                                setIconSearch(event.target.value)
-                              }
-                              placeholder={`Search ${RESOURCE_ICONS.length} Lucide icons…`}
-                              className="pl-9"
-                            />
-                          </div>
-                          <div className="grid max-h-48 grid-cols-[repeat(auto-fill,2rem)] justify-between gap-1 overflow-y-auto p-3">
-                            {filteredIcons.map(({ name, icon: Icon }) => (
-                              <button
-                                key={name}
-                                type="button"
-                                title={name}
-                                aria-label={`Use ${name} icon`}
-                                aria-pressed={icon === name}
-                                className="flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground aria-pressed:bg-black aria-pressed:text-white"
-                                onClick={() => setIcon(name)}
-                              >
-                                <Icon className="size-3.5" />
-                              </button>
-                            ))}
-                          </div>
-                          {filteredIcons.length === 0 && (
-                            <p className="px-3 pb-4 text-center text-sm text-muted-foreground">
-                              No icons match “{iconSearch}”.
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </AccordionContent>
-                </AccordionItem>
-              </Accordion>
-              <div className="grid gap-2">
-                <p className="text-sm font-medium">Notes</p>
-                <ResourceEditor
-                  id="new-resource"
-                  content={content}
-                  onChange={setContent}
-                  readOnly={create.isPending}
-                />
-              </div>
-              <div className="grid gap-3">
-                <div>
-                  <label
-                    htmlFor="resource-link"
-                    className="text-sm font-medium"
-                  >
-                    Links
-                  </label>
-                  <p className="text-xs text-muted-foreground">
-                    Add useful websites, documents, or references.
-                  </p>
+  return (
+    <ResourceDialogLayout open={open} title="New resource" description="Keep notes, links, and files together." icon={values.icon} background={values.background} busy={create.isPending} onRequestClose={close} onClose={onClose}>
+      <form id="resource-create-form" noValidate onSubmit={submit} className="flex min-h-0 flex-1 flex-col">
+        <ResourceDialogBody
+          summary={Object.keys(errors).length ? <ResourceErrorSummary errors={errors} /> : null}
+          main={
+            <FieldGroup className="gap-6">
+              <ResourceTitleField value={values.title} disabled={create.isPending} error={errors.title} onChange={(title) => update({ title })} />
+              <ResourceNotesField documentId="new-resource" content={values.content} readOnly={create.isPending} error={errors.notes} onChange={(content) => update({ content })} />
+              <FieldGroup className="gap-3">
+                <ResourceLinkInput value={link} disabled={create.isPending} error={errors.links} onChange={(value) => { setLink(value); clearError("links"); }} onAdd={addLink} />
+                {links.length ? <div className="grid gap-2">{links.map((value) => <ResourceLinkCard key={value} url={value} disabled={create.isPending} onRemove={() => { setLinks((current) => current.filter((item) => item !== value)); clearError("links"); }} />)}</div> : null}
+              </FieldGroup>
+              <Field id={resourceFieldIds.files} tabIndex={-1} data-invalid={Boolean(errors.files)}>
+                <div className="flex items-center justify-between gap-2">
+                  <FieldLabel>Images and files</FieldLabel>
+                  <span className="text-xs tabular-nums text-muted-foreground">{files.length}/10 selected</span>
                 </div>
-                <div className="flex items-center overflow-hidden rounded-lg border bg-background shadow-xs transition-[border-color,box-shadow] focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/30">
-                  <Link2 className="ml-3 size-4 shrink-0 text-muted-foreground" />
-                  <Input
-                    id="resource-link"
-                    type="url"
-                    value={link}
-                    onChange={(event) => setLink(event.target.value)}
-                    placeholder="Paste a URL"
-                    aria-describedby="resource-link-help"
-                    className="border-0 shadow-none focus-visible:ring-0"
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") {
-                        event.preventDefault();
-                        addLink();
-                      }
-                    }}
-                  />
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    className="shrink-0 rounded-none border-l px-4"
-                    onClick={addLink}
-                  >
-                    Add link
-                  </Button>
-                </div>
-                <p id="resource-link-help" className="sr-only">
-                  Enter a complete HTTP or HTTPS address, then press Enter or
-                  Add link.
-                </p>
-                {links.map((value, index) => (
-                  <div
-                    key={value}
-                    className="flex items-center gap-3 rounded-lg border bg-muted/10 p-2 pl-3 text-sm"
-                  >
-                    <ExternalLink className="size-4 shrink-0 text-muted-foreground" />
-                    <span className="min-w-0 flex-1 truncate">{value}</span>
-                    <Button
-                      type="button"
-                      size="icon-sm"
-                      variant="ghost"
-                      aria-label={`Remove ${value}`}
-                      onClick={() =>
-                        setLinks(links.filter((_, i) => i !== index))
-                      }
-                    >
-                      <X />
-                    </Button>
-                  </div>
-                ))}
-              </div>
-              <div className="grid gap-2">
-                <label htmlFor="resource-files" className="text-sm font-medium">
-                  Images and files
-                </label>
-                <ResourceFileDropzone
-                  id="resource-files"
-                  disabled={create.isPending}
-                  onFiles={addFiles}
-                />
-                <p className="text-xs text-muted-foreground">
-                  {files.length}/10 files selected
-                </p>
-                {imageFiles.length > 0 && (
-                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
-                    {imageFiles.map((file, index) => (
-                      <SelectedImageCard
-                        key={`${file.name}-${file.lastModified}-${index}`}
-                        file={file}
-                        onPreview={() => setPreviewImage(file)}
-                        onRemove={() => removeFile(file)}
-                      />
-                    ))}
-                  </div>
-                )}
-                {documentFiles.length > 0 && (
-                  <div className="grid gap-2">
-                    {documentFiles.map((file, index) => (
-                      <div
-                        key={`${file.name}-${file.lastModified}-${index}`}
-                        className="flex items-center gap-3 rounded-lg border p-3 text-sm"
-                      >
-                        <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
-                          <FileText className="size-4" />
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate font-medium">{file.name}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {formatFileSize(file.size)}
-                          </p>
-                        </div>
-                        <Button
-                          type="button"
-                          size="icon-sm"
-                          variant="ghost"
-                          aria-label={`Remove ${file.name}`}
-                          onClick={() => removeFile(file)}
-                        >
-                          <X />
-                        </Button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-              <div className="grid gap-3">
-                <div>
-                  <label
-                    htmlFor="resource-tag"
-                    className="text-sm font-medium"
-                  >
-                    Tags
-                  </label>
-                  <p className="text-xs text-muted-foreground">
-                    Choose existing tags below or create a new one.
-                  </p>
-                </div>
-                <div className="flex items-center overflow-hidden rounded-lg border bg-background shadow-xs transition-[border-color,box-shadow] focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/30">
-                  <Tag className="ml-3 size-4 shrink-0 text-muted-foreground" />
-                  <Input
-                    id="resource-tag"
-                    value={tag}
-                    maxLength={100}
-                    onChange={(event) => setTag(event.target.value)}
-                    placeholder="Enter a tag name"
-                    className="border-0 shadow-none focus-visible:ring-0"
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") {
-                        event.preventDefault();
-                        addTag();
-                      }
-                    }}
-                  />
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    className="shrink-0 rounded-none border-l px-4"
-                    onClick={addTag}
-                  >
-                    Add tag
-                  </Button>
-                </div>
-                {tags.isLoading && (
-                  <p className="text-sm text-muted-foreground">Loading tags…</p>
-                )}
-                {tags.isError && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => tags.refetch()}
-                  >
-                    Retry loading tags
-                  </Button>
-                )}
-                <div className="flex flex-wrap gap-2">
-                  {tags.data?.data.map((item) => (
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant={
-                        tagIds.includes(item.uuid) ? "default" : "outline"
-                      }
-                      aria-pressed={tagIds.includes(item.uuid)}
-                      key={item.uuid}
-                      onClick={() =>
-                        setTagIds((current) =>
-                          current.includes(item.uuid)
-                            ? current.filter((id) => id !== item.uuid)
-                            : [...current, item.uuid],
-                        )
-                      }
-                    >
-                      {item.name}
-                    </Button>
-                  ))}
-                  {tagNames.map((name) => (
-                    <Button
-                      type="button"
-                      size="sm"
-                      key={name}
-                      aria-label={`Remove new tag ${name}`}
-                      onClick={() =>
-                        setTagNames(tagNames.filter((value) => value !== name))
-                      }
-                    >
-                      {name}
-                      <X />
-                    </Button>
-                  ))}
-                </div>
-              </div>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="grid gap-2">
-                  <label
-                    htmlFor="resource-project"
-                    className="text-sm font-medium"
-                  >
-                    Project (optional)
-                  </label>
-                  <ResourceAssignmentSelect
-                    id="resource-project"
-                    label="Project"
-                    items={projects.data?.data ?? []}
-                    value={projectUuids}
-                    loading={projects.isLoading}
-                    disabled={projects.isLoading || projects.isError}
-                    onValueChange={setProjectUuids}
-                  />
-                  {projects.isError && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => projects.refetch()}
-                    >
-                      Retry projects
-                    </Button>
-                  )}
-                </div>
-                <div className="grid gap-2">
-                  <label
-                    htmlFor="resource-area"
-                    className="text-sm font-medium"
-                  >
-                    Area (optional)
-                  </label>
-                  <ResourceAssignmentSelect
-                    id="resource-area"
-                    label="Area"
-                    items={areas.data?.data ?? []}
-                    value={areaUuids}
-                    loading={areas.isLoading}
-                    disabled={areas.isLoading || areas.isError}
-                    onValueChange={setAreaUuids}
-                  />
-                  {areas.isError && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => areas.refetch()}
-                    >
-                      Retry areas
-                    </Button>
-                  )}
-                </div>
-              </div>
-            </fieldset>
-            {!!errors.length && (
-              <ul role="alert" className="grid gap-1 text-sm text-destructive">
-                {errors.map((error, index) => (
-                  <li key={index}>{error}</li>
-                ))}
-              </ul>
-            )}
-          </form>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              disabled={create.isPending}
-              onClick={onClose}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              form="resource-form"
-              disabled={create.isPending}
-            >
-              {create.isPending ? "Creating…" : "Create resource"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-      <Dialog
-        open={previewImage !== null}
-        onOpenChange={(open) => {
-          if (!open) setPreviewImage(null);
-        }}
-      >
-        <DialogContent className="max-w-5xl bg-black/95 p-4 text-white">
-          <DialogHeader className="pr-10">
-            <DialogTitle className="truncate">
-              {previewImage?.name || "Image preview"}
-            </DialogTitle>
-            <DialogDescription className="text-white/65">
-              {previewImage ? formatFileSize(previewImage.size) : ""}
-            </DialogDescription>
-          </DialogHeader>
-          {previewUrl && previewImage && (
-            <div className="relative min-h-64 w-full overflow-hidden rounded-xl bg-black sm:min-h-[32rem]">
-              {/* Blob URLs are client-local and cannot use Next's image pipeline. */}
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={previewUrl}
-                alt={previewImage.name}
-                className="absolute inset-0 size-full object-contain"
-              />
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
-    </>
+                <ResourceFileDropzone id="resource-files" disabled={create.isPending} onFiles={addFiles} />
+                {errors.files ? <FieldError>{errors.files}</FieldError> : null}
+                {imageFiles.length ? <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">{imageFiles.map((file, index) => <SelectedResourceImage key={`${file.name}-${file.lastModified}-${index}`} file={file} disabled={create.isPending} onPreview={setPreview} onRemove={() => { setFiles((current) => current.filter((item) => item !== file)); clearError("files"); }} />)}</div> : null}
+                {documentFiles.length ? <div className="grid gap-2">{documentFiles.map((file, index) => <ResourceFileCard key={`${file.name}-${file.lastModified}-${index}`} name={file.name} size={file.size} disabled={create.isPending} onRemove={() => { setFiles((current) => current.filter((item) => item !== file)); clearError("files"); }} />)}</div> : null}
+              </Field>
+            </FieldGroup>
+          }
+          sidebar={
+            <FieldGroup className="gap-6">
+              <ResourceAppearanceField title={values.title} icon={values.icon} background={values.background} disabled={create.isPending} error={errors.appearance} onIconChange={(icon) => update({ icon })} onBackgroundChange={(background) => update({ background })} />
+              <ResourceOrganizationFields values={values} options={options} disabled={create.isPending} draftTag={draftTag} errors={errors} onDraftTagChange={(value) => { setDraftTag(value); clearError("tags"); }} onChange={update} />
+            </FieldGroup>
+          }
+        />
+        <ResourceDialogFooter status={"Only a title is required."}>
+          <Button type="button" variant="outline" disabled={create.isPending} onClick={close}>Cancel</Button>
+          <Button type="submit" disabled={create.isPending}>{create.isPending ? <LoaderCircle className="animate-spin motion-reduce:animate-none" data-icon="inline-start" aria-hidden="true" /> : null}{create.isPending ? "Creating…" : "Create resource"}</Button>
+        </ResourceDialogFooter>
+      </form>
+      <ResourceImagePreview image={preview} onClose={() => setPreview(null)} />
+      <ResourceDiscardDialog open={discardOpen} onOpenChange={setDiscardOpen} onDiscard={() => { setDiscardOpen(false); setOpen(false); }} />
+    </ResourceDialogLayout>
   );
 }
