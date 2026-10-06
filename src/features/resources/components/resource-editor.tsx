@@ -4,6 +4,7 @@ import { NoteRichTextEditor } from "@/components/ui/note-rich-text-editor";
 import type { NoteRichTextEditorControls } from "@/components/ui/note-rich-text-editor-client";
 import { useCallback, useRef } from "react";
 import { useTheme } from "next-themes";
+import { cn } from "@/lib/utils";
 
 const noop = () => undefined;
 const unavailable = async (): Promise<never> => {
@@ -15,11 +16,13 @@ export function ResourceEditor({
   content,
   onChange,
   readOnly = false,
+  presentation = "editor",
 }: {
   id: string;
   content: string;
   onChange: (value: string) => void;
   readOnly?: boolean;
+  presentation?: "editor" | "view";
 }) {
   const { resolvedTheme } = useTheme();
   const lastDocument = useRef<string | null>(null);
@@ -29,12 +32,15 @@ export function ResourceEditor({
   const onDocumentChange = useCallback((value: string) => {
     // BlockNote fills in default block properties on mount and can emit a
     // change for that normalization. Only publish edits to the document.
-    if (lastDocument.current === null || value === lastDocument.current) return;
+    if (readOnly || lastDocument.current === null || value === lastDocument.current) return;
     lastDocument.current = value;
     onChange(value);
-  }, [onChange]);
+  }, [onChange, readOnly]);
   return (
-    <div className="resource-note-editor min-h-72 overflow-hidden rounded-xl border bg-background text-foreground">
+    <div className={cn(
+      "resource-note-editor text-foreground",
+      presentation === "view" ? "resource-note-view" : "min-h-72 overflow-hidden rounded-xl border bg-background",
+    )}>
       <NoteRichTextEditor
         mode="resource"
         theme={resolvedTheme === "dark" ? "dark" : "light"}

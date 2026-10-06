@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AlertCircle, Check, Circle, LoaderCircle } from "lucide-react";
+import { AlertCircle, Check, Circle, LoaderCircle, Pencil } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
@@ -15,30 +15,15 @@ import type { Resource, ResourceAttachment, ResourceUpdateInput } from "../type"
 import { ResourceAppearanceField } from "./resource-appearance-field";
 import { ResourceAttachmentCard, ResourceImagePreview, ResourceLinkCard, type ResourceImagePreviewValue } from "./resource-attachment-cards";
 import { ResourceLinkInput, ResourceNotesField, ResourceTitleField } from "./resource-content-fields";
+import { ResourceContentView, ResourceOrganizationView } from "./resource-content-view";
 import { resourceFieldIds, ResourceDialogBody, ResourceDialogFooter, ResourceDialogLayout, ResourceDiscardDialog } from "./resource-dialog-layout";
 import { ResourceFileDropzone } from "./resource-file-dropzone";
-import { ResourceIcon, resourceBadgeStyle } from "./resource-icons";
 import { ResourceOrganizationFields } from "./resource-organization-fields";
 
-function ArchivedOrganization({ resource }: { resource: Resource }) {
-  return (
-    <FieldGroup className="gap-5">
-      <div className="flex items-center gap-3 rounded-xl border bg-background p-3">
-        <div className="flex size-11 shrink-0 items-center justify-center rounded-lg" style={resourceBadgeStyle(resource.background)}><ResourceIcon name={resource.icon} className="size-5" /></div>
-        <p className="text-sm font-medium">Resource appearance</p>
-      </div>
-      {[{ label: "Tags", items: resource.tags }, { label: "Projects", items: resource.projects }, { label: "Areas", items: resource.areas }].map(({ label, items }) => (
-        <Field key={label}>
-          <FieldLabel>{label}</FieldLabel>
-          <div className="flex flex-wrap gap-1.5">{items.length ? items.map((item) => <span key={item.uuid} className="max-w-full break-words rounded-lg border bg-background px-2.5 py-1.5 text-xs">{item.name}</span>) : <p className="text-xs text-muted-foreground">No {label.toLowerCase()}</p>}</div>
-        </Field>
-      ))}
-    </FieldGroup>
-  );
-}
-
 export function ResourceDetailDialog({ resource, onClose }: { resource: Resource; onClose: () => void }) {
-  const editable = resource.archived_at === null;
+  const canEdit = resource.archived_at === null;
+  const [editing, setEditing] = useState(false);
+  const editable = canEdit && editing;
   const [open, setOpen] = useState(false);
   const [values, setValues] = useState<ResourceMetadataValues>(() => ({
     title: resource.title, icon: resource.icon || "BookOpen", background: resource.background || "#000000", content: fromResourceDocument(resource.content),
@@ -57,6 +42,7 @@ export function ResourceDetailDialog({ resource, onClose }: { resource: Resource
   const closingRef = useRef(false);
   const attachmentBusyRef = useRef(false);
   const cancelDeleteRef = useRef<HTMLButtonElement>(null);
+  const editButtonRef = useRef<HTMLButtonElement>(null);
   const options = useResourceFormOptions(editable, resource);
   const addAttachment = useAddResourceAttachments();
   const removeAttachment = useDeleteResourceAttachment();
@@ -94,6 +80,35 @@ export function ResourceDetailDialog({ resource, onClose }: { resource: Resource
     setClosing(false);
     if (!saved || hasUnfinishedDraft) setDiscardOpen(true);
     else setOpen(false);
+  }
+
+  async function finishEditing() {
+    if (!editable || closingRef.current || attachmentBusyRef.current) return;
+    if (hasUnfinishedDraft) {
+      const unfinished: ResourceFormErrors = {};
+      if (link.trim()) unfinished.links = "Add or clear this link before finishing.";
+      if (draftTag.trim()) unfinished.tags = "Add or clear this tag before finishing.";
+      if (failedFiles.length) unfinished.files = "Retry or clear these files before finishing.";
+      setAttachmentErrors((current) => ({ ...current, ...unfinished }));
+      const field = link.trim() ? "links" : draftTag.trim() ? "tags" : "files";
+      window.requestAnimationFrame(() => document.getElementById(resourceFieldIds[field])?.focus());
+      return;
+    }
+    closingRef.current = true;
+    setClosing(true);
+    const saved = await autosave.save();
+    closingRef.current = false;
+    setClosing(false);
+    if (!saved) {
+      window.requestAnimationFrame(() => document.querySelector<HTMLElement>('[data-slot="resource-dialog-body"] [aria-invalid="true"]')?.focus());
+      return;
+    }
+    setAttachmentErrors({});
+    setEditing(false);
+    window.requestAnimationFrame(() => {
+      document.querySelector<HTMLElement>('[data-slot="resource-dialog-body"]')?.scrollTo({ top: 0 });
+      editButtonRef.current?.focus({ preventScroll: true });
+    });
   }
 
   async function addLink() {
@@ -148,10 +163,10 @@ export function ResourceDetailDialog({ resource, onClose }: { resource: Resource
     : closing ? "Saving…" : idleStatus;
 
   return (
-    <ResourceDialogLayout open={open} title={editable ? "Edit resource" : "Resource details"} description={editable ? "Changes save automatically." : "Archived resource"} icon={values.icon} background={values.background} busy={busy} onRequestClose={() => { void close(); }} onClose={onClose}>
+    <ResourceDialogLayout open={open} title={editable ? "Edit resource" : "Resource details"} description={editable ? "Changes save automatically." : canEdit ? "View notes, links, and files." : "Archived resource"} icon={values.icon} background={values.background} busy={busy} fitContent={!editable} onRequestClose={() => { void close(); }} onClose={onClose}>
       <ResourceDialogBody
-        summary={errors.form ? <Alert variant="destructive"><AlertCircle aria-hidden="true" /><AlertTitle>Changes could not be saved</AlertTitle><AlertDescription>{errors.form}</AlertDescription></Alert> : null}
-        main={
+        summary={editable && errors.form ? <Alert variant="destructive"><AlertCircle aria-hidden="true" /><AlertTitle>Changes could not be saved</AlertTitle><AlertDescription>{errors.form}</AlertDescription></Alert> : null}
+        main={editable ? (
           <FieldGroup className="gap-6">
             <ResourceTitleField value={values.title} disabled={closing} readOnly={!editable} error={errors.title} onChange={(title) => update({ title })} />
             <ResourceNotesField documentId={resource.uuid} content={values.content} readOnly={!editable || closing} error={errors.notes} onChange={(content) => update({ content })} />
@@ -176,12 +191,17 @@ export function ResourceDetailDialog({ resource, onClose }: { resource: Resource
               {!editable && !images.length && !files.length ? <p className="text-xs text-muted-foreground">No images or files</p> : null}
             </Field>
           </FieldGroup>
-        }
-        sidebar={editable ? <FieldGroup className="gap-6"><ResourceAppearanceField title={values.title} icon={values.icon} background={values.background} disabled={closing} error={errors.appearance} onIconChange={(icon) => update({ icon })} onBackgroundChange={(background) => update({ background })} /><ResourceOrganizationFields values={values} options={options} disabled={closing} draftTag={draftTag} errors={errors} onDraftTagChange={setDraftTag} onChange={update} /></FieldGroup> : <ArchivedOrganization resource={resource} />}
+        ) : <ResourceContentView resourceUuid={resource.uuid} values={values} attachments={attachments} onPreview={setPreview} />}
+        sidebar={editable ? <FieldGroup className="gap-6"><ResourceAppearanceField title={values.title} icon={values.icon} background={values.background} disabled={closing} error={errors.appearance} onIconChange={(icon) => update({ icon })} onBackgroundChange={(background) => update({ background })} /><ResourceOrganizationFields values={values} options={options} disabled={closing} draftTag={draftTag} errors={errors} onDraftTagChange={(value) => { setDraftTag(value); clearAttachmentError("tags"); }} onChange={update} /></FieldGroup> : <ResourceOrganizationView values={values} options={options} />}
       />
-      <ResourceDialogFooter status={editable ? <span role="status" aria-live="polite" className="inline-flex items-center gap-1.5">{status === "Saved" ? <Check className="size-3.5" aria-hidden="true" /> : busy || autosave.saving ? <LoaderCircle className="size-3.5 animate-spin motion-reduce:animate-none" aria-hidden="true" /> : autosave.failed ? <AlertCircle className="size-3.5 text-destructive" aria-hidden="true" /> : <Circle className="size-3" aria-hidden="true" />}{status}</span> : "Archived resources are read-only."}>
+      <ResourceDialogFooter status={editable ? <span role="status" aria-live="polite" className="inline-flex items-center gap-1.5">{status === "Saved" ? <Check className="size-3.5" aria-hidden="true" /> : busy || autosave.saving ? <LoaderCircle className="size-3.5 animate-spin motion-reduce:animate-none" aria-hidden="true" /> : autosave.failed ? <AlertCircle className="size-3.5 text-destructive" aria-hidden="true" /> : <Circle className="size-3" aria-hidden="true" />}{status}</span> : canEdit ? "Select Edit to make changes." : "Archived resources are read-only."}>
         {editable && autosave.failed ? <Button type="button" variant="outline" disabled={busy} onClick={() => { void autosave.save(); }}>Retry save</Button> : null}
         <Button type="button" variant="outline" disabled={busy} onClick={() => { void close(); }}>Close</Button>
+        {canEdit ? editable ? (
+          <Button type="button" disabled={busy} onClick={() => { void finishEditing(); }}>Done</Button>
+        ) : (
+          <Button ref={editButtonRef} type="button" onClick={() => setEditing(true)}><Pencil data-icon="inline-start" aria-hidden="true" />Edit resource</Button>
+        ) : null}
       </ResourceDialogFooter>
       <ResourceImagePreview image={preview} onClose={() => setPreview(null)} />
       <ResourceDiscardDialog open={discardOpen} editing onOpenChange={setDiscardOpen} onDiscard={() => { setDiscardOpen(false); setOpen(false); }} />

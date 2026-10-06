@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { cn } from "@/lib/utils";
 import { resourceFieldLabels, type ResourceFieldName, type ResourceFormErrors } from "../resource-form-utils";
 import { ResourceIcon, resourceBadgeStyle } from "./resource-icons";
 
@@ -25,7 +26,7 @@ export const resourceFieldIds: Record<ResourceFieldName, string> = {
 };
 
 export function ResourceDialogLayout({
-  open, title, description, icon, background, busy = false, onRequestClose, onClose, children,
+  open, title, description, icon, background, busy = false, fitContent = false, onRequestClose, onClose, children,
 }: {
   open: boolean;
   title: string;
@@ -33,6 +34,7 @@ export function ResourceDialogLayout({
   icon: string;
   background: string;
   busy?: boolean;
+  fitContent?: boolean;
   onRequestClose: () => void;
   onClose: () => void;
   children: ReactNode;
@@ -50,7 +52,10 @@ export function ResourceDialogLayout({
       <DialogContent
         showCloseButton={false}
         finalFocus={openerRef}
-        className="h-[min(92dvh,56rem)] max-h-[92dvh] w-[calc(100%-1rem)] max-w-6xl gap-0 overflow-hidden p-0 motion-reduce:transition-none sm:w-[calc(100%-2rem)]"
+        className={cn(
+          "max-h-[92dvh] w-[calc(100%-1rem)] max-w-6xl gap-0 overflow-hidden p-0 motion-reduce:transition-none sm:w-[calc(100%-2rem)]",
+          fitContent ? "h-auto" : "h-[min(92dvh,56rem)]",
+        )}
       >
         <DialogHeader className="flex shrink-0 flex-row items-center gap-3 border-b px-5 py-4 pr-5 sm:px-6">
           <div className="flex size-11 shrink-0 items-center justify-center rounded-xl" style={resourceBadgeStyle(/^#[0-9a-f]{6}$/i.test(background) ? background : "#000000")}>

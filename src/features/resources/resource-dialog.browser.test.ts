@@ -51,7 +51,8 @@ async function mockResources(page: Page, options: ApiOptions = {}) {
     const call: ApiRequest = { path, method: request.method(), body };
     requests.push(call);
     if (call.method === "GET" && path.startsWith(`/resource/${resourceUuid}/attachments/`)) {
-      await route.fulfill({ contentType: "image/png", body: png });
+      const attachment = resource.attachments.find((item) => path.endsWith(item.uuid));
+      await route.fulfill({ contentType: attachment?.mime_type ?? "image/png", body: attachment?.kind === "file" ? Buffer.from("saved file") : png });
       return;
     }
     let reply: ApiReply = { data: null };
@@ -111,13 +112,156 @@ async function openAdd(page: Page) {
   await expect(page.locator(".bn-editor")).toBeVisible();
 }
 
-async function openEdit(page: Page) {
+async function openView(page: Page) {
   await page.goto("/resources");
   await page.getByRole("button", { name: `Open ${initialResource.title}`, exact: true }).click();
+  await expect(page.getByRole("dialog", { name: "Resource details", exact: true })).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "Resource details", exact: true })).toHaveCSS("opacity", "1");
+  await expect(page.locator(".bn-editor")).toBeVisible();
+}
+
+async function openEdit(page: Page) {
+  await openView(page);
+  await page.getByRole("button", { name: "Edit resource", exact: true }).click();
   await expect(page.getByRole("dialog", { name: "Edit resource", exact: true })).toBeVisible();
   await expect(page.getByRole("dialog", { name: "Edit resource", exact: true })).toHaveCSS("opacity", "1");
   await expect(page.locator(".bn-editor")).toBeVisible();
 }
+
+test("resources open for viewing with previews and downloads and require Edit for changes", async ({ page }) => {
+  const api = await mockResources(page);
+  await openView(page);
+  const dialog = page.getByRole("dialog", { name: "Resource details", exact: true });
+  await expect(dialog.getByRole("heading", { name: initialResource.title, exact: true })).toBeVisible();
+  await expect(dialog.getByText("Saved research notes", { exact: true })).toBeVisible();
+  await expect(dialog.getByRole("region", { name: "Tags", exact: true })).toContainText("Research");
+  await expect(dialog.getByRole("region", { name: "Projects", exact: true })).toContainText("Product launch");
+  await expect(dialog.locator("input, textarea, [contenteditable=true]")).toHaveCount(0);
+  await expect(dialog.getByRole("button", { name: /^Remove / })).toHaveCount(0);
+  await expect(dialog.getByRole("link", { name: "Open Accessibility reference", exact: true })).toHaveAttribute("href", reference.url);
+  await dialog.getByRole("button", { name: "View reference.png", exact: true }).click();
+  const preview = page.getByRole("dialog", { name: "reference.png", exact: true });
+  await expect(preview).toBeVisible();
+  await preview.getByRole("button", { name: "Close", exact: true }).click();
+  await expect(preview).toBeHidden();
+  const download = page.waitForEvent("download");
+  await dialog.getByRole("button", { name: "Download Research notes.pdf", exact: true }).click();
+  expect((await download).suggestedFilename()).toBe("Research notes.pdf");
+  expect(api.writes()).toHaveLength(0);
+  await dialog.getByRole("button", { name: "Close", exact: true }).click();
+  await expect(dialog).toBeHidden();
+  await expect(page.getByRole("button", { name: `Open ${initialResource.title}`, exact: true })).toBeFocused();
+});
+
+test("Done waits for current saves and returns to viewing updated content and organization", async ({ page }) => {
+  const pending = deferred<ApiReply>();
+  let firstNext: TestResource | undefined;
+  let attempts = 0;
+  const api = await mockResources(page, { onPatch: (_request, next) => {
+    if (++attempts === 1) { firstNext = next; return pending.promise; }
+    return { data: next };
+  } });
+  await openEdit(page);
+  await page.getByLabel(/^Title/).fill("Updated resource");
+  await page.getByRole("button", { name: "Remove Research", exact: true }).click();
+  const tags = page.getByRole("combobox", { name: "Tags", exact: true });
+  await tags.fill("Review");
+  await tags.press("Enter");
+  await page.getByRole("button", { name: "Remove Product launch", exact: true }).click();
+  await page.getByRole("button", { name: "Done", exact: true }).click();
+  await expect.poll(() => api.patches().length).toBe(1);
+  await expect(page.getByRole("button", { name: "Done", exact: true })).toBeDisabled();
+  await expect(page.getByRole("dialog", { name: "Edit resource", exact: true })).toBeVisible();
+  pending.resolve({ data: firstNext });
+  const view = page.getByRole("dialog", { name: "Resource details", exact: true });
+  await expect(view).toBeVisible();
+  await expect(view.getByRole("heading", { name: "Updated resource", exact: true })).toBeVisible();
+  await expect(view.getByRole("region", { name: "Tags", exact: true })).toContainText("Review");
+  await expect(view.getByRole("region", { name: "Tags", exact: true })).not.toContainText("Research");
+  await expect(view.getByRole("region", { name: "Projects", exact: true })).toContainText("No projects");
+  await expect(view.getByRole("button", { name: "Edit resource", exact: true })).toBeFocused();
+  await expect(view.locator("[contenteditable=true]")).toHaveCount(0);
+  expect(api.patches().at(-1)!.body).toMatchObject({ title: "Updated resource", tag_names: ["Review"], tag_uuids: [], project_uuids: [] });
+  const count = api.patches().length;
+  await view.getByRole("button", { name: "Edit resource", exact: true }).click();
+  await expect(page.getByLabel(/^Title/)).toHaveValue("Updated resource");
+  await page.getByRole("button", { name: "Done", exact: true }).click();
+  await expect(view).toBeVisible();
+  expect(api.patches()).toHaveLength(count);
+});
+
+test("Done keeps invalid or failed edits editable until they save successfully", async ({ page }) => {
+  let attempts = 0;
+  const api = await mockResources(page, { onPatch: (_request, next) => ++attempts === 1 ? { status: 500, message: "Save failed. Keep your draft." } : { data: next } });
+  await openEdit(page);
+  await page.getByLabel(/^Title/).fill("");
+  await page.getByRole("button", { name: "Done", exact: true }).click();
+  await expect(page.getByLabel(/^Title/)).toHaveAttribute("aria-invalid", "true");
+  await expect(page.getByLabel(/^Title/)).toBeFocused();
+  expect(api.writes()).toHaveLength(0);
+  await page.getByLabel(/^Title/).fill("Keep my changes");
+  await page.getByRole("button", { name: "Done", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Retry save", exact: true })).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "Edit resource", exact: true })).toBeVisible();
+  await expect(page.getByLabel(/^Title/)).toHaveValue("Keep my changes");
+  await page.getByRole("button", { name: "Retry save", exact: true }).click();
+  await expect(page.getByRole("status").filter({ hasText: /^Saved$/ })).toBeVisible();
+  await page.getByRole("button", { name: "Done", exact: true }).click();
+  await expect(page.getByRole("dialog", { name: "Resource details", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Keep my changes", exact: true })).toBeVisible();
+  expect(api.patches()).toHaveLength(2);
+});
+
+test("Done asks for unfinished links and tags to be added or cleared", async ({ page }) => {
+  await mockResources(page);
+  await openEdit(page);
+  const link = page.getByLabel("Links", { exact: true });
+  await link.fill("https://example.com/unfinished");
+  await page.getByRole("button", { name: "Done", exact: true }).click();
+  await expect(link).toBeFocused();
+  await expect(page.getByText("Add or clear this link before finishing.", { exact: true })).toBeVisible();
+  await link.fill("");
+  const tags = page.getByRole("combobox", { name: "Tags", exact: true });
+  await tags.fill("Review");
+  await page.getByRole("button", { name: "Done", exact: true, includeHidden: true }).click();
+  await expect(tags).toBeFocused();
+  await expect(page.getByText("Add or clear this tag before finishing.", { exact: true })).toBeVisible();
+  await tags.press("ArrowDown");
+  await expect(page.getByRole("option", { name: "Create “Review”", exact: true })).toBeVisible();
+  await tags.press("Enter");
+  await expect(page.getByRole("button", { name: "Remove Review", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Done", exact: true }).click();
+  await expect(page.getByRole("dialog", { name: "Resource details", exact: true })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Tags", exact: true })).toContainText("Review");
+});
+
+test("linked resources open in viewing mode", async ({ page }) => {
+  const api = await mockResources(page);
+  await page.goto(`/resources?resource=${resourceUuid}`);
+  const dialog = page.getByRole("dialog", { name: "Resource details", exact: true });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole("heading", { name: initialResource.title, exact: true })).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Edit resource", exact: true })).toBeVisible();
+  await expect(dialog.locator("input, textarea, [contenteditable=true]")).toHaveCount(0);
+  expect(api.writes()).toHaveLength(0);
+});
+
+test("an empty resource stays unchanged when switching between viewing and editing", async ({ page }) => {
+  const api = await mockResources(page, { resource: { content: null, attachments: [], tags: [], projects: [], areas: [] } });
+  await page.goto("/resources");
+  await page.getByRole("button", { name: `Open ${initialResource.title}`, exact: true }).click();
+  const view = page.getByRole("dialog", { name: "Resource details", exact: true });
+  await expect(view).toBeVisible();
+  await expect(view.getByText("No notes yet.", { exact: true })).toBeVisible();
+  await expect(view.getByText("No links added.", { exact: true })).toBeVisible();
+  await expect(view.getByText("No images or files added.", { exact: true })).toBeVisible();
+  await view.getByRole("button", { name: "Edit resource", exact: true }).click();
+  await expect(page.locator(".bn-editor[contenteditable=true]")).toBeVisible();
+  await page.getByRole("button", { name: "Done", exact: true }).click();
+  await expect(view).toBeVisible();
+  await expect(view.getByText("No notes yet.", { exact: true })).toBeVisible();
+  expect(api.writes()).toHaveLength(0);
+});
 
 test("create includes unfinished valid link and tag without extra add steps", async ({ page }) => {
   const api = await mockResources(page);
@@ -201,6 +345,73 @@ test("create protects a changed draft and restores focus on dismissal", async ({
   await expect(page.getByRole("dialog", { name: "New resource", exact: true })).toBeHidden();
   await expect(page.getByRole("button", { name: "New resource", exact: true })).toBeFocused();
 });
+
+test("appearance opens without rendering the whole icon catalog", async ({ page }) => {
+  await mockResources(page);
+  await openEdit(page);
+  const browser = await page.context().newCDPSession(page);
+  await browser.send("Emulation.setCPUThrottlingRate", { rate: 4 });
+  const profile = await page.evaluate(async () => {
+    const button = document.querySelector<HTMLButtonElement>('[aria-label="Customize resource appearance"]');
+    const start = performance.now();
+    button?.click();
+    await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+    return {
+      milliseconds: Math.round(performance.now() - start),
+      iconButtons: document.querySelectorAll('[aria-label="Resource icons"] button').length,
+    };
+  });
+  console.log("Appearance profile with 4x CPU slowdown:", profile);
+  expect(profile.iconButtons).toBeGreaterThan(0);
+  expect(profile.iconButtons).toBeLessThan(100);
+});
+
+for (const mode of ["add", "edit"] as const) {
+  test(`${mode} appearance pages through icons and searches the full catalog`, async ({ page }) => {
+    const api = await mockResources(page);
+    if (mode === "add") await page.setViewportSize({ width: 390, height: 844 });
+    if (mode === "add") await openAdd(page);
+    else await openEdit(page);
+    await page.getByRole("button", { name: "Customize resource appearance", exact: true }).click();
+    const grid = page.getByRole("group", { name: "Resource icons", exact: true });
+    const previous = page.getByRole("button", { name: "Previous icon page", exact: true });
+    const next = page.getByRole("button", { name: "Next icon page", exact: true });
+    const firstIcon = await grid.getByRole("button").first().getAttribute("aria-label");
+    expect(await grid.getByRole("button").count()).toBeLessThan(100);
+    await expect(previous).toBeDisabled();
+    await grid.evaluate((element) => { element.scrollTop = element.scrollHeight; });
+    await next.click();
+    await expect(previous).toBeEnabled();
+    await expect(grid.getByRole("button").first()).not.toHaveAttribute("aria-label", firstIcon!);
+    expect(await grid.evaluate((element) => element.scrollTop)).toBe(0);
+    await previous.click();
+    await expect(grid.getByRole("button").first()).toHaveAttribute("aria-label", firstIcon!);
+    await next.click();
+    await page.getByLabel("Icon", { exact: true }).fill("ZoomOut");
+    await expect(page.getByRole("group", { name: "Icon pages", exact: true })).toHaveCount(0);
+    await page.getByRole("button", { name: "Use ZoomOut icon", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Use ZoomOut icon", exact: true })).toHaveAttribute("aria-pressed", "true");
+    await page.getByLabel("Icon", { exact: true }).fill("no-such-resource-icon");
+    await expect(page.getByText("No matching icons. Try another search.", { exact: true })).toBeVisible();
+    await page.getByLabel("Icon", { exact: true }).fill("");
+    await expect(previous).toBeDisabled();
+    expect(await grid.getByRole("button").count()).toBeLessThan(100);
+    await next.scrollIntoViewIfNeeded();
+    const dialog = page.getByRole("dialog", { name: mode === "add" ? "New resource" : "Edit resource", exact: true });
+    expect(await dialog.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+    await page.screenshot({ path: test.info().outputPath(`resource-appearance-${mode}.png`) });
+    if (mode === "add") {
+      await page.getByLabel(/^Title/).fill("Quick appearance");
+      await page.getByRole("button", { name: "Create resource", exact: true }).click();
+      await expect(page.getByRole("dialog", { name: "New resource", exact: true })).toBeHidden();
+      expect(api.writes()[0].body).toMatchObject({ icon: "ZoomOut" });
+    } else {
+      await expect.poll(() => api.patches().length).toBe(1);
+      await expect(page.getByRole("status").filter({ hasText: /^Saved$/ })).toBeVisible();
+      expect(api.patches()[0].body).toMatchObject({ icon: "ZoomOut" });
+    }
+  });
+}
 
 test("appearance is shared and custom color correction keeps the picker open", async ({ page }) => {
   await mockResources(page);
@@ -429,7 +640,8 @@ test("archived resources stay read-only and send no mutations", async ({ page })
   const api = await mockResources(page, { resource: { archived_at: "2026-10-06T10:00:00Z" } });
   await page.goto(`/resources?resource=${resourceUuid}`);
   await expect(page.getByRole("dialog", { name: "Resource details", exact: true })).toBeVisible();
-  await expect(page.getByLabel(/^Title/)).toHaveAttribute("readonly", "");
+  await expect(page.getByRole("heading", { name: initialResource.title, exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Edit resource", exact: true })).toHaveCount(0);
   await expect(page.getByRole("combobox")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Customize resource appearance", exact: true })).toHaveCount(0);
   await expect(page.locator("input[type=file]")).toHaveCount(0);
@@ -441,14 +653,14 @@ test("archived resources stay read-only and send no mutations", async ({ page })
 
 for (const theme of ["light", "dark"]) {
   for (const width of [390, 768, 1440]) {
-    for (const mode of ["add", "edit"]) {
+    for (const mode of ["add", "view", "edit"]) {
       test(`${mode} layout keeps actions and focused controls visible at ${width}px in ${theme} mode`, async ({ page }, info) => {
         await page.setViewportSize({ width, height: width < 768 ? 844 : 1000 });
         await page.addInitScript((theme) => localStorage.setItem("theme", theme), theme);
         await mockResources(page);
-        if (mode === "add") await openAdd(page); else await openEdit(page);
-        const dialog = page.getByRole("dialog", { name: mode === "add" ? "New resource" : "Edit resource", exact: true });
-        const action = page.getByRole("button", { name: mode === "add" ? "Create resource" : "Close", exact: true });
+        if (mode === "add") await openAdd(page); else if (mode === "view") await openView(page); else await openEdit(page);
+        const dialog = page.getByRole("dialog", { name: mode === "add" ? "New resource" : mode === "view" ? "Resource details" : "Edit resource", exact: true });
+        const action = page.getByRole("button", { name: mode === "add" ? "Create resource" : mode === "view" ? "Edit resource" : "Close", exact: true });
         await expect(action).toBeInViewport();
         const overflow = await dialog.evaluate((element) => {
           const body = element.querySelector('[data-slot="resource-dialog-body"]')!;
@@ -459,7 +671,7 @@ for (const theme of ["light", "dark"]) {
         expect(editorColors.background).not.toBe(editorColors.color);
         if (theme === "dark") expect(editorColors.background).not.toBe("rgb(255, 255, 255)");
         await page.screenshot({ path: info.outputPath(`resource-${mode}-${width}-${theme}.png`) });
-        const input = page.getByRole("combobox", { name: "Tags", exact: true });
+        const input = mode === "view" ? dialog.getByRole("button", { name: "Download Research notes.pdf", exact: true }) : page.getByRole("combobox", { name: "Tags", exact: true });
         await input.focus();
         await expect(input).toBeInViewport();
         await expect(action).toBeInViewport();

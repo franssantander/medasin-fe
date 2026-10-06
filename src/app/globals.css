@@ -354,6 +354,22 @@ html[data-app-font="inter"] {
   background: var(--background);
 }
 
+.resource-note-view .note-rich-text,
+.resource-note-view .note-rich-text > div,
+.resource-note-view .note-rich-text :is(.bn-container, .bn-editor, .ProseMirror) {
+  background: transparent;
+}
+
+.resource-note-view .note-rich-text .bn-editor {
+  min-height: 0;
+  padding: 0;
+}
+
+.resource-note-view [data-slot="skeleton"] {
+  min-height: 6rem;
+  background: var(--muted);
+}
+
 /* Keep page-rendering rules outside Tailwind's layers so they can override
    BlockNote's unlayered default editor styles. */
 .letter-composer-document .note-rich-text .bn-editor {
