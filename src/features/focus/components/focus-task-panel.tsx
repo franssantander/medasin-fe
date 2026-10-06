@@ -1,350 +1,131 @@
 "use client";
 
-import {
-  Check,
-  KanbanSquare,
-  Link2,
-  MoreHorizontal,
-  Plus,
-  RotateCcw,
-  Trash2,
-} from "lucide-react";
+import { Check, Circle, CircleCheck, KanbanSquare, MoreHorizontal, Plus, RotateCcw, Trash2 } from "lucide-react";
 import { useState } from "react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Input } from "@/components/ui/input";
+import { Card, CardAction, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
-import {
-  useCreateFocusTaskMutation,
-  useDeleteFocusTaskMutation,
-  useLinkableFocusTasksQuery,
-  useUpdateFocusTaskMutation,
-} from "../queries/focus-query";
-import { focusTaskSchema } from "../schemas/focus-schema";
+import { useDeleteFocusTaskMutation, useFocusTasksQuery, useUpdateFocusTaskMutation } from "../queries/focus-query";
 import type { FocusTask } from "../type";
 
-type Props = {
+export function FocusTaskPanel({ tasks, selectedUuid, activeTaskUuid, sessionActive, onSelect, onAdd }: {
   tasks: FocusTask[];
-  completedTasks: FocusTask[];
-  completedLoading: boolean;
   selectedUuid?: string;
+  activeTaskUuid?: string;
+  sessionActive: boolean;
   onSelect: (task: FocusTask) => void;
-};
-
-export function FocusTaskPanel({
-  tasks,
-  completedTasks,
-  completedLoading,
-  selectedUuid,
-  onSelect,
-}: Props) {
+  onAdd: () => void;
+}) {
   const [filter, setFilter] = useState<"active" | "completed">("active");
-  const [addOpen, setAddOpen] = useState(false);
+  const completed = useFocusTasksQuery("completed", filter === "completed");
   const updateTask = useUpdateFocusTaskMutation();
   const deleteTask = useDeleteFocusTaskMutation();
-  const shown = filter === "active" ? tasks : completedTasks;
+  const pending = updateTask.isPending || deleteTask.isPending;
+  const error = updateTask.error ?? deleteTask.error;
+  const shown = filter === "active" ? tasks : completed.data?.data ?? [];
 
   return (
-    <Card className="order-2 min-h-[34rem] gap-0 py-0 lg:order-1">
-      <div className="flex items-center justify-between border-b px-4 py-4">
-        <div>
-          <h2 className="font-semibold">Focus tasks</h2>
-          <p className="text-xs text-muted-foreground">
-            {tasks.length} active {tasks.length === 1 ? "task" : "tasks"}
-          </p>
-        </div>
-        <Button size="sm" onClick={() => setAddOpen(true)}>
-          <Plus />
-          Add task
-        </Button>
-      </div>
-      <div className="border-b p-3">
-        <Tabs
-          value={filter}
-          onValueChange={(value) => setFilter(value as "active" | "completed")}
-        >
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="active">Active</TabsTrigger>
-            <TabsTrigger value="completed">Completed</TabsTrigger>
+    <Card className="min-w-0 gap-4 lg:max-h-[42rem]" aria-label="Focus tasks">
+      <CardHeader>
+        <CardTitle><h2>Focus tasks</h2></CardTitle>
+        <CardDescription>{tasks.length} active {tasks.length === 1 ? "task" : "tasks"}</CardDescription>
+        <CardAction>
+          <Button variant="outline" className="min-h-11" onClick={onAdd}><Plus data-icon="inline-start" />Add task</Button>
+        </CardAction>
+      </CardHeader>
+      <CardContent className="min-h-0">
+        <Tabs value={filter} onValueChange={(value) => setFilter(value as "active" | "completed")} className="min-h-0 gap-3">
+          <TabsList className="min-h-12 w-full">
+            <TabsTrigger value="active" className="min-h-11">Active</TabsTrigger>
+            <TabsTrigger value="completed" className="min-h-11">Completed</TabsTrigger>
           </TabsList>
-        </Tabs>
-      </div>
-      <div className="flex flex-1 flex-col gap-2 p-3">
-        {completedLoading && filter === "completed" && (
-          <>
-            <Skeleton className="h-24" />
-            <Skeleton className="h-24" />
-          </>
-        )}
-        {!completedLoading && shown.length === 0 && (
-          <div className="grid flex-1 place-items-center px-6 text-center text-sm text-muted-foreground">
-            {filter === "active"
-              ? "Add a task to begin a focused session."
-              : "Completed tasks will stay here with their session history."}
-          </div>
-        )}
-        {shown.map((task) => {
-          const selected = task.uuid === selectedUuid;
-          return (
-            <article
-              key={task.uuid}
-              role="button"
-              tabIndex={0}
-              onClick={() => filter === "active" && onSelect(task)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" || event.key === " ") {
-                  event.preventDefault();
-                  if (filter === "active") onSelect(task);
-                }
-              }}
-              className={cn(
-                "rounded-lg border p-3 text-left transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                selected && "border-foreground/35 bg-muted/50",
-              )}
-            >
-              <div className="flex items-start gap-3">
-                <span
-                  role="button"
-                  tabIndex={0}
-                  aria-label={
-                    task.completed_at
-                      ? `Reopen ${task.title}`
-                      : `Complete ${task.title}`
-                  }
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    updateTask.mutate({
-                      uuid: task.uuid,
-                      input: { completed: !task.completed_at },
-                    });
-                  }}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") event.currentTarget.click();
-                  }}
-                  className={cn(
-                    "mt-0.5 grid size-5 shrink-0 place-items-center rounded-full border",
-                    task.completed_at && "bg-primary text-primary-foreground",
+          {error && <Alert variant="destructive"><AlertDescription>{error.message}</AlertDescription></Alert>}
+          {(["active", "completed"] as const).map((status) => (
+            <TabsContent key={status} value={status} className="workspace-list-scrollbar flex min-h-0 flex-col gap-2 overflow-y-auto px-1 pb-1 lg:max-h-[30rem]">
+              {status === "completed" && completed.isLoading ? (
+                <><Skeleton className="h-24" /><Skeleton className="h-24" /></>
+              ) : (
+                <>
+                  {status === "completed" && completed.isError && (
+                    <Alert variant="destructive">
+                      <AlertDescription className="flex flex-col items-start gap-2">
+                        Completed tasks could not be loaded.
+                        <Button variant="outline" className="min-h-11" onClick={() => completed.refetch()}>Try again</Button>
+                      </AlertDescription>
+                    </Alert>
                   )}
-                >
-                  {task.completed_at && <Check className="size-3" />}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <p
-                        className={cn(
-                          "truncate font-medium",
-                          task.completed_at &&
-                            "text-muted-foreground line-through",
-                        )}
-                      >
-                        {task.title}
-                      </p>
-                      {task.source && (
-                        <p className="mt-1 flex items-center gap-1 truncate text-xs text-muted-foreground">
-                          <KanbanSquare className="size-3" />
-                          {task.source.project} / {task.source.board}
-                        </p>
-                      )}
-                    </div>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger
-                        onClick={(event) => event.stopPropagation()}
-                        className="grid size-7 place-items-center rounded-md text-muted-foreground hover:bg-muted"
-                        aria-label={`Actions for ${task.title}`}
-                      >
-                        <MoreHorizontal className="size-4" />
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent>
-                        <DropdownMenuItem
-                          onClick={() =>
-                            updateTask.mutate({
-                              uuid: task.uuid,
-                              input: { completed: !task.completed_at },
-                            })
-                          }
+                  {shown.length === 0 && !(status === "completed" && completed.isError) && (
+                    <Empty className="px-2 py-8">
+                      <EmptyHeader>
+                        <EmptyTitle>{status === "active" ? "A clear starting point" : "No completed tasks yet"}</EmptyTitle>
+                        <EmptyDescription>{status === "active" ? "Add a task, then give it your attention." : "Finished tasks and their session counts will appear here."}</EmptyDescription>
+                      </EmptyHeader>
+                    </Empty>
+                  )}
+                  {shown.map((task) => {
+                    const selected = task.uuid === selectedUuid && status === "active";
+                    const current = task.uuid === activeTaskUuid;
+                    const source = task.source && [task.source.project, task.source.board].filter(Boolean).join(" / ");
+                    return (
+                      <article key={task.uuid} className={cn("flex min-w-0 gap-1 rounded-lg border p-1", selected && "border-primary/30 bg-muted/50")}>
+                        <Button
+                          variant="ghost" size="icon" className="mt-1 size-11 shrink-0"
+                          aria-label={(task.completed_at ? "Reopen " : "Complete ") + task.title}
+                          disabled={pending}
+                          onClick={() => updateTask.mutate({ uuid: task.uuid, input: { completed: !task.completed_at } })}
                         >
-                          {task.completed_at ? <RotateCcw /> : <Check />}
-                          {task.completed_at ? "Reopen" : "Complete"}
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          destructive
-                          onClick={() => deleteTask.mutate(task.uuid)}
-                        >
-                          <Trash2 />
-                          Remove
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-                  <div className="mt-3 flex items-center justify-between">
-                    <span
-                      className={cn(
-                        "text-[11px] text-muted-foreground",
-                        !selected && "invisible",
-                      )}
-                    >
-                      Selected
-                    </span>
-                    <SessionDots count={task.session_count} />
-                  </div>
-                </div>
-              </div>
-            </article>
-          );
-        })}
-      </div>
-      <AddFocusTaskDialog open={addOpen} onOpenChange={setAddOpen} />
+                          {task.completed_at ? <CircleCheck /> : <Circle />}
+                        </Button>
+                        <div className="min-w-0 flex-1 py-1">
+                          {status === "active" ? (
+                            <Button
+                              variant="ghost"
+                              className="h-auto min-h-11 w-full flex-col items-start gap-1 px-1 py-2 text-left whitespace-normal"
+                              aria-label={"Focus on " + task.title}
+                              aria-pressed={selected}
+                              disabled={sessionActive && !current}
+                              onClick={() => onSelect(task)}
+                            >
+                              <span className="line-clamp-2 leading-snug" title={task.title}>{task.title}</span>
+                              {source && <span className="flex min-w-0 max-w-full items-center gap-1 text-xs font-normal text-muted-foreground"><KanbanSquare className="size-3.5 shrink-0" /><span className="truncate" title={source}>{source}</span></span>}
+                            </Button>
+                          ) : (
+                            <p className="line-clamp-2 px-1 py-2 leading-snug text-muted-foreground line-through" title={task.title}>{task.title}</p>
+                          )}
+                          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 px-1 pb-1">
+                            {selected && <Badge variant="secondary">{current ? "Current" : "Selected"}</Badge>}
+                            <span className="text-xs tabular-nums text-muted-foreground">{task.session_count} {task.session_count === 1 ? "session" : "sessions"}</span>
+                          </div>
+                        </div>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger render={<Button variant="ghost" size="icon" className="mt-1 size-11 shrink-0" />} aria-label={"Actions for " + task.title} disabled={pending}>
+                            <MoreHorizontal />
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent>
+                            <DropdownMenuGroup>
+                              <DropdownMenuItem className="min-h-11" onClick={() => updateTask.mutate({ uuid: task.uuid, input: { completed: !task.completed_at } })}>
+                                {task.completed_at ? <RotateCcw /> : <Check />}{task.completed_at ? "Reopen" : "Complete"}
+                              </DropdownMenuItem>
+                              <DropdownMenuItem className="min-h-11" destructive disabled={current} onClick={() => deleteTask.mutate(task.uuid)}><Trash2 />Remove</DropdownMenuItem>
+                            </DropdownMenuGroup>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </article>
+                    );
+                  })}
+                </>
+              )}
+            </TabsContent>
+          ))}
+        </Tabs>
+      </CardContent>
+      {sessionActive && <CardFooter><p className="text-xs leading-relaxed text-muted-foreground">Finish or reset the current session before switching tasks. Other tasks stay in your queue.</p></CardFooter>}
     </Card>
-  );
-}
-
-function SessionDots({ count }: { count: number }) {
-  return (
-    <div
-      className="flex items-center gap-1"
-      aria-label={`${count} completed focus sessions`}
-    >
-      {Array.from({ length: Math.min(count, 5) }).map((_, index) => (
-        <span key={index} className="size-2 rounded-full bg-foreground/75" />
-      ))}
-      <span className="ml-1 text-[11px] tabular-nums text-muted-foreground">
-        {count}
-      </span>
-    </div>
-  );
-}
-
-function AddFocusTaskDialog({
-  open,
-  onOpenChange,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-}) {
-  const [mode, setMode] = useState<"standalone" | "linked">("standalone");
-  const [title, setTitle] = useState("");
-  const [search, setSearch] = useState("");
-  const [selectedLink, setSelectedLink] = useState<string>();
-  const createTask = useCreateFocusTaskMutation();
-  const linkable = useLinkableFocusTasksQuery(
-    search,
-    open && mode === "linked",
-  );
-  const close = () => {
-    setTitle("");
-    setSearch("");
-    setSelectedLink(undefined);
-    onOpenChange(false);
-  };
-  const submit = () => {
-    if (mode === "standalone") {
-      const parsed = focusTaskSchema.safeParse({ title });
-      if (!parsed.success) return;
-      createTask.mutate({ title: parsed.data.title }, { onSuccess: close });
-    } else if (selectedLink)
-      createTask.mutate(
-        { board_task_uuid: selectedLink },
-        { onSuccess: close },
-      );
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Add focus task</DialogTitle>
-          <DialogDescription>
-            Create a lightweight task or bring in work from a Project Board.
-          </DialogDescription>
-        </DialogHeader>
-        <Tabs
-          value={mode}
-          onValueChange={(value) => setMode(value as "standalone" | "linked")}
-        >
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="standalone">
-              <Plus />
-              New task
-            </TabsTrigger>
-            <TabsTrigger value="linked">
-              <Link2 />
-              Project task
-            </TabsTrigger>
-          </TabsList>
-        </Tabs>
-        {mode === "standalone" ? (
-          <Input
-            value={title}
-            onChange={(event) => setTitle(event.target.value)}
-            placeholder="What do you want to focus on?"
-            maxLength={120}
-            autoFocus
-          />
-        ) : (
-          <div className="grid gap-2">
-            <Input
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Search Project Board tasks…"
-            />
-            <div className="max-h-64 space-y-1 overflow-y-auto rounded-lg border p-1">
-              {linkable.isLoading && <Skeleton className="h-16" />}
-              {linkable.data?.data.map((task) => (
-                <button
-                  key={task.uuid}
-                  type="button"
-                  onClick={() => setSelectedLink(task.uuid)}
-                  className={cn(
-                    "w-full rounded-md p-2 text-left hover:bg-muted",
-                    selectedLink === task.uuid && "bg-muted ring-1 ring-ring",
-                  )}
-                >
-                  <p className="text-sm font-medium">{task.title}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {task.project} / {task.board} · {task.stage}
-                  </p>
-                </button>
-              ))}
-              {linkable.data?.data.length === 0 && (
-                <p className="p-4 text-center text-sm text-muted-foreground">
-                  No available Project Board tasks.
-                </p>
-              )}
-            </div>
-          </div>
-        )}
-        <DialogFooter>
-          <Button variant="outline" onClick={close}>
-            Cancel
-          </Button>
-          <Button
-            disabled={
-              createTask.isPending ||
-              (mode === "standalone" ? !title.trim() : !selectedLink)
-            }
-            onClick={submit}
-          >
-            {createTask.isPending ? "Adding…" : "Add task"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
   );
 }

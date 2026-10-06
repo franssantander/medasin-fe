@@ -25,7 +25,7 @@ export function useFocusTimer(session: FocusSession | null, onElapsed: (session:
     const tick = () => {
       const current = Date.now() + clockOffset;
       const next = getRemaining(session, current);
-      setNow(current);
+      setNow((previous) => getRemaining(session, previous) === next ? previous : current);
       if (next === 0 && completedRef.current !== session.uuid) {
         completedRef.current = session.uuid;
         onElapsedRef.current(session);

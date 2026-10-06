@@ -3,6 +3,7 @@ import type {
   JournalApiResponse,
   JournalEntry,
   JournalEntryInput,
+  JournalEntrySummary,
   JournalEntryUpdateInput,
   JournalPage,
 } from "../type";
@@ -12,6 +13,24 @@ const unwrap = <T>(
 ): Promise<JournalApiResponse<T>> => request.then((response) => response.data);
 
 export const journalService = {
+  async findFocusReflection(
+    sessionUuid: string,
+    signal?: AbortSignal,
+  ): Promise<JournalEntrySummary | null> {
+    let page = 1;
+    while (!signal?.aborted) {
+      const response = await journalService.list(page, signal);
+      const entry = response.data.data.find(
+        (item) => item.source?.session_uuid === sessionUuid,
+      );
+      if (entry) return entry;
+      if (response.data.current_page >= response.data.last_page) return null;
+      page = response.data.current_page + 1;
+    }
+    signal?.throwIfAborted();
+    return null;
+  },
+
   list(page = 1, signal?: AbortSignal) {
     return unwrap(
       axiosClient.get<JournalApiResponse<JournalPage>>("/journal", {

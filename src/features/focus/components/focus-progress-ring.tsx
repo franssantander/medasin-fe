@@ -9,8 +9,9 @@ export function FocusProgressRing({
   const circumference = 2 * Math.PI * radius;
   return (
     <div
-      className="relative grid size-64 place-items-center sm:size-72"
+      className="relative grid size-60 max-w-full place-items-center sm:size-72"
       role="timer"
+      aria-live="off"
       aria-label={`${label}, ${time} remaining`}
     >
       <svg
@@ -24,7 +25,7 @@ export function FocusProgressRing({
           r={radius}
           fill="none"
           stroke="currentColor"
-          strokeWidth="12"
+          strokeWidth="6"
           className="text-muted"
         />
         <circle
@@ -33,18 +34,18 @@ export function FocusProgressRing({
           r={radius}
           fill="none"
           stroke="currentColor"
-          strokeWidth="12"
+          strokeWidth="6"
           strokeLinecap="round"
           strokeDasharray={circumference}
           strokeDashoffset={circumference * (1 - progress)}
-          className="text-primary transition-[stroke-dashoffset] duration-300"
+          className="text-primary transition-[stroke-dashoffset] duration-300 motion-reduce:transition-none"
         />
       </svg>
       <div className="text-center">
-        <div className="text-5xl font-semibold tabular-nums tracking-[-0.05em] sm:text-6xl">
+        <div className="text-6xl font-semibold tabular-nums tracking-[-0.05em] sm:text-7xl">
           {time}
         </div>
-        <p className="mt-2 text-sm text-muted-foreground">{label}</p>
+        <p className="mt-2 text-sm text-muted-foreground">remaining</p>
       </div>
     </div>
   );

@@ -1,238 +1,171 @@
 "use client";
 
-import { Settings } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { Check, RefreshCw, Settings, X } from "lucide-react";
+import { useState } from "react";
 import PageHeader from "@/components/shared/page-header";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
-import { Card, CardDescription, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAmbientNoise } from "../hooks/use-ambient-noise";
-import { useFocusTimer } from "../hooks/use-focus-timer";
-import {
-  useFocusDashboardQuery,
-  useFocusSessionActionMutation,
-  useFocusTasksQuery,
-  useSaveFocusReflectionMutation,
-  useStartFocusSessionMutation,
-  useUpdateFocusSettingsMutation,
-} from "../queries/focus-query";
-import type {
-  AmbientSound,
-  FocusMood,
-  FocusSession,
-  FocusSessionType,
-  FocusTask,
-} from "../type";
+import { useFocusSessionFlow } from "../hooks/use-focus-session-flow";
+import { useUpdateFocusSettingsMutation } from "../queries/focus-query";
+import type { AmbientSound } from "../type";
+import { AddFocusTaskDialog } from "./add-focus-task-dialog";
 import { FocusCompletionDialog } from "./focus-completion-dialog";
+import { FocusJournalLink } from "./focus-journal-link";
 import { FocusSettingsDialog } from "./focus-settings-dialog";
 import { FocusTaskPanel } from "./focus-task-panel";
 import { FocusTimerCard } from "./focus-timer-card";
 
 export function FocusPage() {
-  const dashboard = useFocusDashboardQuery();
-  const completedTasks = useFocusTasksQuery("completed");
-  const action = useFocusSessionActionMutation();
-  const start = useStartFocusSessionMutation();
-  const reflect = useSaveFocusReflectionMutation();
+  const flow = useFocusSessionFlow();
+  const { dashboard, data, activeSession } = flow;
   const updateSettings = useUpdateFocusSettingsMutation();
-  const [selectedUuid, setSelectedUuid] = useState<string>();
-  const [phase, setPhase] = useState<FocusSessionType | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [completion, setCompletion] = useState<{
-    session: FocusSession;
-    nextType: FocusSessionType;
-  } | null>(null);
-  const continuingRef = useRef(false);
-  const data = dashboard.data?.data;
-  const activeSession = data?.active_session ?? null;
-  const refetchDashboard = dashboard.refetch;
+  const [addOpen, setAddOpen] = useState(false);
+  const [resetSessionUuid, setResetSessionUuid] = useState<string | null>(null);
+  const resetOpen = Boolean(resetSessionUuid && activeSession?.uuid === resetSessionUuid);
+  const [requestedSound, setRequestedSound] = useState<AmbientSound>("off");
+  useAmbientNoise(data?.settings.ambient_sound ?? "off", activeSession?.status === "running");
 
-  useEffect(() => {
-    const refresh = () => void refetchDashboard();
-    const refreshWhenVisible = () => {
-      if (document.visibilityState === "visible") refresh();
-    };
-    window.addEventListener("focus", refresh);
-    document.addEventListener("visibilitychange", refreshWhenVisible);
-    return () => {
-      window.removeEventListener("focus", refresh);
-      document.removeEventListener("visibilitychange", refreshWhenVisible);
-    };
-  }, [refetchDashboard]);
-
-  const handleElapsed = async (session: FocusSession) => {
-    try {
-      const response = await action.mutateAsync({
-        uuid: session.uuid,
-        action: "complete",
-      });
-      const refreshed = await dashboard.refetch();
-      const suggestedNextType =
-        refreshed.data?.data.suggested_next_type ?? "focus";
-      const nextType = getNextType(session.type, suggestedNextType);
-      const settings = refreshed.data?.data.settings ?? data?.settings;
-      setPhase(null);
-      if (
-        !settings ||
-        settings.ask_before_next_session ||
-        (session.type === "focus" && settings.ask_for_reflection)
-      ) {
-        setCompletion({ session: response.data, nextType });
-      } else {
-        setPhase(nextType);
-        const nextTaskUuid =
-          session.task?.uuid ??
-          selectedUuid ??
-          refreshed.data?.data.tasks[0]?.uuid;
-        await start.mutateAsync({
-          type: nextType,
-          taskUuid: nextType === "focus" ? nextTaskUuid : undefined,
-        });
-      }
-    } catch {
-      await dashboard.refetch();
-    }
-  };
-  const timer = useFocusTimer(activeSession, handleElapsed);
-  useAmbientNoise(
-    data?.settings.ambient_sound ?? "off",
-    activeSession?.status === "running",
-  );
-
-  if (dashboard.isLoading)
-    return (
-      <div className="grid gap-4">
-        <Skeleton className="h-10 w-44" />
-        <div className="grid gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
-          <Skeleton className="h-[34rem] rounded-xl" />
-          <Skeleton className="h-[34rem] rounded-xl" />
-        </div>
+  if (dashboard.isLoading && !data) return (
+    <div className="mx-auto grid w-full max-w-6xl gap-5">
+      <Skeleton className="h-12 w-64" />
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
+        <Skeleton className="h-[38rem] rounded-xl" />
+        <Skeleton className="h-96 rounded-xl" />
       </div>
-    );
-  if (dashboard.isError || !data)
-    return (
-      <Card className="items-center py-16 text-center">
+    </div>
+  );
+  if (!data) return (
+    <Card>
+      <CardHeader className="justify-items-center">
         <CardTitle>Focus could not be loaded</CardTitle>
         <CardDescription>Check your connection and try again.</CardDescription>
-        <Button variant="outline" onClick={() => dashboard.refetch()}>
-          Try again
-        </Button>
-      </Card>
-    );
-
-  const effectiveSelectedUuid =
-    activeSession?.task?.uuid ??
-    (data.tasks.some((task) => task.uuid === selectedUuid)
-      ? selectedUuid
-      : data.tasks[0]?.uuid);
-  const selectedTask = data.tasks.find(
-    (task) => task.uuid === effectiveSelectedUuid,
+      </CardHeader>
+      <CardContent className="items-center">
+        <Button variant="outline" className="min-h-11" onClick={() => dashboard.refetch()}><RefreshCw data-icon="inline-start" />Try again</Button>
+      </CardContent>
+    </Card>
   );
-  const idlePhase = phase ?? data.suggested_next_type;
-  const pending = action.isPending || start.isPending || reflect.isPending;
-  const startCurrent = () =>
-    start.mutate({
-      type: idlePhase,
-      taskUuid: idlePhase === "focus" ? effectiveSelectedUuid : undefined,
-    });
-  const runAction = (nextAction: "pause" | "resume" | "cancel") =>
-    activeSession &&
-    action.mutate({ uuid: activeSession.uuid, action: nextAction });
-  const changeAmbient = (sound: AmbientSound) =>
-    updateSettings.mutate({ ...data.settings, ambient_sound: sound });
-  const continueAfterCompletion = async (
-    mood: FocusMood | null,
-    note: string | null,
-  ) => {
-    if (!completion || continuingRef.current) return;
-    continuingRef.current = true;
-    const { session, nextType: completionNextType } = completion;
 
-    try {
-      if (
-        session.type === "focus" &&
-        data.settings.ask_for_reflection &&
-        (mood || note)
-      )
-        await reflect.mutateAsync({ uuid: session.uuid, mood, note });
-      await start.mutateAsync({
-        type: completionNextType,
-        taskUuid:
-          completionNextType === "focus" ? effectiveSelectedUuid : undefined,
-      });
-      setPhase(completionNextType);
-      setCompletion(null);
-    } finally {
-      continuingRef.current = false;
-    }
+  const changeAmbient = (sound: AmbientSound) => {
+    setRequestedSound(sound);
+    updateSettings.mutate({ ...data.settings, ambient_sound: sound });
   };
 
   return (
-    <div className="mx-auto grid w-full gap-4">
+    <div className="mx-auto grid w-full max-w-6xl gap-5">
       <PageHeader
-        title="Focus"
-        description="Pick a task, set your rhythm, and go deep."
-        action={
-          <Button variant="outline" onClick={() => setSettingsOpen(true)}>
-            <Settings />
-            Settings
-          </Button>
-        }
+        title="Focus Timer"
+        description="One task. One focused session."
+        action={<Button variant="outline" className="min-h-11" onClick={() => setSettingsOpen(true)} disabled={updateSettings.isPending}><Settings data-icon="inline-start" />Settings</Button>}
       />
-      <div className="grid gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
-        <FocusTaskPanel
-          tasks={data.tasks}
-          completedTasks={completedTasks.data?.data ?? []}
-          completedLoading={completedTasks.isLoading}
-          selectedUuid={effectiveSelectedUuid}
-          onSelect={(task: FocusTask) => setSelectedUuid(task.uuid)}
-        />
+      {dashboard.isError && (
+        <Alert>
+          <AlertTitle>Focus could not be refreshed</AlertTitle>
+          <AlertDescription className="flex flex-wrap items-center justify-between gap-2">
+            <span>Your current timer is still shown. Check your connection and try again.</span>
+            <Button variant="outline" className="min-h-11" onClick={() => dashboard.refetch()} disabled={dashboard.isFetching}>Try again</Button>
+          </AlertDescription>
+        </Alert>
+      )}
+      {flow.completionFailure && (
+        <Alert variant="destructive">
+          <AlertTitle>Session completion could not be confirmed</AlertTitle>
+          <AlertDescription className="flex flex-wrap items-center justify-between gap-2">
+            {flow.completionFailure.message}
+            <Button variant="outline" className="min-h-11" onClick={flow.retryCompletion} disabled={flow.pending}>Retry completion</Button>
+          </AlertDescription>
+        </Alert>
+      )}
+      {flow.requestError && !(flow.requestError.action === "cancel" && resetOpen) && (
+        <Alert variant="destructive">
+          <AlertDescription className="flex flex-wrap items-center justify-between gap-2">
+            {flow.requestError.message}
+            <Button variant="outline" className="min-h-11" onClick={flow.retryAction} disabled={flow.pending}>Try again</Button>
+          </AlertDescription>
+        </Alert>
+      )}
+      {updateSettings.isError && (
+        <Alert variant="destructive">
+          <AlertTitle>Sound could not be changed</AlertTitle>
+          <AlertDescription className="flex flex-wrap items-center justify-between gap-2">
+            {updateSettings.error.message}
+            <Button variant="outline" className="min-h-11" onClick={() => changeAmbient(requestedSound)} disabled={updateSettings.isPending}>Try again</Button>
+          </AlertDescription>
+        </Alert>
+      )}
+      {flow.savedReflectionUuid && !flow.completion && (
+        <Alert role="status">
+          <Check />
+          <AlertTitle>Saved to Journal</AlertTitle>
+          <AlertDescription className="flex flex-wrap items-center justify-between gap-2">
+            <FocusJournalLink sessionUuid={flow.savedReflectionUuid} />
+            <Button variant="ghost" size="icon" className="size-11" aria-label="Dismiss saved reflection" onClick={flow.dismissSavedReflection}><X /></Button>
+          </AlertDescription>
+        </Alert>
+      )}
+      <div className="grid min-w-0 items-start gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
         <FocusTimerCard
           session={activeSession}
-          phase={idlePhase}
-          selectedTask={selectedTask}
+          phase={flow.idlePhase}
+          selectedTask={flow.selectedTask}
           settings={data.settings}
-          remaining={timer.remaining}
-          progress={timer.progress}
-          todayCount={data.today.completed_focus_sessions}
-          pending={pending}
-          onPhaseChange={setPhase}
-          onStart={startCurrent}
-          onPause={() => runAction("pause")}
-          onResume={() => runAction("resume")}
-          onReset={() => runAction("cancel")}
+          stats={data.today}
+          pending={flow.pending || Boolean(flow.completionFailure)}
+          soundPending={updateSettings.isPending}
+          onPhaseChange={flow.setPhase}
+          onStart={flow.startCurrent}
+          onPause={() => flow.runAction("pause")}
+          onResume={() => flow.runAction("resume")}
+          onReset={() => setResetSessionUuid(activeSession?.uuid ?? null)}
           onAmbientChange={changeAmbient}
-          onOpenSettings={() => setSettingsOpen(true)}
+          onAddTask={() => setAddOpen(true)}
+          onElapsed={flow.handleElapsed}
+        />
+        <FocusTaskPanel
+          tasks={data.tasks}
+          selectedUuid={flow.effectiveSelectedUuid}
+          activeTaskUuid={activeSession?.task?.uuid}
+          sessionActive={activeSession?.type === "focus"}
+          onSelect={(task) => flow.setSelectedUuid(task.uuid)}
+          onAdd={() => setAddOpen(true)}
         />
       </div>
-      {settingsOpen && (
-        <FocusSettingsDialog
-          open
-          onOpenChange={setSettingsOpen}
-          settings={data.settings}
-        />
-      )}
-      {completion && (
+      {addOpen && <AddFocusTaskDialog onOpenChange={setAddOpen} onCreated={(task) => activeSession?.type !== "focus" && flow.setSelectedUuid(task.uuid)} />}
+      {settingsOpen && <FocusSettingsDialog open onOpenChange={setSettingsOpen} settings={data.settings} />}
+      {flow.completion && !settingsOpen && !addOpen && !resetOpen && (
         <FocusCompletionDialog
-          key={completion.session.uuid}
-          session={completion.session}
-          reflectionEnabled={data.settings.ask_for_reflection}
-          nextType={completion.nextType}
+          key={flow.completion.session.uuid}
+          completion={flow.completion}
+          settings={data.settings}
           stats={data.today}
-          onSkip={() => setCompletion(null)}
-          onContinue={continueAfterCompletion}
-          pending={pending}
+          hasActiveTask={data.tasks.length > 0}
+          onResolve={flow.resolveReflection}
+          onContinue={flow.continueSession}
+          onFinish={flow.finish}
+          onDraftChange={flow.clearCompletionError}
+          pending={flow.pending}
         />
       )}
+      <AlertDialog open={resetOpen} onOpenChange={(open) => !flow.pending && !open && setResetSessionUuid(null)}>
+        <AlertDialogContent finalFocus={() => document.getElementById("focus-primary-action")}>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Reset this session?</AlertDialogTitle>
+            <AlertDialogDescription>The timer will return to its full duration. This session will not count as completed.</AlertDialogDescription>
+          </AlertDialogHeader>
+          {flow.requestError?.action === "cancel" && <Alert variant="destructive"><AlertDescription>{flow.requestError.message}</AlertDescription></Alert>}
+          <AlertDialogFooter>
+            <AlertDialogCancel className="min-h-11" disabled={flow.pending}>Keep session</AlertDialogCancel>
+            <AlertDialogAction className="min-h-11" variant="destructive" disabled={flow.pending} onClick={async () => {
+              if (await flow.runAction("cancel")) setResetSessionUuid(null);
+            }}>{flow.pending ? "Resetting…" : "Reset session"}</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
-}
-
-function getNextType(
-  completedType: FocusSessionType,
-  suggestedNextType: FocusSessionType,
-): FocusSessionType {
-  if (completedType !== "focus") return "focus";
-
-  return suggestedNextType === "long_break" ? "long_break" : "short_break";
 }

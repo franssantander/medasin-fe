@@ -19,6 +19,8 @@ export const journalKeys = {
   all: ["journal"] as const,
   list: () => ["journal", "list"] as const,
   detail: (uuid: string) => ["journal", "detail", uuid] as const,
+  focusReflection: (sessionUuid: string) =>
+    ["journal", "focus-reflection", sessionUuid] as const,
 };
 
 type JournalListData = InfiniteData<
