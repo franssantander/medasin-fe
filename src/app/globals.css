@@ -148,6 +148,107 @@ html[data-app-font="inter"] {
   }
 }
 
+@layer utilities {
+  .habits-workspace-card {
+    min-height: 22rem;
+  }
+
+  .habit-calendar-scroll {
+    --habit-label-width: 10rem;
+    overflow: auto;
+    scroll-padding: 4rem 0 0 calc(var(--habit-label-width) + 0.5rem);
+  }
+
+  .habit-calendar-table {
+    min-width: calc(var(--habit-label-width) + var(--habit-columns) * 3rem);
+  }
+
+  .habit-calendar-grid {
+    display: grid;
+    grid-template-columns: var(--habit-label-width) repeat(var(--habit-columns), minmax(3rem, 1fr));
+  }
+
+  .habit-date-cells {
+    display: contents;
+  }
+
+  @media (min-width: 768px) {
+    .habit-calendar-scroll {
+      --habit-label-width: 16rem;
+    }
+  }
+
+  @media (min-width: 1280px) {
+    .habit-calendar-scroll {
+      --habit-label-width: 18rem;
+    }
+  }
+
+  @media (min-width: 768px) and (min-height: 700px) {
+    .habits-workspace {
+      height: 100%;
+      min-height: 0;
+    }
+
+    .habits-workspace-card {
+      flex: 1;
+      min-height: 0;
+    }
+
+    .habit-calendar-scroll {
+      flex: 1;
+      min-height: 0;
+    }
+  }
+
+  @media (max-width: 767px) {
+    .habit-calendar-table[data-view="week"] {
+      min-width: 0;
+    }
+
+    .habit-calendar-table[data-view="week"] .habit-calendar-header {
+      display: none;
+    }
+
+    .habit-calendar-table[data-view="week"] .habit-calendar-row {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .habit-calendar-table[data-view="week"] .habit-identity {
+      position: static;
+      border-right: 0;
+      padding: 1rem 0.75rem 0.5rem;
+    }
+
+    .habit-calendar-table[data-view="week"] .habit-identity-icon {
+      display: flex;
+    }
+
+    .habit-calendar-table[data-view="week"] .habit-date-cells {
+      display: grid;
+      grid-template-columns: repeat(7, minmax(2.75rem, 1fr));
+      gap: 0.25rem;
+      overflow-x: auto;
+      padding: 0.25rem 0.5rem 0.75rem;
+    }
+
+    .habit-calendar-table[data-view="week"] .habit-day-cell {
+      min-height: 5rem;
+      border: 0;
+      border-radius: var(--radius-md);
+    }
+
+    .habit-calendar-table[data-view="week"] .habit-day-cell > button {
+      min-height: 5rem;
+    }
+
+    .habit-calendar-table[data-view="week"] .habit-mobile-date {
+      display: flex;
+    }
+  }
+}
+
 @layer components {
   .plans-calendar {
     --fc-classic-background: var(--card);

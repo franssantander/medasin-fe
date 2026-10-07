@@ -44,6 +44,13 @@ export type HabitCheckIn = {
   completed: boolean;
 };
 
+export type PendingHabitCheckIn = {
+  habitUuid: string;
+  date: string;
+};
+
+export type HabitStatusFilter = "all" | "active" | "paused";
+
 export type HabitCalendarData = {
   habits: Habit[];
   check_ins: Record<string, HabitCheckIn[]>;

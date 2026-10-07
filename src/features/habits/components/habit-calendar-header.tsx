@@ -1,6 +1,5 @@
 "use client";
 
-import type { CSSProperties } from "react";
 import { cn } from "@/lib/utils";
 import type { HabitCalendarColumn } from "../type";
 import { isCurrentColumn } from "./habit-calendar-utils";
@@ -8,36 +7,41 @@ import { isCurrentColumn } from "./habit-calendar-utils";
 export function HabitCalendarHeader({
   columns,
   today,
-  style,
 }: {
   columns: HabitCalendarColumn[];
   today: Date;
-  style: CSSProperties;
 }) {
   return (
     <div
-      className="sticky top-0 z-20 grid grid-cols-[minmax(16rem,1.80fr)_repeat(var(--habit-columns),minmax(3.25rem,1fr))] border-b bg-muted/95 shadow-sm backdrop-blur"
-      style={style}
+      role="row"
+      className="habit-calendar-grid habit-calendar-header sticky top-0 z-20 border-b bg-muted"
     >
-      <div className="sticky left-0 top-0 z-30 flex min-h-14 items-center border-r bg-muted/95 px-4 py-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground backdrop-blur">
-        Habit
+      <div
+        role="columnheader"
+        className="sticky left-0 z-30 flex min-h-14 items-center border-r bg-muted px-4 text-xs font-medium text-muted-foreground"
+      >
+        Habit / schedule
       </div>
       {columns.map((column) => (
         <div
           key={column.key}
+          role="columnheader"
+          aria-label={column.label}
           aria-current={isCurrentColumn(column, today) ? "date" : undefined}
           className={cn(
-            "flex min-h-14 flex-col items-center justify-center gap-0.5 border-r px-1.5 text-center last:border-r-0",
+            "flex min-h-14 flex-col items-center justify-center gap-0.5 border-r px-1 text-center last:border-r-0",
             isCurrentColumn(column, today) && "bg-primary/10 text-primary",
           )}
         >
-          <span className="text-sm font-semibold">{column.shortLabel}</span>
-          <span className="truncate text-xs text-muted-foreground">
+          <span className="text-sm font-semibold tabular-nums">
+            {column.shortLabel}
+          </span>
+          <span className="text-xs text-muted-foreground">
             {column.aggregate
-              ? column.label
+              ? column.date.toLocaleDateString(undefined, { year: "numeric" })
               : column.date.toLocaleDateString(undefined, {
                   month: "short",
-                  day: "numeric",
+                  ...(columns.length === 7 ? { day: "numeric" } : {}),
                 })}
           </span>
         </div>
