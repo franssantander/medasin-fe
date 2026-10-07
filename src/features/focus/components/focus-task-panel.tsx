@@ -31,19 +31,19 @@ export function FocusTaskPanel({ tasks, selectedUuid, activeTaskUuid, sessionAct
   const shown = filter === "active" ? tasks : completed.data?.data ?? [];
 
   return (
-    <Card className="min-w-0 gap-4 lg:max-h-[42rem]" aria-label="Focus tasks">
+    <Card className="min-w-0 gap-4 [--card-spacing:--spacing(5)] lg:max-h-[42rem]" aria-label="Focus tasks">
       <CardHeader>
         <CardTitle><h2>Focus tasks</h2></CardTitle>
         <CardDescription>{tasks.length} active {tasks.length === 1 ? "task" : "tasks"}</CardDescription>
         <CardAction>
-          <Button variant="outline" className="min-h-11" onClick={onAdd}><Plus data-icon="inline-start" />Add task</Button>
+          <Button variant="outline" size="sm" onClick={onAdd}><Plus data-icon="inline-start" />Add task</Button>
         </CardAction>
       </CardHeader>
       <CardContent className="min-h-0">
         <Tabs value={filter} onValueChange={(value) => setFilter(value as "active" | "completed")} className="min-h-0 gap-3">
-          <TabsList className="min-h-12 w-full">
-            <TabsTrigger value="active" className="min-h-11">Active</TabsTrigger>
-            <TabsTrigger value="completed" className="min-h-11">Completed</TabsTrigger>
+          <TabsList className="w-full">
+            <TabsTrigger value="active">Active</TabsTrigger>
+            <TabsTrigger value="completed">Completed</TabsTrigger>
           </TabsList>
           {error && <Alert variant="destructive"><AlertDescription>{error.message}</AlertDescription></Alert>}
           {(["active", "completed"] as const).map((status) => (
@@ -56,7 +56,7 @@ export function FocusTaskPanel({ tasks, selectedUuid, activeTaskUuid, sessionAct
                     <Alert variant="destructive">
                       <AlertDescription className="flex flex-col items-start gap-2">
                         Completed tasks could not be loaded.
-                        <Button variant="outline" className="min-h-11" onClick={() => completed.refetch()}>Try again</Button>
+                        <Button variant="outline" size="sm" onClick={() => completed.refetch()}>Try again</Button>
                       </AlertDescription>
                     </Alert>
                   )}
@@ -75,7 +75,7 @@ export function FocusTaskPanel({ tasks, selectedUuid, activeTaskUuid, sessionAct
                     return (
                       <article key={task.uuid} className={cn("flex min-w-0 gap-1 rounded-lg border p-1", selected && "border-primary/30 bg-muted/50")}>
                         <Button
-                          variant="ghost" size="icon" className="mt-1 size-11 shrink-0"
+                          variant="ghost" size="icon-sm" className="mt-1"
                           aria-label={(task.completed_at ? "Reopen " : "Complete ") + task.title}
                           disabled={pending}
                           onClick={() => updateTask.mutate({ uuid: task.uuid, input: { completed: !task.completed_at } })}
@@ -86,14 +86,14 @@ export function FocusTaskPanel({ tasks, selectedUuid, activeTaskUuid, sessionAct
                           {status === "active" ? (
                             <Button
                               variant="ghost"
-                              className="h-auto min-h-11 w-full flex-col items-start gap-1 px-1 py-2 text-left whitespace-normal"
+                              className="h-auto w-full flex-col items-start gap-1 px-1 py-2 text-left whitespace-normal"
                               aria-label={"Focus on " + task.title}
                               aria-pressed={selected}
                               disabled={sessionActive && !current}
                               onClick={() => onSelect(task)}
                             >
-                              <span className="line-clamp-2 leading-snug" title={task.title}>{task.title}</span>
-                              {source && <span className="flex min-w-0 max-w-full items-center gap-1 text-xs font-normal text-muted-foreground"><KanbanSquare className="size-3.5 shrink-0" /><span className="truncate" title={source}>{source}</span></span>}
+                              <span className="max-w-full line-clamp-2 break-words leading-snug" title={task.title}>{task.title}</span>
+                              {source && <span className="flex min-w-0 max-w-full items-center gap-1 text-xs font-normal text-muted-foreground"><KanbanSquare aria-hidden="true" /><span className="truncate" title={source}>{source}</span></span>}
                             </Button>
                           ) : (
                             <p className="line-clamp-2 px-1 py-2 leading-snug text-muted-foreground line-through" title={task.title}>{task.title}</p>
@@ -104,15 +104,15 @@ export function FocusTaskPanel({ tasks, selectedUuid, activeTaskUuid, sessionAct
                           </div>
                         </div>
                         <DropdownMenu>
-                          <DropdownMenuTrigger render={<Button variant="ghost" size="icon" className="mt-1 size-11 shrink-0" />} aria-label={"Actions for " + task.title} disabled={pending}>
+                          <DropdownMenuTrigger render={<Button variant="ghost" size="icon-sm" className="mt-1" />} aria-label={"Actions for " + task.title} disabled={pending}>
                             <MoreHorizontal />
                           </DropdownMenuTrigger>
                           <DropdownMenuContent>
                             <DropdownMenuGroup>
-                              <DropdownMenuItem className="min-h-11" onClick={() => updateTask.mutate({ uuid: task.uuid, input: { completed: !task.completed_at } })}>
+                              <DropdownMenuItem onClick={() => updateTask.mutate({ uuid: task.uuid, input: { completed: !task.completed_at } })}>
                                 {task.completed_at ? <RotateCcw /> : <Check />}{task.completed_at ? "Reopen" : "Complete"}
                               </DropdownMenuItem>
-                              <DropdownMenuItem className="min-h-11" destructive disabled={current} onClick={() => deleteTask.mutate(task.uuid)}><Trash2 />Remove</DropdownMenuItem>
+                              <DropdownMenuItem destructive disabled={current} onClick={() => deleteTask.mutate(task.uuid)}><Trash2 />Remove</DropdownMenuItem>
                             </DropdownMenuGroup>
                           </DropdownMenuContent>
                         </DropdownMenu>

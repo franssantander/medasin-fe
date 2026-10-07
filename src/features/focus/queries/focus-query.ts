@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useRef } from "react";
 import { toast } from "@/components/ui/toast";
 import { journalKeys } from "@/features/journal/queries/journal-query";
 import { focusService } from "../services/focus-service";
@@ -6,9 +7,14 @@ import type { FocusApiResponse, FocusDashboard, FocusMood, FocusSession, FocusSe
 
 export const focusKeys = { all: ["focus"] as const, dashboard: (timezone: string) => ["focus", "dashboard", timezone] as const, tasks: (status: string) => ["focus", "tasks", status] as const, linkable: (search: string) => ["focus", "linkable", search] as const };
 
-export function useFocusDashboardQuery() {
+export function useFocusDashboardQuery(pollWhenIdle = true) {
   const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
-  return useQuery({ queryKey: focusKeys.dashboard(timezone), queryFn: () => focusService.dashboard(timezone), refetchInterval: 30000, refetchOnWindowFocus: true });
+  return useQuery({
+    queryKey: focusKeys.dashboard(timezone),
+    queryFn: ({ signal }) => focusService.dashboard(timezone, signal),
+    refetchInterval: (query) => pollWhenIdle || query.state.data?.data.active_session ? 30000 : false,
+    refetchOnWindowFocus: true,
+  });
 }
 
 export function useFocusTasksQuery(status: "active" | "completed", enabled = true) {
@@ -37,9 +43,15 @@ export const useDeleteFocusTaskMutation = () => useFocusMutation((uuid: string) 
 export const useUpdateFocusSettingsMutation = () => useFocusMutation((input: FocusSettings) => focusService.updateSettings(input));
 function useFocusSessionMutation<T>(mutationFn: (input: T) => Promise<FocusApiResponse<FocusSession>>) {
   const queryClient = useQueryClient();
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
   return useMutation({
     mutationFn,
     onSuccess: async (response) => {
+      if (!mountedRef.current) return;
       const session = response.data;
       queryClient.setQueriesData<FocusApiResponse<FocusDashboard>>(
         { queryKey: ["focus", "dashboard"] },

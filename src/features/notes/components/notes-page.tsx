@@ -48,7 +48,7 @@ export function NotesPage({ initialNoteUuid }: { initialNoteUuid?: string }) {
   );
 
   return (
-    <div className="h-[calc(100dvh-5.5rem)] min-w-0 sm:h-[calc(100dvh-6.5rem)]">
+    <div className="h-full min-h-0 min-w-0">
       {areasQuery.isError ? (
         <div className="flex h-full min-h-0 min-w-0 flex-col gap-5">
           <PageHeader

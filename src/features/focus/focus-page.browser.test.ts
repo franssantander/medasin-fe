@@ -1,5 +1,6 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page, type WebSocketRoute } from "@playwright/test";
 import type { JournalEntry } from "@/features/journal/type";
+import type { PlanNotification } from "@/features/plans/notifications/type";
 import type { FocusMood, FocusSession, FocusSessionType, FocusSettings, FocusTask } from "./type";
 
 test.use({ actionTimeout: 15_000 });
@@ -20,7 +21,7 @@ const earlierEntry: JournalEntry = {
   created_at: "2026-10-01T10:00:00Z", updated_at: "2026-10-01T10:00:00Z", resources: [], source: null,
 };
 type ApiRequest = { path: string; method: string; body: Record<string, unknown> | null; params: Record<string, string> };
-type ApiOptions = { settings?: Partial<FocusSettings>; tasks?: FocusTask[]; active?: { type: FocusSessionType; paused?: boolean; remaining?: number }; journalOffset?: number; suggested?: FocusSessionType };
+type ApiOptions = { settings?: Partial<FocusSettings>; tasks?: FocusTask[]; active?: { type: FocusSessionType; paused?: boolean; remaining?: number }; journalOffset?: number; suggested?: FocusSessionType; realtime?: boolean };
 
 async function mockFocus(page: Page, options: ApiOptions = {}) {
   await page.clock.install({ time: new Date() });
@@ -40,6 +41,21 @@ async function mockFocus(page: Page, options: ApiOptions = {}) {
   const requests: ApiRequest[] = [];
   const failures = new Map<string, number>();
   const holds = new Map<string, Promise<void>>();
+  const notices: PlanNotification[] = [];
+  const sockets: WebSocketRoute[] = [];
+  let subscribed = false;
+  if (options.realtime) {
+    await page.routeWebSocket(/\/app\/test-key(?:\?|$)/, (socket) => {
+      sockets.push(socket);
+      socket.onMessage((message) => {
+        const frame = JSON.parse(String(message)) as { event: string; data?: { channel?: string } };
+        if (frame.event !== "pusher:subscribe") return;
+        subscribed = frame.data?.channel === "private-users.1.notifications";
+        socket.send(JSON.stringify({ event: "pusher_internal:subscription_succeeded", channel: frame.data?.channel, data: "{}" }));
+      });
+      socket.send(JSON.stringify({ event: "pusher:connection_established", data: JSON.stringify({ socket_id: "123.456", activity_timeout: 30 }) }));
+    });
+  }
   const makeSession = (type: FocusSessionType, uuid?: string, paused = false, remaining?: number) => {
     const duration = (type === "focus" ? settings.focus_minutes : type === "short_break" ? settings.short_break_minutes : settings.long_break_minutes) * 60;
     const task = tasks.find((item) => item.uuid === uuid);
@@ -90,7 +106,11 @@ async function mockFocus(page: Page, options: ApiOptions = {}) {
     if (hold) await hold;
     let data: unknown = null;
     if (path === "/auth/me") data = { id: 1, uuid: "user", first_name: "Ada", last_name: "Lovelace", email: "ada@example.com", username: "ada", status: "active", font_family: "manrope" };
-    else if (path === "/notifications") data = { current_page: 1, data: [], last_page: 1, per_page: 15, total: 0 };
+    else if (path === "/broadcasting/auth") {
+      await route.fulfill({ json: { auth: "test-key:signature" } });
+      return;
+    }
+    else if (path === "/notifications") data = { current_page: 1, data: notices, last_page: 1, per_page: 15, total: notices.length };
     else if (path === "/focus") {
       if (!seeded) {
         seeded = true;
@@ -160,6 +180,12 @@ async function mockFocus(page: Page, options: ApiOptions = {}) {
     },
     currentSession: () => active,
     entries: () => journal,
+    subscribed: () => subscribed,
+    deliverReminder: (id: string) => {
+      notices.push({ id, type: "App\\Notifications\\CalendarPlanReminder", data: { title: "Meet the team", plan_uuid: "test-plan", date: "2026-10-07", time: "14:30", timezone: "Asia/Manila" }, read_at: null, created_at: iso() });
+      const frame = JSON.stringify({ event: "calendar.plan-reminder.delivered", channel: "private-users.1.notifications", data: JSON.stringify({ notification_id: id }) });
+      sockets.at(-1)!.send(frame);
+    },
     expire: async () => {
       await page.clock.runFor(1000);
       const session = active!;
@@ -171,7 +197,7 @@ async function mockFocus(page: Page, options: ApiOptions = {}) {
       await page.clock.runFor(1000);
       const target = new Date(active!.ends_at!).getTime() + 1000;
       virtualNow = target;
-      await page.clock.pauseAt(await page.evaluate(() => Date.now()) + 10);
+      await page.clock.pauseAt(await page.evaluate(() => Date.now()) + 1000);
       await page.clock.setSystemTime(target);
       const response = page.waitForResponse((item) => new URL(item.url()).pathname === "/api-test/v1/focus");
       await page.evaluate(() => window.dispatchEvent(new Event("focus")));
@@ -190,10 +216,459 @@ async function openFocus(page: Page) {
 }
 
 async function completionDialog(page: Page) {
-  const dialog = page.getByRole("dialog", { name: /^(Focus session|Break) complete$/ });
+  const dialog = page.getByRole("dialog", { name: /^(Focus session|Break) complete$/ }).and(page.locator('[data-slot="dialog-content"]'));
   await expect(dialog).toBeVisible();
   await expect(dialog).toHaveCSS("opacity", "1");
   return dialog;
+}
+
+async function openJournalFromFocus(page: Page) {
+  const navigation = page.getByRole("link", { name: "Journal", exact: true });
+  if (!await navigation.isVisible()) await page.getByRole("button", { name: "Open navigation", exact: true }).click();
+  await page.getByRole("link", { name: "Journal", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Journal", exact: true })).toBeVisible();
+}
+
+test("a running timer follows navigation and compact controls preserve the session", async ({ page }) => {
+  const api = await mockFocus(page, { active: { type: "focus", remaining: 900 } });
+  await openFocus(page);
+  const uuid = api.currentSession()!.uuid;
+  await expect(page.getByRole("button", { name: "Settings", exact: true })).toBeEnabled();
+  await openJournalFromFocus(page);
+  const bar = page.getByRole("region", { name: "Focus session", exact: true });
+  await expect(bar.getByText(initialTasks[0].title, { exact: true })).toBeVisible();
+  const before = await bar.getByRole("timer").textContent();
+  await page.clock.runFor(5000);
+  await expect(bar.getByRole("timer")).not.toHaveText(before!);
+  api.failNext(`/focus/sessions/${uuid}/pause`, "POST");
+  await bar.getByRole("button", { name: "Pause", exact: true }).click();
+  await expect(bar.getByText("Request failed. Try again.")).toBeVisible();
+  await bar.getByRole("button", { name: "Try again", exact: true }).click();
+  await expect(bar.getByRole("button", { name: "Resume", exact: true })).toBeVisible();
+  const paused = await bar.getByRole("timer").textContent();
+  await page.clock.runFor(5000);
+  await expect(bar.getByRole("timer")).toHaveText(paused!);
+  await bar.getByRole("button", { name: "Resume", exact: true }).click();
+  await expect(bar.getByRole("button", { name: "Pause", exact: true })).toBeVisible();
+  await bar.getByRole("link", { name: "Open Focus", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Focus Timer", exact: true })).toBeVisible();
+  await expect(bar).toHaveCount(0);
+  expect(api.currentSession()!.uuid).toBe(uuid);
+  expect(api.calls("/focus/sessions", "POST")).toHaveLength(0);
+});
+
+test("a direct visit and reload on another page recover the running or paused timer", async ({ page }) => {
+  const api = await mockFocus(page, { active: { type: "focus", remaining: 900 } });
+  await page.goto("/journal");
+  const bar = page.getByRole("region", { name: "Focus session", exact: true });
+  await expect(bar.getByRole("button", { name: "Pause", exact: true })).toBeVisible();
+  const uuid = api.currentSession()!.uuid;
+  await page.reload();
+  await expect(bar.getByRole("button", { name: "Pause", exact: true })).toBeVisible();
+  await bar.getByRole("button", { name: "Pause", exact: true }).click();
+  await expect(bar.getByRole("button", { name: "Resume", exact: true })).toBeVisible();
+  const paused = await bar.getByRole("timer").textContent();
+  await page.reload();
+  await expect(bar.getByRole("button", { name: "Resume", exact: true })).toBeVisible();
+  await expect(bar.getByRole("timer")).toHaveText(paused!);
+  expect(api.currentSession()!.uuid).toBe(uuid);
+});
+
+test("completion away from Focus preserves form focus and offers one notice and review", async ({ page }) => {
+  const api = await mockFocus(page, { active: { type: "focus" } });
+  await openFocus(page);
+  const uuid = api.currentSession()!.uuid;
+  await openJournalFromFocus(page);
+  const title = page.getByRole("textbox", { name: "Journal entry title", exact: true });
+  await title.fill("A draft I am still writing");
+  await api.expire();
+  const bar = page.getByRole("region", { name: "Focus session", exact: true });
+  await expect(bar.getByText("Complete", { exact: true })).toBeVisible();
+  await expect(title).toHaveValue("A draft I am still writing");
+  await expect(title).toBeFocused();
+  await expect(page.getByRole("dialog", { name: "Focus session complete" }).and(page.locator('[data-slot="dialog-content"]'))).toHaveCount(0);
+  const notice = page.locator('[data-slot="toast-title"]').filter({ hasText: /^Focus session complete$/ });
+  await expect(notice).toHaveCount(1);
+  await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+  await expect(bar.getByRole("link", { name: "Review session", exact: true })).toBeVisible();
+  expect(api.calls(`/focus/sessions/${uuid}/complete`, "POST")).toHaveLength(1);
+  await expect(notice).toHaveCount(1);
+  await bar.getByRole("link", { name: "Review session", exact: true }).click();
+  const dialog = await completionDialog(page);
+  await expect(dialog.getByLabel("Reflection note", { exact: false })).toBeVisible();
+  await dialog.getByRole("button", { name: "Finish for now", exact: true }).click();
+  await expect(dialog).toBeHidden();
+  await expect(page.locator("#focus-primary-action")).toBeFocused();
+});
+
+test("navigation stays available while completion is pending", async ({ page }) => {
+  const api = await mockFocus(page, { active: { type: "focus" } });
+  await openFocus(page);
+  const uuid = api.currentSession()!.uuid;
+  const release = api.holdNext(`/focus/sessions/${uuid}/complete`, "POST");
+  await api.expire();
+  await expect(page.getByRole("button", { name: "Pause", exact: true })).toBeDisabled();
+  await openJournalFromFocus(page);
+  const bar = page.getByRole("region", { name: "Focus session", exact: true });
+  await expect(bar.getByText("Finishing…", { exact: true })).toBeVisible();
+  release();
+  await expect(bar.getByRole("link", { name: "Review session", exact: true })).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "Focus session complete" }).and(page.locator('[data-slot="dialog-content"]'))).toHaveCount(0);
+  expect(api.calls(`/focus/sessions/${uuid}/complete`, "POST")).toHaveLength(1);
+});
+
+test("signing out during completion prevents a late notice or automatic next session", async ({ page }) => {
+  const api = await mockFocus(page, { active: { type: "short_break" }, settings: { ask_before_next_session: false } });
+  await openFocus(page);
+  const uuid = api.currentSession()!.uuid;
+  const release = api.holdNext(`/focus/sessions/${uuid}/complete`, "POST");
+  await api.expire();
+  await expect(page.getByRole("button", { name: "Pause", exact: true })).toBeDisabled();
+  await page.getByRole("button", { name: "Open account menu for Ada Lovelace", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Log out", exact: true }).click();
+  await expect(page).toHaveURL(/\/login$/);
+  release();
+  await page.clock.runFor(1000);
+  expect(api.calls("/focus/sessions", "POST")).toHaveLength(0);
+  await expect(page.locator('[data-slot="toast-title"]').filter({ hasText: /^Break complete$/ })).toHaveCount(0);
+});
+
+test("completion errors can retry from another page without losing the review", async ({ page }) => {
+  const api = await mockFocus(page, { active: { type: "focus" } });
+  await openFocus(page);
+  const uuid = api.currentSession()!.uuid;
+  await openJournalFromFocus(page);
+  api.failNext(`/focus/sessions/${uuid}/complete`, "POST");
+  await api.expire();
+  const bar = page.getByRole("region", { name: "Focus session", exact: true });
+  await expect(bar.getByText("Needs attention", { exact: true })).toBeVisible();
+  await bar.getByRole("button", { name: "Retry completion", exact: true }).click();
+  await expect(bar.getByText("Complete", { exact: true })).toBeVisible();
+  expect(api.calls(`/focus/sessions/${uuid}/complete`, "POST")).toHaveLength(2);
+  await bar.getByRole("link", { name: "Review session", exact: true }).click();
+  await completionDialog(page);
+});
+
+test("automatic next sessions keep running away from Focus", async ({ page }) => {
+  const api = await mockFocus(page, { active: { type: "short_break" }, settings: { ask_before_next_session: false, ask_for_reflection: false } });
+  await openFocus(page);
+  await openJournalFromFocus(page);
+  await api.expire();
+  const bar = page.getByRole("region", { name: "Focus session", exact: true });
+  await expect(bar.getByText(initialTasks[0].title, { exact: true })).toBeVisible();
+  await expect(bar.getByRole("button", { name: "Pause", exact: true })).toBeEnabled();
+  await expect.poll(() => api.calls("/focus/sessions", "POST").length).toBe(1);
+  expect(api.currentSession()!.type).toBe("focus");
+  await bar.getByRole("link", { name: "Open Focus", exact: true }).click();
+  await expect(page.getByRole("dialog", { name: "Break complete" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Pause", exact: true })).toBeEnabled();
+});
+
+test("ambient sound continues across routes and stops while the timer is paused", async ({ page }) => {
+  await page.addInitScript(() => {
+    const counts = { created: 0, closed: 0 };
+    Object.assign(window, { focusAudioCounts: counts });
+    window.AudioContext = new Proxy(window.AudioContext, {
+      construct(target, args) {
+        const context = Reflect.construct(target, args) as AudioContext;
+        counts.created += 1;
+        const close = context.close.bind(context);
+        context.close = () => { counts.closed += 1; return close(); };
+        return context;
+      },
+    });
+  });
+  await mockFocus(page, { active: { type: "focus" }, settings: { ambient_sound: "brown" } });
+  await openFocus(page);
+  const audioCounts = () => page.evaluate(() => (window as typeof window & { focusAudioCounts: { created: number; closed: number } }).focusAudioCounts);
+  await expect.poll(audioCounts).toEqual({ created: 1, closed: 0 });
+  await openJournalFromFocus(page);
+  await expect.poll(audioCounts).toEqual({ created: 1, closed: 0 });
+  const bar = page.getByRole("region", { name: "Focus session", exact: true });
+  await bar.getByRole("button", { name: "Pause", exact: true }).click();
+  await expect.poll(audioCounts).toEqual({ created: 1, closed: 1 });
+  await bar.getByRole("button", { name: "Resume", exact: true }).click();
+  await expect.poll(audioCounts).toEqual({ created: 2, closed: 1 });
+});
+
+test("quiet view keeps essential controls, pauses, and restores keyboard focus and sidebar preference", async ({ page }) => {
+  const api = await mockFocus(page, { active: { type: "focus", remaining: 900 } });
+  await openFocus(page);
+  const uuid = api.currentSession()!.uuid;
+  await page.getByRole("button", { name: "Collapse sidebar", exact: true }).click();
+  await page.getByRole("button", { name: "Quiet view", exact: true }).click();
+  const showApp = page.getByRole("button", { name: "Show app", exact: true });
+  await expect(showApp).toBeFocused();
+  await expect(page.getByRole("complementary", { name: "App sidebar" })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Focus tasks", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("group", { name: "Session type" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Settings", exact: true })).toHaveCount(0);
+  await page.keyboard.press("Control+k");
+  await expect(page.getByRole("combobox", { name: "Search everything", exact: true })).toHaveCount(0);
+  await page.getByLabel("Sound", { exact: true }).click();
+  await expect(page.getByRole("listbox")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("listbox")).toHaveCount(0);
+  await expect(page.locator('[data-slot="select-content"]')).not.toBeVisible();
+  await expect(showApp).toBeVisible();
+  await page.getByLabel("Sound", { exact: true }).click();
+  await page.getByRole("option", { name: "Brown noise", exact: true }).click();
+  await expect.poll(() => api.calls("/focus/settings", "PUT").at(-1)?.body?.ambient_sound).toBe("brown");
+  await expect(page.locator('[data-slot="toast-description"]').filter({ hasText: /^Saved\.$/ })).toBeVisible();
+  await expect(page.locator('[data-slot="select-content"]')).not.toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("button", { name: "Quiet view", exact: true })).toBeFocused();
+  await page.getByRole("button", { name: "Quiet view", exact: true }).click();
+  await page.getByRole("button", { name: "Pause", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Resume", exact: true })).toBeVisible();
+  const paused = await page.getByRole("timer").textContent();
+  await page.clock.runFor(5000);
+  await expect(page.getByRole("timer")).toHaveText(paused!);
+  await expect(showApp).toBeVisible();
+  await page.getByRole("button", { name: "Reset", exact: true }).click();
+  const reset = page.getByRole("alertdialog", { name: "Reset this session?" });
+  await expect(reset).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(reset).toHaveCount(0);
+  await expect(showApp).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("button", { name: "Quiet view", exact: true })).toBeFocused();
+  await expect(page.getByRole("button", { name: "Expand sidebar", exact: true })).toBeVisible();
+  await page.keyboard.press("Control+k");
+  await expect(page.getByRole("combobox", { name: "Search everything", exact: true })).toBeFocused();
+  await page.keyboard.press("Escape");
+  expect(api.currentSession()!.uuid).toBe(uuid);
+  expect(api.calls(`/focus/sessions/${uuid}/cancel`, "POST")).toHaveLength(0);
+});
+
+test("a failed reset in quiet view keeps its confirmation and can retry", async ({ page }) => {
+  const api = await mockFocus(page, { active: { type: "short_break" } });
+  await openFocus(page);
+  const uuid = api.currentSession()!.uuid;
+  await page.getByRole("button", { name: "Quiet view", exact: true }).click();
+  api.failNext(`/focus/sessions/${uuid}/cancel`, "POST");
+  await page.getByRole("button", { name: "Reset", exact: true }).click();
+  const reset = page.getByRole("alertdialog", { name: "Reset this session?" });
+  await reset.getByRole("button", { name: "Reset session", exact: true }).click();
+  await expect(reset.getByText("Request failed. Try again.")).toBeVisible();
+  await expect(page.locator("#focus-exit-quiet")).toBeVisible();
+  await reset.getByRole("button", { name: "Reset session", exact: true }).click();
+  await expect(reset).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Start short break", exact: true })).toBeFocused();
+  expect(api.calls(`/focus/sessions/${uuid}/cancel`, "POST")).toHaveLength(2);
+});
+
+for (const ending of ["reset", "completion"] as const) {
+  test(`quiet view restores the app after ${ending}`, async ({ page }) => {
+    const api = await mockFocus(page, { active: { type: "focus" } });
+    await openFocus(page);
+    await page.getByRole("button", { name: "Quiet view", exact: true }).click();
+    if (ending === "reset") {
+      await page.getByRole("button", { name: "Reset", exact: true }).click();
+      await page.getByRole("alertdialog").getByRole("button", { name: "Reset session", exact: true }).click();
+      await expect(page.getByRole("button", { name: "Start focus", exact: true })).toBeVisible();
+    } else {
+      await api.expire();
+      await completionDialog(page);
+    }
+    await expect(page.getByRole("button", { name: "Show app", exact: true })).toHaveCount(0);
+    await expect(page.locator('#app-desktop-navigation')).toBeVisible();
+  });
+}
+
+test("leaving quiet view through browser navigation or reload keeps the session in the normal view", async ({ page }) => {
+  const api = await mockFocus(page, { active: { type: "focus" } });
+  await page.goto("/journal");
+  await page.getByRole("region", { name: "Focus session", exact: true }).getByRole("link", { name: "Open Focus", exact: true }).click();
+  await page.getByRole("button", { name: "Quiet view", exact: true }).click();
+  const uuid = api.currentSession()!.uuid;
+  await page.goBack();
+  const bar = page.getByRole("region", { name: "Focus session", exact: true });
+  await bar.getByRole("link", { name: "Open Focus", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Show app", exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "Quiet view", exact: true }).click();
+  await page.reload();
+  await expect(page.getByRole("button", { name: "Quiet view", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Show app", exact: true })).toHaveCount(0);
+  expect(api.currentSession()!.uuid).toBe(uuid);
+});
+
+test("quiet view suppresses live reminder toasts while keeping unread updates and the subscription", async ({ page }) => {
+  const api = await mockFocus(page, { active: { type: "focus" }, realtime: true });
+  await openFocus(page);
+  await expect.poll(api.subscribed).toBe(true);
+  api.deliverReminder("first-reminder");
+  await expect(page.getByText("Plan reminder", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Quiet view", exact: true }).click();
+  await expect(page.getByText("Plan reminder", { exact: true })).toHaveCount(0);
+  api.deliverReminder("quiet-reminder");
+  await expect(page.locator('button[aria-label="Notifications, 2 unread"]')).toHaveCount(1);
+  await expect(page.getByText("Plan reminder", { exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "Show app", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Notifications, 2 unread", exact: true })).toBeVisible();
+  await expect(page.getByText("Plan reminder", { exact: true })).toHaveCount(0);
+  expect(api.calls("/broadcasting/auth", "POST")).toHaveLength(1);
+  api.deliverReminder("after-quiet-reminder");
+  await expect(page.getByText("Plan reminder", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Notifications, 3 unread", exact: true })).toBeVisible();
+});
+
+test("idle Focus polling and failed Focus loading do not interrupt other pages", async ({ page }) => {
+  const api = await mockFocus(page);
+  api.failNext("/focus", "GET", 2);
+  await page.goto("/journal");
+  await expect(page.getByRole("textbox", { name: "Journal entry title", exact: true })).toBeVisible();
+  await expect.poll(() => api.calls("/focus", "GET").length).toBe(2);
+  await page.clock.runFor(65000);
+  expect(api.calls("/focus", "GET")).toHaveLength(2);
+  await page.getByRole("link", { name: "Focus", exact: true }).click();
+  await expect(page.getByRole("timer")).toBeVisible();
+});
+
+for (const width of [390, 768, 1440, 1920]) {
+  for (const theme of ["light", "dark"]) {
+    test(`quiet view and compact timer fit ${width}px in ${theme} mode`, async ({ page }, testInfo) => {
+      const height = width === 390 ? 568 : 1000;
+      await page.setViewportSize({ width, height });
+      await page.addInitScript((value) => localStorage.setItem("theme", value), theme);
+      await page.emulateMedia({ reducedMotion: "reduce" });
+      await mockFocus(page, { active: { type: "focus" }, tasks: [{ ...initialTasks[0], title: "Review the detailed research notes and plan the next improvements to the project" }] });
+      await openFocus(page);
+      await page.getByRole("button", { name: "Quiet view", exact: true }).click();
+      const pause = page.getByRole("button", { name: "Pause", exact: true });
+      await pause.scrollIntoViewIfNeeded();
+      await expect(pause).toBeInViewport();
+      expect((await pause.boundingBox())!.height).toBe(36);
+      const sound = page.getByLabel("Sound", { exact: true });
+      await sound.scrollIntoViewIfNeeded();
+      await expect(sound).toBeInViewport();
+      await expect(page.getByRole("button", { name: "Show app", exact: true })).toBeInViewport();
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+      await page.screenshot({ path: testInfo.outputPath(`focus-quiet-${width}-${theme}.png`) });
+      await page.getByRole("button", { name: "Show app", exact: true }).click();
+      await openJournalFromFocus(page);
+      const bar = page.getByRole("region", { name: "Focus session", exact: true });
+      await expect(bar.getByRole("button", { name: "Pause", exact: true })).toBeInViewport();
+      await expect(bar.getByRole("link", { name: "Open Focus", exact: true })).toBeInViewport();
+      expect((await bar.getByText("Review the detailed research notes and plan the next improvements to the project", { exact: true }).boundingBox())!.width).toBeGreaterThan(40);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+      const editor = (await page.getByRole("region", { name: "Journal entry editor", exact: true }).boundingBox())!;
+      expect(editor.y + editor.height).toBeLessThanOrEqual(height);
+      await page.screenshot({ path: testInfo.outputPath(`focus-compact-${width}-${theme}.png`) });
+    });
+  }
+}
+
+async function dismissAnimatedDialog(dialog: Locator) {
+  await expect(dialog).toHaveCSS("opacity", "1");
+  const observed = await dialog.evaluate((popup) => new Promise<{ closing: boolean; overlapping: boolean }>((resolve) => {
+    let closing = false;
+    let overlapping = false;
+    const observer = new MutationObserver((records) => {
+      closing ||= records.some((record) => record.target === popup && record.attributeName === "data-ending-style");
+      overlapping ||= popup.isConnected && document.querySelectorAll('[data-slot="dialog-content"]').length > 1;
+      if (!popup.isConnected) {
+        observer.disconnect();
+        resolve({ closing, overlapping });
+      }
+    });
+    observer.observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ["data-ending-style"] });
+    Array.from(popup.querySelectorAll("button")).find((button) => button.textContent?.trim() === "Cancel")!.click();
+  }));
+  expect(observed.closing).toBe(true);
+  expect(observed.overlapping).toBe(false);
+  await expect(dialog).toHaveCount(0);
+}
+
+for (const kind of ["settings", "task"] as const) {
+  const settings = kind === "settings";
+  const dialogName = settings ? "Timer settings" : "Add focus task";
+  const openerName = settings ? "Settings" : "Add task";
+  const fieldName = settings ? "Focus session" : "Task title";
+  const submitName = settings ? "Save settings" : "Add task";
+  const path = settings ? "/focus/settings" : "/focus/tasks";
+  const method = settings ? "PUT" : "POST";
+
+  test(`${dialogName} animates dismissal, resets drafts, and restores focus`, async ({ page }) => {
+    await mockFocus(page);
+    await page.emulateMedia({ reducedMotion: "no-preference" });
+    await openFocus(page);
+    const opener = page.getByRole("button", { name: openerName, exact: true });
+    const dialog = page.getByRole("dialog", { name: dialogName });
+    await opener.click();
+    const field = dialog.getByLabel(fieldName, { exact: true });
+    await field.fill(settings ? "121" : "");
+    await dialog.getByRole("button", { name: submitName, exact: true }).click();
+    await expect(field).toHaveAttribute("aria-invalid", "true");
+    if (!settings) await field.fill("An unsaved task");
+    await dismissAnimatedDialog(dialog);
+    await expect(opener).toBeFocused();
+
+    for (const dismissal of ["close", "escape", "outside"] as const) {
+      await opener.click();
+      await expect(field).toHaveValue(settings ? "25" : "");
+      await expect(field).toHaveAttribute("aria-invalid", "false");
+      await expect(dialog).toHaveCSS("opacity", "1");
+      if (dismissal === "close") await dialog.getByRole("button", { name: "Close", exact: true }).click();
+      else if (dismissal === "escape") await page.keyboard.press("Escape");
+      else await page.mouse.click(1, 1);
+      await expect(dialog).toHaveCount(0);
+      await expect(opener).toBeFocused();
+    }
+
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await opener.click();
+    await expect(dialog).toHaveCSS("transition-property", "none");
+    await expect(page.locator('[data-slot="dialog-overlay"]')).toHaveCSS("transition-property", "none");
+    await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+    await expect(dialog).toHaveCount(0);
+    await expect(opener).toBeFocused();
+  });
+
+  test(`${dialogName} retains failed drafts and blocks dismissal while submitting`, async ({ page }) => {
+    const api = await mockFocus(page);
+    await openFocus(page);
+    const opener = page.getByRole("button", { name: openerName, exact: true });
+    const dialog = page.getByRole("dialog", { name: dialogName });
+    await opener.click();
+    const value = settings ? "30" : "Read the next chapter";
+    const field = dialog.getByLabel(fieldName, { exact: true });
+    await field.fill(value);
+    api.failNext(path, method);
+    await dialog.getByRole("button", { name: submitName, exact: true }).click();
+    await expect(dialog.getByText("Request failed. Try again.")).toBeVisible();
+    await expect(field).toHaveValue(value);
+    const release = api.holdNext(path, method);
+    await dialog.getByRole("button", { name: submitName, exact: true }).click();
+    await expect(dialog.getByRole("button", { name: "Cancel", exact: true })).toBeDisabled();
+    await expect(dialog.getByRole("button", { name: "Close", exact: true })).toBeDisabled();
+    await page.keyboard.press("Escape");
+    await page.mouse.click(1, 1);
+    await expect(dialog).toBeVisible();
+    release();
+    await expect(dialog).toHaveCount(0);
+    await expect(opener).toBeFocused();
+    await opener.click();
+    await expect(field).toHaveValue(settings ? value : "");
+    await expect(dialog.getByText("Request failed. Try again.")).toHaveCount(0);
+    await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+    await expect(dialog).toHaveCount(0);
+  });
+
+  test(`session completion waits until ${dialogName} finishes closing`, async ({ page }) => {
+    const api = await mockFocus(page, { active: { type: "focus" } });
+    await page.emulateMedia({ reducedMotion: "no-preference" });
+    await openFocus(page);
+    await page.getByRole("button", { name: openerName, exact: true }).click();
+    const dialog = page.getByRole("dialog", { name: dialogName });
+    await expect(dialog).toHaveCSS("opacity", "1");
+    await api.expire();
+    await expect(page.locator("#focus-primary-action")).toHaveText("Start short break");
+    await expect(page.getByRole("dialog", { name: "Focus session complete" })).toHaveCount(0);
+    await dismissAnimatedDialog(dialog);
+    await completionDialog(page);
+    await expect(page.locator('[data-slot="dialog-content"]')).toHaveCount(1);
+  });
 }
 
 test("timer selection and phase controls work with keyboard and show readable daily totals", async ({ page }) => {
@@ -590,7 +1065,7 @@ test("background refresh failures retain the active timer and can retry", async 
   await expect(page.getByText("Focus could not be refreshed", { exact: true })).toBeHidden();
 });
 
-for (const width of [390, 768, 1440]) {
+for (const width of [390, 768, 1440, 1920]) {
   for (const theme of ["light", "dark"]) {
     test(`Focus and settings stay usable at ${width}px in ${theme} mode`, async ({ page }, testInfo) => {
       await page.setViewportSize({ width, height: width === 390 ? 844 : 1000 });
@@ -601,15 +1076,23 @@ for (const width of [390, 768, 1440]) {
       await openFocus(page);
       const start = page.getByRole("button", { name: "Start focus", exact: true });
       const bounds = (await start.boundingBox())!;
-      expect(bounds.height).toBeGreaterThanOrEqual(44);
+      expect(bounds.height).toBe(36);
       expect(bounds.y + bounds.height).toBeLessThanOrEqual(width === 390 ? 844 : 1000);
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+      const unusedWidth = await page.getByRole("heading", { name: "Focus Timer", exact: true }).evaluate((heading) => {
+        const content = heading.closest("header")!.parentElement!;
+        const main = content.parentElement!;
+        const style = getComputedStyle(main);
+        return main.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight) - content.getBoundingClientRect().width;
+      });
+      expect(Math.abs(unusedWidth)).toBeLessThan(1);
       await page.screenshot({ path: testInfo.outputPath(`focus-${width}-${theme}.png`) });
       await page.getByRole("button", { name: "Settings", exact: true }).click();
       const dialog = page.getByRole("dialog", { name: "Timer settings" });
       await expect(dialog).toBeVisible();
+      await expect(dialog).toHaveCSS("opacity", "1");
       const save = (await dialog.getByRole("button", { name: "Save settings", exact: true }).boundingBox())!;
-      expect(save.height).toBeGreaterThanOrEqual(44);
+      expect(save.height).toBe(36);
       expect(save.y + save.height).toBeLessThanOrEqual(width === 390 ? 844 : 1000);
       expect(await dialog.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
       await page.screenshot({ path: testInfo.outputPath(`focus-settings-${width}-${theme}.png`) });
@@ -634,6 +1117,42 @@ for (const width of [390, 768, 1440]) {
       await dialog.getByRole("button", { name: "Save & finish", exact: true }).click();
       await expect(dialog).toBeHidden();
       await expect(page.locator("#focus-primary-action")).toBeFocused();
+    });
+  }
+}
+
+for (const width of [390, 768]) {
+  for (const theme of ["light", "dark"]) {
+    test(`Focus dialogs keep actions visible at ${width}x568 in ${theme} mode`, async ({ page }, testInfo) => {
+      await page.setViewportSize({ width, height: 568 });
+      await page.addInitScript((value) => localStorage.setItem("theme", value), theme);
+      await page.emulateMedia({ reducedMotion: "reduce" });
+      await mockFocus(page);
+      await openFocus(page);
+      for (const settings of [true, false]) {
+        await page.getByRole("button", { name: settings ? "Settings" : "Add task", exact: true }).click();
+        const dialog = page.getByRole("dialog", { name: settings ? "Timer settings" : "Add focus task" });
+        await expect(dialog).toBeVisible();
+        if (!settings) {
+          await dialog.getByRole("tab", { name: "Project task", exact: true }).click();
+          await expect(dialog.getByRole("button", { name: /Draft dashboard layout/ })).toBeVisible();
+        }
+        const submit = dialog.getByRole("button", { name: settings ? "Save settings" : "Add task", exact: true });
+        const bounds = (await submit.boundingBox())!;
+        expect(bounds.y).toBeGreaterThanOrEqual(0);
+        expect(bounds.y + bounds.height).toBeLessThanOrEqual(568);
+        expect(await dialog.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+        if (settings) {
+          const sound = dialog.getByLabel("Ambient sound", { exact: true });
+          await sound.scrollIntoViewIfNeeded();
+          await expect(sound).toBeInViewport();
+          const footer = (await submit.boundingBox())!;
+          expect(footer.y + footer.height).toBeLessThanOrEqual(568);
+        }
+        await page.screenshot({ path: testInfo.outputPath(`focus-${settings ? "settings" : "add-task"}-${width}x568-${theme}.png`) });
+        await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+        await expect(dialog).toHaveCount(0);
+      }
     });
   }
 }

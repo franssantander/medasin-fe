@@ -3,7 +3,7 @@
 import { Bell, BellRing, CalendarDays, Check, ChevronRight, RefreshCw } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardAction, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -34,7 +34,7 @@ function notificationWhen(item: PlanNotification) {
   return `${label}${item.data.time ? ` at ${item.data.time}` : " · All day"}${item.data.timezone ? ` (${item.data.timezone})` : ""}`;
 }
 
-export function PlanNotifications({ userId }: { userId?: number }) {
+export function PlanNotifications({ userId, toastsEnabled = true }: { userId?: number; toastsEnabled?: boolean }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const unreadQuery = useUnreadCount();
@@ -42,6 +42,25 @@ export function PlanNotifications({ userId }: { userId?: number }) {
   const markRead = useMarkNotificationRead();
   const count = unreadQuery.data ?? 0;
   const items = listQuery.data?.pages.flatMap((page) => page.data.data) ?? [];
+  const toastsEnabledRef = useRef(toastsEnabled);
+  const reminderToastsRef = useRef(new Set<string>());
+
+  useEffect(() => {
+    toastsEnabledRef.current = toastsEnabled;
+    if (!toastsEnabled) {
+      for (const id of reminderToastsRef.current) toast.close(id);
+      reminderToastsRef.current.clear();
+    }
+  }, [toastsEnabled]);
+
+  useEffect(() => {
+    const reminders = reminderToastsRef.current;
+    return () => {
+      toastsEnabledRef.current = false;
+      for (const id of reminders) toast.close(id);
+      reminders.clear();
+    };
+  }, []);
 
   const openPlan = async (item: PlanNotification) => {
     const planUuid = item.data.plan_uuid;
@@ -58,6 +77,7 @@ export function PlanNotifications({ userId }: { userId?: number }) {
   };
 
   const showReminderToast = async (notificationId: string) => {
+    if (!toastsEnabledRef.current) return;
     let item: PlanNotification | undefined;
     try {
       const response = await notificationService.list({ per_page: 50 });
@@ -66,6 +86,7 @@ export function PlanNotifications({ userId }: { userId?: number }) {
       // The notification sheet can still load the reminder on demand.
     }
 
+    if (!toastsEnabledRef.current) return;
     const reminder = item;
     const toastId = toast.add({
       type: "info",
@@ -83,7 +104,9 @@ export function PlanNotifications({ userId }: { userId?: number }) {
           }
         },
       },
+      onClose: () => { reminderToastsRef.current.delete(toastId); },
     });
+    reminderToastsRef.current.add(toastId);
   };
 
   usePlanReminderEvents(userId, (id) => { void showReminderToast(id); });

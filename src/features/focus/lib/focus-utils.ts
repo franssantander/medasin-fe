@@ -20,6 +20,10 @@ export function formatFocused(seconds: number) {
     : `${minutes}m`;
 }
 
+export function formatCountdown(seconds: number) {
+  return String(Math.floor(seconds / 60)).padStart(2, "0") + ":" + String(seconds % 60).padStart(2, "0");
+}
+
 export function getNextType(
   completedType: FocusSessionType,
   suggestedNextType: FocusSessionType,

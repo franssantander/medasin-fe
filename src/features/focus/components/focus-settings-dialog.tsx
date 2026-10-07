@@ -4,7 +4,7 @@ import { Loader2, X } from "lucide-react";
 import { useRef, useState } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Field, FieldContent, FieldDescription, FieldError, FieldGroup, FieldLabel, FieldLegend, FieldSet } from "@/components/ui/field";
 import { InputGroup, InputGroupAddon, InputGroupInput, InputGroupText } from "@/components/ui/input-group";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -25,11 +25,13 @@ const numberFields: { key: NumberKey; label: string; max: number; unit: string }
   { key: "sessions_before_long_break", label: "Sessions before long break", max: 12, unit: "sessions" },
 ];
 
-export function FocusSettingsDialog({ open, onOpenChange, settings }: {
+export function FocusSettingsDialog({ open, onOpenChange, onClosed, settings }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onClosed: () => void;
   settings: FocusSettings;
 }) {
+  const [opener] = useState(() => typeof document !== "undefined" && document.activeElement instanceof HTMLElement ? document.activeElement : null);
   const [form, setForm] = useState<SettingsDraft>(() => ({
     ...settings,
     focus_minutes: String(settings.focus_minutes),
@@ -47,6 +49,7 @@ export function FocusSettingsDialog({ open, onOpenChange, settings }: {
   };
   const focusInvalid = () => requestAnimationFrame(() => formRef.current?.querySelector<HTMLElement>("[aria-invalid=true]")?.focus());
   const save = () => {
+    if (update.isPending) return;
     const parsed = focusSettingsSchema.safeParse(form);
     if (!parsed.success) {
       setErrors(Object.fromEntries(parsed.error.issues.map((issue) => [issue.path[0], issue.message])));
@@ -67,27 +70,31 @@ export function FocusSettingsDialog({ open, onOpenChange, settings }: {
   };
 
   return (
-    <Dialog open={open} onOpenChange={(next) => !update.isPending && onOpenChange(next)}>
-      <DialogContent showCloseButton={false} className="max-h-[92dvh] gap-0 overflow-hidden p-0 motion-reduce:transition-none">
-        <form ref={formRef} className="flex min-h-0 flex-col" onSubmit={(event) => { event.preventDefault(); save(); }} noValidate>
-          <DialogHeader className="shrink-0 px-6 py-5">
+    <Dialog
+      open={open}
+      onOpenChange={(next) => !update.isPending && onOpenChange(next)}
+      onOpenChangeComplete={(next) => !next && onClosed()}
+    >
+      <DialogContent showCloseButton={false} finalFocus={() => opener} className="max-h-[92dvh] gap-0 overflow-hidden p-0">
+        <form ref={formRef} className="flex min-h-0 flex-1 flex-col" onSubmit={(event) => { event.preventDefault(); save(); }} noValidate>
+          <DialogHeader className="shrink-0 px-5 py-4 pr-14 sm:px-6 sm:pr-14">
             <DialogTitle>Timer settings</DialogTitle>
             <DialogDescription>Build a rhythm that works for you.</DialogDescription>
           </DialogHeader>
-          <Button type="button" variant="ghost" size="icon" className="absolute top-3 right-3 size-11" aria-label="Close" onClick={() => onOpenChange(false)} disabled={update.isPending}>
+          <DialogClose render={<Button type="button" variant="ghost" size="icon-sm" className="absolute top-4 right-4" />} aria-label="Close" disabled={update.isPending}>
             <X />
-          </Button>
+          </DialogClose>
           <Separator />
-          <FieldGroup className="min-h-0 gap-6 overflow-y-auto px-6 py-5">
+          <FieldGroup className="workspace-list-scrollbar min-h-0 flex-1 gap-5 overflow-y-auto overscroll-contain px-5 py-5 sm:px-6">
             {update.isError && <Alert variant="destructive"><AlertDescription>{update.error.message}</AlertDescription></Alert>}
             <FieldSet className="gap-3">
               <FieldLegend>Session lengths</FieldLegend>
               <FieldDescription>Duration changes apply to your next session.</FieldDescription>
               <FieldGroup className="grid gap-4 sm:grid-cols-2">
                 {numberFields.map((item) => (
-                  <Field key={item.key} data-invalid={Boolean(errors[item.key])} className="gap-2">
+                  <Field key={item.key} data-invalid={Boolean(errors[item.key])} data-disabled={update.isPending} className="gap-2">
                     <FieldLabel htmlFor={"focus-setting-" + item.key}>{item.label}</FieldLabel>
-                    <InputGroup className="min-h-11">
+                    <InputGroup>
                       <InputGroupInput
                         id={"focus-setting-" + item.key}
                         type="number"
@@ -131,21 +138,21 @@ export function FocusSettingsDialog({ open, onOpenChange, settings }: {
               </FieldGroup>
             </FieldSet>
             <Separator />
-            <Field className="gap-2">
+            <Field data-disabled={update.isPending} className="gap-2">
               <FieldLabel htmlFor="focus-setting-sound">Ambient sound</FieldLabel>
               <Select items={ambientOptions} value={form.ambient_sound} onValueChange={(value) => value && change("ambient_sound", value as AmbientSound)} disabled={update.isPending}>
-                <SelectTrigger id="focus-setting-sound" className="min-h-11 w-full"><SelectValue /></SelectTrigger>
+                <SelectTrigger id="focus-setting-sound" className="w-full"><SelectValue /></SelectTrigger>
                 <SelectContent><SelectGroup>
-                  {ambientOptions.map((item) => <SelectItem key={item.value} value={item.value} className="min-h-11">{item.label}</SelectItem>)}
+                  {ambientOptions.map((item) => <SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>)}
                 </SelectGroup></SelectContent>
               </Select>
               <FieldDescription>Sound changes apply immediately and play only while a session is running.</FieldDescription>
             </Field>
           </FieldGroup>
           <Separator />
-          <DialogFooter className="shrink-0 px-6 py-4">
-            <Button type="button" variant="outline" className="min-h-11" onClick={() => onOpenChange(false)} disabled={update.isPending}>Cancel</Button>
-            <Button type="submit" className="min-h-11" disabled={update.isPending}>
+          <DialogFooter className="shrink-0 px-5 py-4 sm:px-6">
+            <DialogClose render={<Button type="button" variant="outline" />} disabled={update.isPending}>Cancel</DialogClose>
+            <Button type="submit" disabled={update.isPending}>
               {update.isPending && <Loader2 data-icon="inline-start" className="animate-spin motion-reduce:animate-none" />}
               {update.isPending ? "Saving…" : "Save settings"}
             </Button>
@@ -167,12 +174,12 @@ function ToggleRow({ id, title, description, checked, onCheckedChange, disabled 
   return (
     <Field orientation="horizontal" data-disabled={disabled} className="justify-between gap-4">
       <FieldContent>
-        <FieldLabel htmlFor={id} className="min-h-11 flex-col items-start justify-center gap-1">
+        <FieldLabel htmlFor={id} className="flex-col items-start gap-1">
           <span>{title}</span>
           <span className="text-sm leading-normal font-normal text-muted-foreground">{description}</span>
         </FieldLabel>
       </FieldContent>
-      <div className="flex min-h-11 shrink-0 items-center">
+      <div className="flex shrink-0 items-center">
         <Switch id={id} checked={checked} onCheckedChange={onCheckedChange} disabled={disabled} />
       </div>
     </Field>

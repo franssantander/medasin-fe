@@ -10,6 +10,9 @@ import { appNavigationItems } from "@/features/app-shell/components/app-navigati
 import { AppSidebar } from "@/features/app-shell/components/app-sidebar";
 import { useSidebar } from "@/features/app-shell/hooks/use-sidebar";
 import { useAppFont } from "@/features/settings/hooks/use-app-font";
+import type { CurrentUser } from "@/features/auth/type";
+import { FocusSessionBar } from "@/features/focus/components/focus-session-bar";
+import { FocusSessionProvider, useFocusView } from "@/features/focus/providers/focus-session-provider";
 
 function AppLoadingSkeleton() {
   return (
@@ -42,32 +45,42 @@ export default function AppLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const pathname = usePathname();
   const { isReady, currentUser } = useRoleGate();
   useAppFont(currentUser?.id, currentUser?.font_family);
+
+  if (!isReady || !currentUser) return <AppLoadingSkeleton />;
+
+  return (
+    <FocusSessionProvider key={currentUser.id}>
+      <AppShell currentUser={currentUser}>{children}</AppShell>
+    </FocusSessionProvider>
+  );
+}
+
+function AppShell({ currentUser, children }: { currentUser: CurrentUser; children: React.ReactNode }) {
+  const pathname = usePathname();
+  const { quiet } = useFocusView();
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const { isCollapsed, toggleSidebar } = useSidebar();
 
-  if (!isReady) {
-    return <AppLoadingSkeleton />;
-  }
-
   return (
     <div id="app-shell" className="flex h-dvh overflow-hidden bg-background">
-      <AppSidebar
+      {!quiet && <AppSidebar
         pathname={pathname}
         isCollapsed={isCollapsed}
         onToggle={toggleSidebar}
         isMobileOpen={isMobileNavOpen}
         onMobileOpenChange={setIsMobileNavOpen}
-      />
+      />}
 
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <AppHeader
           currentUser={currentUser}
           isMobileNavOpen={isMobileNavOpen}
           onOpenMobileNav={() => setIsMobileNavOpen(true)}
+          quiet={quiet}
         />
+        <FocusSessionBar pathname={pathname} />
         <main className="min-h-0 flex-1 overflow-y-auto bg-app-content p-4 sm:p-6">
           {children}
         </main>

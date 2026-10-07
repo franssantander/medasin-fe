@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, RefreshCw, Settings, X } from "lucide-react";
+import { Check, Minimize2, RefreshCw, Settings, X } from "lucide-react";
 import { useState } from "react";
 import PageHeader from "@/components/shared/page-header";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -8,8 +8,8 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useAmbientNoise } from "../hooks/use-ambient-noise";
-import { useFocusSessionFlow } from "../hooks/use-focus-session-flow";
+import { cn } from "@/lib/utils";
+import { useFocusSession, useFocusView } from "../providers/focus-session-provider";
 import { useUpdateFocusSettingsMutation } from "../queries/focus-query";
 import type { AmbientSound } from "../type";
 import { AddFocusTaskDialog } from "./add-focus-task-dialog";
@@ -19,34 +19,36 @@ import { FocusSettingsDialog } from "./focus-settings-dialog";
 import { FocusTaskPanel } from "./focus-task-panel";
 import { FocusTimerCard } from "./focus-timer-card";
 
+type FocusDialogState = "open" | "closing" | null;
+
 export function FocusPage() {
-  const flow = useFocusSessionFlow();
-  const { dashboard, data, activeSession } = flow;
+  const flow = useFocusSession();
+  const { quiet, enterQuiet, exitQuiet } = useFocusView();
+  const { dashboard, data, activeSession, timerSession } = flow;
   const updateSettings = useUpdateFocusSettingsMutation();
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [addOpen, setAddOpen] = useState(false);
+  const [settingsDialog, setSettingsDialog] = useState<FocusDialogState>(null);
+  const [addDialog, setAddDialog] = useState<FocusDialogState>(null);
   const [resetSessionUuid, setResetSessionUuid] = useState<string | null>(null);
   const resetOpen = Boolean(resetSessionUuid && activeSession?.uuid === resetSessionUuid);
   const [requestedSound, setRequestedSound] = useState<AmbientSound>("off");
-  useAmbientNoise(data?.settings.ambient_sound ?? "off", activeSession?.status === "running");
 
   if (dashboard.isLoading && !data) return (
-    <div className="mx-auto grid w-full max-w-6xl gap-5">
+    <div className="grid w-full min-w-0 gap-5">
       <Skeleton className="h-12 w-64" />
-      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
-        <Skeleton className="h-[38rem] rounded-xl" />
+      <div className="grid min-w-0 gap-5 lg:grid-cols-[minmax(0,1fr)_20rem] xl:grid-cols-[minmax(0,1fr)_22rem]">
+        <Skeleton className="h-[34rem] rounded-xl" />
         <Skeleton className="h-96 rounded-xl" />
       </div>
     </div>
   );
   if (!data) return (
-    <Card>
+    <Card className="w-full min-w-0">
       <CardHeader className="justify-items-center">
         <CardTitle>Focus could not be loaded</CardTitle>
         <CardDescription>Check your connection and try again.</CardDescription>
       </CardHeader>
       <CardContent className="items-center">
-        <Button variant="outline" className="min-h-11" onClick={() => dashboard.refetch()}><RefreshCw data-icon="inline-start" />Try again</Button>
+        <Button variant="outline" size="sm" onClick={() => dashboard.refetch()}><RefreshCw data-icon="inline-start" />Try again</Button>
       </CardContent>
     </Card>
   );
@@ -57,18 +59,20 @@ export function FocusPage() {
   };
 
   return (
-    <div className="mx-auto grid w-full max-w-6xl gap-5">
+    <div className={cn("grid w-full min-w-0 gap-5", quiet && "mx-auto min-h-full max-w-2xl content-center py-2 sm:py-6 [&>header]:sticky [&>header]:top-0 [&>header]:z-10 [&>header]:bg-app-content [&>header]:py-2")}>
       <PageHeader
         title="Focus Timer"
-        description="One task. One focused session."
-        action={<Button variant="outline" className="min-h-11" onClick={() => setSettingsOpen(true)} disabled={updateSettings.isPending}><Settings data-icon="inline-start" />Settings</Button>}
+        description={quiet ? "Quiet view. One thing at a time." : "One task. One focused session."}
+        action={quiet
+          ? <Button id="focus-exit-quiet" variant="outline" onClick={exitQuiet}><Minimize2 data-icon="inline-start" />Show app</Button>
+          : <Button variant="outline" onClick={() => setSettingsDialog("open")} disabled={updateSettings.isPending}><Settings data-icon="inline-start" />Settings</Button>}
       />
       {dashboard.isError && (
         <Alert>
           <AlertTitle>Focus could not be refreshed</AlertTitle>
           <AlertDescription className="flex flex-wrap items-center justify-between gap-2">
             <span>Your current timer is still shown. Check your connection and try again.</span>
-            <Button variant="outline" className="min-h-11" onClick={() => dashboard.refetch()} disabled={dashboard.isFetching}>Try again</Button>
+            <Button variant="outline" size="sm" onClick={() => dashboard.refetch()} disabled={dashboard.isFetching}>Try again</Button>
           </AlertDescription>
         </Alert>
       )}
@@ -77,7 +81,7 @@ export function FocusPage() {
           <AlertTitle>Session completion could not be confirmed</AlertTitle>
           <AlertDescription className="flex flex-wrap items-center justify-between gap-2">
             {flow.completionFailure.message}
-            <Button variant="outline" className="min-h-11" onClick={flow.retryCompletion} disabled={flow.pending}>Retry completion</Button>
+            <Button variant="outline" size="sm" onClick={flow.retryCompletion} disabled={flow.pending}>Retry completion</Button>
           </AlertDescription>
         </Alert>
       )}
@@ -85,7 +89,7 @@ export function FocusPage() {
         <Alert variant="destructive">
           <AlertDescription className="flex flex-wrap items-center justify-between gap-2">
             {flow.requestError.message}
-            <Button variant="outline" className="min-h-11" onClick={flow.retryAction} disabled={flow.pending}>Try again</Button>
+            <Button variant="outline" size="sm" onClick={flow.retryAction} disabled={flow.pending}>Try again</Button>
           </AlertDescription>
         </Alert>
       )}
@@ -94,7 +98,7 @@ export function FocusPage() {
           <AlertTitle>Sound could not be changed</AlertTitle>
           <AlertDescription className="flex flex-wrap items-center justify-between gap-2">
             {updateSettings.error.message}
-            <Button variant="outline" className="min-h-11" onClick={() => changeAmbient(requestedSound)} disabled={updateSettings.isPending}>Try again</Button>
+            <Button variant="outline" size="sm" onClick={() => changeAmbient(requestedSound)} disabled={updateSettings.isPending}>Try again</Button>
           </AlertDescription>
         </Alert>
       )}
@@ -104,40 +108,55 @@ export function FocusPage() {
           <AlertTitle>Saved to Journal</AlertTitle>
           <AlertDescription className="flex flex-wrap items-center justify-between gap-2">
             <FocusJournalLink sessionUuid={flow.savedReflectionUuid} />
-            <Button variant="ghost" size="icon" className="size-11" aria-label="Dismiss saved reflection" onClick={flow.dismissSavedReflection}><X /></Button>
+            <Button variant="ghost" size="icon-sm" aria-label="Dismiss saved reflection" onClick={flow.dismissSavedReflection}><X /></Button>
           </AlertDescription>
         </Alert>
       )}
-      <div className="grid min-w-0 items-start gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
+      <div className={cn("grid min-w-0 items-start gap-5", !quiet && "lg:grid-cols-[minmax(0,1fr)_20rem] xl:grid-cols-[minmax(0,1fr)_22rem]")}>
         <FocusTimerCard
-          session={activeSession}
+          session={timerSession}
           phase={flow.idlePhase}
           selectedTask={flow.selectedTask}
           settings={data.settings}
           stats={data.today}
           pending={flow.pending || Boolean(flow.completionFailure)}
           soundPending={updateSettings.isPending}
+          quiet={quiet}
           onPhaseChange={flow.setPhase}
           onStart={flow.startCurrent}
           onPause={() => flow.runAction("pause")}
           onResume={() => flow.runAction("resume")}
           onReset={() => setResetSessionUuid(activeSession?.uuid ?? null)}
           onAmbientChange={changeAmbient}
-          onAddTask={() => setAddOpen(true)}
-          onElapsed={flow.handleElapsed}
+          onAddTask={() => setAddDialog("open")}
+          onEnterQuiet={enterQuiet}
         />
-        <FocusTaskPanel
+        {!quiet && <FocusTaskPanel
           tasks={data.tasks}
           selectedUuid={flow.effectiveSelectedUuid}
-          activeTaskUuid={activeSession?.task?.uuid}
-          sessionActive={activeSession?.type === "focus"}
+          activeTaskUuid={timerSession?.task?.uuid}
+          sessionActive={timerSession?.type === "focus"}
           onSelect={(task) => flow.setSelectedUuid(task.uuid)}
-          onAdd={() => setAddOpen(true)}
-        />
+          onAdd={() => setAddDialog("open")}
+        />}
       </div>
-      {addOpen && <AddFocusTaskDialog onOpenChange={setAddOpen} onCreated={(task) => activeSession?.type !== "focus" && flow.setSelectedUuid(task.uuid)} />}
-      {settingsOpen && <FocusSettingsDialog open onOpenChange={setSettingsOpen} settings={data.settings} />}
-      {flow.completion && !settingsOpen && !addOpen && !resetOpen && (
+      {addDialog && (
+        <AddFocusTaskDialog
+          open={addDialog === "open"}
+          onOpenChange={(open) => setAddDialog(open ? "open" : "closing")}
+          onClosed={() => setAddDialog((current) => current === "closing" ? null : current)}
+          onCreated={(task) => activeSession?.type !== "focus" && flow.setSelectedUuid(task.uuid)}
+        />
+      )}
+      {settingsDialog && (
+        <FocusSettingsDialog
+          open={settingsDialog === "open"}
+          onOpenChange={(open) => setSettingsDialog(open ? "open" : "closing")}
+          onClosed={() => setSettingsDialog((current) => current === "closing" ? null : current)}
+          settings={data.settings}
+        />
+      )}
+      {flow.completion && !settingsDialog && !addDialog && !resetOpen && (
         <FocusCompletionDialog
           key={flow.completion.session.uuid}
           completion={flow.completion}
@@ -159,8 +178,8 @@ export function FocusPage() {
           </AlertDialogHeader>
           {flow.requestError?.action === "cancel" && <Alert variant="destructive"><AlertDescription>{flow.requestError.message}</AlertDescription></Alert>}
           <AlertDialogFooter>
-            <AlertDialogCancel className="min-h-11" disabled={flow.pending}>Keep session</AlertDialogCancel>
-            <AlertDialogAction className="min-h-11" variant="destructive" disabled={flow.pending} onClick={async () => {
+            <AlertDialogCancel disabled={flow.pending}>Keep session</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" disabled={flow.pending} onClick={async () => {
               if (await flow.runAction("cancel")) setResetSessionUuid(null);
             }}>{flow.pending ? "Resetting…" : "Reset session"}</AlertDialogAction>
           </AlertDialogFooter>

@@ -1,4 +1,5 @@
 import { expect, test, type Page, type WebSocketRoute } from "@playwright/test";
+import { idleFocusDashboard } from "@/test-utils/focus-fixture";
 
 const noticeId = "b86b941b-f609-4e33-91ed-95bfb3c49b09";
 const planId = "eb0c597d-76a4-49d5-a47f-65b7c815c519";
@@ -39,6 +40,8 @@ async function fixture(page: Page, useSocket: boolean) {
 
     if (path === "/auth/me") {
       data = { id: 7, first_name: "Test", last_name: "User", username: "tester", roles: [] };
+    } else if (path === "/focus") {
+      data = idleFocusDashboard();
     } else if (path === "/broadcasting/auth") {
       authorizations += 1;
       data = { auth: "test-key:signature" };

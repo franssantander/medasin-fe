@@ -13,7 +13,13 @@ import type {
 const unwrap = <T>(request: Promise<{ data: FocusApiResponse<T> }>) => request.then((response) => response.data);
 
 export const focusService = {
-  dashboard: (timezone: string) => unwrap(axiosClient.get<FocusApiResponse<FocusDashboard>>("/focus", { params: { timezone } })),
+  dashboard: async (timezone: string, signal?: AbortSignal) => {
+    const response = await unwrap(axiosClient.get<FocusApiResponse<FocusDashboard>>("/focus", { params: { timezone }, signal }));
+    if (!response.data?.settings || !Array.isArray(response.data.tasks) || !response.data.today) {
+      throw new Error("Focus returned an incomplete dashboard. Try again.");
+    }
+    return response;
+  },
   tasks: (status: "active" | "completed" | "all") => unwrap(axiosClient.get<FocusApiResponse<FocusTask[]>>("/focus/tasks", { params: { status } })),
   linkableTasks: (search: string, signal?: AbortSignal) => unwrap(axiosClient.get<FocusApiResponse<LinkableFocusTask[]>>("/focus/linkable-tasks", { params: { search }, signal })),
   createTask: (input: { title?: string; board_task_uuid?: string }) => unwrap(axiosClient.post<FocusApiResponse<FocusTask>>("/focus/tasks", input)),

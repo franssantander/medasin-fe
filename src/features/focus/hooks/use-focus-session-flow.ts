@@ -26,9 +26,12 @@ export type FocusCompletion = {
 export type ReflectionAction = "save" | "skip" | "finish";
 type SessionAction = "pause" | "resume" | "cancel";
 
-export function useFocusSessionFlow() {
+export function useFocusSessionFlow({ pollWhenIdle = true, onCompleted }: {
+  pollWhenIdle?: boolean;
+  onCompleted?: (session: FocusSession) => void;
+} = {}) {
   const queryClient = useQueryClient();
-  const dashboard = useFocusDashboardQuery();
+  const dashboard = useFocusDashboardQuery(pollWhenIdle);
   const action = useFocusSessionActionMutation();
   const start = useStartFocusSessionMutation();
   const reflect = useSaveFocusReflectionMutation();
@@ -38,16 +41,19 @@ export function useFocusSessionFlow() {
   const [selectedUuid, setSelectedUuid] = useState<string>();
   const [phase, setPhase] = useState<FocusSessionType | null>(null);
   const [completion, setCompletion] = useState<FocusCompletion | null>(null);
+  const [completingSession, setCompletingSession] = useState<FocusSession | null>(null);
   const [completionFailure, setCompletionFailure] = useState<{ session: FocusSession; message: string } | null>(null);
   const [savedReflectionUuid, setSavedReflectionUuid] = useState<string | null>(null);
   const [requestError, setRequestError] = useState<{ message: string; action: SessionAction | "start" } | null>(null);
   const [busy, setBusy] = useState(false);
+  const mountedRef = useRef(true);
   const interactionRef = useRef(false);
   const completionAttemptRef = useRef<string | null>(null);
   const completionInFlightRef = useRef(false);
   const cancellingRef = useRef<string | null>(null);
   const observedRef = useRef<{ session: FocusSession; offset: number } | null>(null);
   const elapsedRef = useRef<(session: FocusSession) => Promise<void>>(async () => undefined);
+  const onCompletedRef = useRef(onCompleted);
   const data = dashboard.data?.data;
   const activeSession = data?.active_session ?? null;
   const effectiveSelectedUuid = activeSession?.task?.uuid ?? getActiveTaskUuid(data?.tasks ?? [], selectedUuid);
@@ -55,11 +61,17 @@ export function useFocusSessionFlow() {
   const idlePhase = phase ?? data?.suggested_next_type ?? "focus";
   const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
 
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
+
   const readDashboard = useCallback(() =>
     queryClient.getQueryData<FocusApiResponse<FocusDashboard>>(focusKeys.dashboard(timezone))?.data,
   [queryClient, timezone]);
 
   const startNext = useCallback(async (current: FocusCompletion) => {
+    if (!mountedRef.current) return;
     const latest = readDashboard();
     const taskUuid = getActiveTaskUuid(latest?.tasks ?? [], current.session.task?.uuid ?? selectedUuid);
     if (current.nextType === "focus" && !taskUuid) {
@@ -81,11 +93,13 @@ export function useFocusSessionFlow() {
     completionInFlightRef.current = true;
     completionAttemptRef.current = session.uuid;
     setBusy(true);
+    setCompletingSession(session);
     setCompletionFailure(null);
     setRequestError(null);
     setSavedReflectionUuid(null);
     try {
       const response = await act({ uuid: session.uuid, action: "complete" });
+      if (!mountedRef.current) return;
       const latest = readDashboard();
       const nextType = getNextType(session.type, latest?.suggested_next_type ?? "short_break");
       const reflectionEnabled = session.type === "focus" && Boolean(latest?.settings.ask_for_reflection);
@@ -101,16 +115,19 @@ export function useFocusSessionFlow() {
       if (session.type === "focus") setSelectedUuid(session.task?.uuid);
       setPhase(nextType);
       setCompletion(current);
+      onCompletedRef.current?.(response.data);
       if (!current.askBeforeNext && current.reflectionResolved) await startNext(current);
     } catch (error) {
       setCompletionFailure({ session, message: parseApiError(error).message });
     } finally {
       completionInFlightRef.current = false;
+      setCompletingSession(null);
       setBusy(false);
     }
   }, [act, readDashboard, startNext]);
 
   useEffect(() => { elapsedRef.current = handleElapsed; }, [handleElapsed]);
+  useEffect(() => { onCompletedRef.current = onCompleted; }, [onCompleted]);
 
   // A dashboard refresh can reconcile an expired session before the timer's next tick.
   useEffect(() => {
@@ -132,9 +149,18 @@ export function useFocusSessionFlow() {
 
   const refetch = dashboard.refetch;
   useEffect(() => {
-    const refresh = () => void refetch();
+    if (pollWhenIdle) void refetch({ cancelRefetch: false });
+  }, [pollWhenIdle, refetch]);
+  useEffect(() => {
+    const refresh = () => {
+      if (!document.hidden) void refetch({ cancelRefetch: false });
+    };
     window.addEventListener("focus", refresh);
-    return () => window.removeEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+    };
   }, [refetch]);
 
   const startCurrent = async () => {
@@ -185,6 +211,7 @@ export function useFocusSessionFlow() {
     try {
       if (intent !== "skip" && !current.reflectionSaved && (mood || note)) {
         const response = await saveReflection({ uuid: current.session.uuid, mood, note });
+        if (!mountedRef.current) return;
         current = { ...current, session: response.data, reflectionSaved: true };
         setSavedReflectionUuid(current.session.uuid);
       }
@@ -214,6 +241,7 @@ export function useFocusSessionFlow() {
 
   return {
     dashboard, data, activeSession, selectedTask, effectiveSelectedUuid, idlePhase,
+    timerSession: activeSession ?? completingSession ?? completionFailure?.session ?? null,
     completion, completionFailure, requestError, savedReflectionUuid,
     pending: busy || action.isPending || start.isPending || reflect.isPending,
     setSelectedUuid, setPhase, startCurrent, runAction, handleElapsed, resolveReflection, continueSession,

@@ -6,7 +6,7 @@ export function LettersPage({
   initialLetterUuid?: string;
 }) {
   return (
-    <div className="h-[calc(100dvh-5.5rem)] min-h-0 min-w-0 overflow-hidden bg-background sm:h-[calc(100dvh-6.5rem)]">
+    <div className="h-full min-h-0 min-w-0 overflow-hidden bg-background">
       <LetterWorkspace initialLetterUuid={initialLetterUuid} />
     </div>
   );

@@ -33,7 +33,14 @@ export function useFocusTimer(session: FocusSession | null, onElapsed: (session:
     };
     tick();
     const interval = window.setInterval(tick, 250);
-    return () => window.clearInterval(interval);
+    const refresh = () => { if (!document.hidden) tick(); };
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+    };
   }, [session]);
 
   const remaining = getRemaining(session, now);

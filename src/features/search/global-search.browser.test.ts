@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { idleFocusDashboard } from "@/test-utils/focus-fixture";
 
 type SearchType =
   | "project"
@@ -86,6 +87,8 @@ async function fixture(page: Page, initialGroups: SearchGroup[] = defaultGroups)
         username: `tester-${userId}`,
         email: `tester-${userId}@example.com`,
       };
+    } else if (path === "/focus") {
+      data = idleFocusDashboard();
     } else if (path === "/notifications") {
       data = { current_page: 1, data: [], last_page: 1, per_page: 15, total: 0 };
     } else if (path === `/project/${projectUuid}`) {

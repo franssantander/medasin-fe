@@ -26,11 +26,13 @@ import { GlobalSearch } from "@/features/search/global-search";
 import type { CurrentUser } from "@/features/auth/type";
 import { UserAvatar } from "@/features/profile/components/user-avatar";
 import { useProfileAccountPending } from "@/features/profile/queries/profile-query";
+import { cn } from "@/lib/utils";
 
 type AppHeaderProps = {
   currentUser?: CurrentUser;
   isMobileNavOpen: boolean;
   onOpenMobileNav: () => void;
+  quiet: boolean;
 };
 
 function ProfileMenu({ user }: { user?: CurrentUser }) {
@@ -108,9 +110,10 @@ export function AppHeader({
   currentUser,
   isMobileNavOpen,
   onOpenMobileNav,
+  quiet,
 }: AppHeaderProps) {
   return (
-    <header className="relative z-20 flex h-14 shrink-0 items-center gap-2 border-b border-border bg-background px-2 sm:px-6">
+    <header inert={quiet} aria-hidden={quiet || undefined} className={cn("relative z-20 flex h-14 shrink-0 items-center gap-2 border-b border-border bg-background px-2 sm:px-6", quiet && "hidden")}>
       <div className="flex min-w-0 flex-1 items-center gap-2">
         <Button
           id="app-navigation-trigger"
@@ -142,10 +145,10 @@ export function AppHeader({
             Medasin
           </span>
         </Link>
-        <GlobalSearch userId={currentUser?.id} />
+        {!quiet && <GlobalSearch userId={currentUser?.id} />}
       </div>
       <div className="flex shrink-0 items-center justify-end gap-3">
-        <PlanNotifications userId={currentUser?.id} />
+        <PlanNotifications userId={currentUser?.id} toastsEnabled={!quiet} />
         <ProfileMenu user={currentUser} />
       </div>
     </header>
