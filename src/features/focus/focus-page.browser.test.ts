@@ -101,8 +101,10 @@ async function mockFocus(page: Page, options: ApiOptions = {}) {
       await route.fulfill({ status: 500, json: { status: 500, message: "Request failed. Try again." } });
       return;
     }
-    const hold = holds.get(key);
-    holds.delete(key);
+    const detailsKey = key + "?per_page=50";
+    const holdKey = path === "/notifications" && url.searchParams.get("per_page") === "50" && holds.has(detailsKey) ? detailsKey : key;
+    const hold = holds.get(holdKey);
+    holds.delete(holdKey);
     if (hold) await hold;
     let data: unknown = null;
     if (path === "/auth/me") data = { id: 1, uuid: "user", first_name: "Ada", last_name: "Lovelace", email: "ada@example.com", username: "ada", status: "active", font_family: "manrope" };
@@ -511,6 +513,25 @@ test("quiet view suppresses live reminder toasts while keeping unread updates an
   api.deliverReminder("after-quiet-reminder");
   await expect(page.getByText("Plan reminder", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Notifications, 3 unread", exact: true })).toBeVisible();
+});
+
+test("a reminder lookup started before quiet view does not replay after leaving it", async ({ page }) => {
+  const api = await mockFocus(page, { active: { type: "focus" }, realtime: true });
+  await openFocus(page);
+  await expect.poll(api.subscribed).toBe(true);
+  const release = api.holdNext("/notifications?per_page=50", "GET");
+  api.deliverReminder("pending-reminder");
+  await expect.poll(() => api.calls("/notifications", "GET").filter((call) => call.params.per_page === "50").length).toBe(1);
+  await page.getByRole("button", { name: "Quiet view", exact: true }).click();
+  await page.getByRole("button", { name: "Show app", exact: true }).click();
+  const response = page.waitForResponse((item) => new URL(item.url()).searchParams.get("per_page") === "50");
+  release();
+  await response;
+  await page.clock.runFor(1000);
+  await expect(page.getByText("Plan reminder", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Notifications, 1 unread", exact: true })).toBeVisible();
+  api.deliverReminder("after-pending-reminder");
+  await expect(page.getByText("Plan reminder", { exact: true })).toBeVisible();
 });
 
 test("idle Focus polling and failed Focus loading do not interrupt other pages", async ({ page }) => {

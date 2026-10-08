@@ -1,3 +1,5 @@
+export type NotificationFilter = "all" | "unread";
+
 export type PlanNotification = {
   id: string;
   type: string;
