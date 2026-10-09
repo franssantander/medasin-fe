@@ -17,6 +17,15 @@ function getApiOrigin() {
 const apiOrigin = getApiOrigin();
 
 const nextConfig: NextConfig = {
+  async redirects() {
+    return [
+      {
+        source: "/settings",
+        destination: "/settings/preferences",
+        permanent: false,
+      },
+    ];
+  },
   async rewrites() {
     if (!apiOrigin) return [];
 

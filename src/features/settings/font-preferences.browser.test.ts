@@ -167,7 +167,7 @@ for (const failSave of [false, true]) {
     store.failSave = failSave;
     await mockPreferences(page.context(), store);
     await page.goto("/home");
-    await expect(page.getByRole("heading", { name: "Home", exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Welcome, Test.", level: 1, exact: true })).toBeVisible();
     await page.goto("/settings/preferences");
     await expectAppFont(page, "manrope");
     const release = deferSave(store);

@@ -132,6 +132,37 @@ html[data-app-font="inter"] {
   --sidebar-ring: oklch(0.556 0 0);
 }
 
+.home-welcome-mark,
+.home-welcome-art::before {
+  background: var(--background);
+}
+
+.home-welcome-art::before,
+.home-welcome-art::after {
+  position: absolute;
+  content: "";
+  pointer-events: none;
+}
+
+.home-welcome-art::before {
+  inset: 1.25rem;
+  border-radius: 46% 54% 60% 40% / 43% 42% 58% 57%;
+  transform: rotate(-12deg);
+}
+
+.home-welcome-art::after {
+  inset: 0.25rem;
+  border: 1px solid color-mix(in oklab, var(--primary) 25%, transparent);
+  border-radius: 55% 45% 47% 53% / 49% 58% 42% 51%;
+  transform: rotate(12deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-workspace [data-slot="skeleton"] {
+    animation: none;
+  }
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

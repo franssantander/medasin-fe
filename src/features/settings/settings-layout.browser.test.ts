@@ -118,6 +118,29 @@ async function expectNoHorizontalOverflow(page: Page) {
   }
 }
 
+test("Settings redirects before rendering and opens from app navigation without runtime errors", async ({ page }) => {
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  await fixture(page, { items: [] });
+
+  const response = await page.request.get("/settings", {
+    headers: { RSC: "1" },
+  });
+  expect(response.ok()).toBe(true);
+  expect(new URL(response.url()).pathname).toBe("/settings/preferences");
+
+  await page.goto("/settings");
+  await expect(page).toHaveURL(/\/settings\/preferences$/);
+  await expect(page.getByRole("heading", { name: "Appearance" })).toBeVisible();
+
+  await page.getByRole("navigation", { name: "Settings navigation" }).getByRole("link", { name: "Trash" }).click();
+  await expect(page.getByRole("heading", { name: "Trash", exact: true })).toBeVisible();
+  await page.getByRole("navigation", { name: "Main navigation" }).getByRole("link", { name: "Settings", exact: true }).click();
+  await expect(page).toHaveURL(/\/settings\/preferences$/);
+  await expect(page.getByRole("heading", { name: "Appearance" })).toBeVisible();
+  expect(pageErrors).toEqual([]);
+});
+
 test("Preferences cards fill the available height with expanded and collapsed app navigation", async ({ page }, testInfo) => {
   await fixture(page);
   await page.goto("/settings");
