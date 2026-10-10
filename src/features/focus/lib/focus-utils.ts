@@ -1,9 +1,45 @@
+import { Brain, Coffee, Sofa, type LucideIcon } from "lucide-react";
 import type { AmbientSound, FocusSessionType, FocusTask } from "../type";
 
 export const phaseLabels: Record<FocusSessionType, string> = {
   focus: "Focus",
   short_break: "Short break",
   long_break: "Long break",
+};
+
+// Static class strings so Tailwind can see every phase tint.
+export const phaseMeta: Record<FocusSessionType, {
+  icon: LucideIcon;
+  text: string;
+  dot: string;
+  chip: string;
+  wash: string;
+  accent: string;
+}> = {
+  focus: {
+    icon: Brain,
+    text: "text-orange-600 dark:text-orange-400",
+    dot: "bg-orange-500",
+    chip: "bg-orange-500/10 text-orange-600 dark:bg-orange-400/15 dark:text-orange-400",
+    wash: "bg-linear-to-b from-orange-500/[0.06] to-transparent to-60% dark:from-orange-400/[0.08]",
+    accent: "before:bg-orange-500",
+  },
+  short_break: {
+    icon: Coffee,
+    text: "text-emerald-600 dark:text-emerald-400",
+    dot: "bg-emerald-500",
+    chip: "bg-emerald-500/10 text-emerald-600 dark:bg-emerald-400/15 dark:text-emerald-400",
+    wash: "bg-linear-to-b from-emerald-500/[0.06] to-transparent to-60% dark:from-emerald-400/[0.08]",
+    accent: "before:bg-emerald-500",
+  },
+  long_break: {
+    icon: Sofa,
+    text: "text-sky-600 dark:text-sky-400",
+    dot: "bg-sky-500",
+    chip: "bg-sky-500/10 text-sky-600 dark:bg-sky-400/15 dark:text-sky-400",
+    wash: "bg-linear-to-b from-sky-500/[0.06] to-transparent to-60% dark:from-sky-400/[0.08]",
+    accent: "before:bg-sky-500",
+  },
 };
 
 export const ambientOptions: { value: AmbientSound; label: string }[] = [
@@ -35,4 +71,19 @@ export function getNextType(
 export function getActiveTaskUuid(tasks: FocusTask[], preferred?: string) {
   return tasks.find((task) => task.uuid === preferred && !task.completed_at)?.uuid
     ?? tasks.find((task) => !task.completed_at)?.uuid;
+}
+
+export function phaseMinutes(settings: { focus_minutes: number; short_break_minutes: number; long_break_minutes: number }): Record<FocusSessionType, number> {
+  return {
+    focus: settings.focus_minutes,
+    short_break: settings.short_break_minutes,
+    long_break: settings.long_break_minutes,
+  };
+}
+
+// Completed focus sessions in the current long-break cycle (1-based round of the next focus session).
+export function getRoundProgress(completed: number, perCycle: number, suggestedNext: FocusSessionType) {
+  const size = Math.max(1, perCycle);
+  const filled = suggestedNext === "long_break" ? size : completed % size;
+  return { size, filled, round: Math.min(size, filled + 1) };
 }

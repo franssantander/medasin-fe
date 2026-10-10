@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, Circle, CircleCheck, KanbanSquare, MoreHorizontal, Plus, RotateCcw, Trash2 } from "lucide-react";
+import { Check, Circle, CircleCheck, KanbanSquare, MoreHorizontal, Plus, RotateCcw, Timer, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -11,6 +11,7 @@ import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/u
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
+import { phaseMeta } from "../lib/focus-utils";
 import { useDeleteFocusTaskMutation, useFocusTasksQuery, useUpdateFocusTaskMutation } from "../queries/focus-query";
 import type { FocusTask } from "../type";
 
@@ -31,7 +32,7 @@ export function FocusTaskPanel({ tasks, selectedUuid, activeTaskUuid, sessionAct
   const shown = filter === "active" ? tasks : completed.data?.data ?? [];
 
   return (
-    <Card className="min-w-0 gap-4 [--card-spacing:--spacing(5)] lg:max-h-[42rem]" aria-label="Focus tasks">
+    <Card className="min-w-0 gap-4 [--card-spacing:--spacing(5)] lg:sticky lg:top-4 lg:max-h-[42rem]" aria-label="Focus tasks">
       <CardHeader>
         <CardTitle><h2>Focus tasks</h2></CardTitle>
         <CardDescription>{tasks.length} active {tasks.length === 1 ? "task" : "tasks"}</CardDescription>
@@ -61,7 +62,7 @@ export function FocusTaskPanel({ tasks, selectedUuid, activeTaskUuid, sessionAct
                     </Alert>
                   )}
                   {shown.length === 0 && !(status === "completed" && completed.isError) && (
-                    <Empty className="px-2 py-8">
+                    <Empty className="rounded-lg border border-dashed px-4 py-8">
                       <EmptyHeader>
                         <EmptyTitle>{status === "active" ? "A clear starting point" : "No completed tasks yet"}</EmptyTitle>
                         <EmptyDescription>{status === "active" ? "Add a task, then give it your attention." : "Finished tasks and their session counts will appear here."}</EmptyDescription>
@@ -73,41 +74,51 @@ export function FocusTaskPanel({ tasks, selectedUuid, activeTaskUuid, sessionAct
                     const current = task.uuid === activeTaskUuid;
                     const source = task.source && [task.source.project, task.source.board].filter(Boolean).join(" / ");
                     return (
-                      <article key={task.uuid} className={cn("flex min-w-0 gap-1 rounded-lg border p-1", selected && "border-primary/30 bg-muted/50")}>
+                      <article
+                        key={task.uuid}
+                        className={cn(
+                          "group/task relative flex min-w-0 items-start gap-1 rounded-lg border bg-card p-1.5 transition-colors hover:bg-muted/40 motion-reduce:transition-none",
+                          selected && cn("border-transparent bg-muted/50 ring-1 ring-border before:absolute before:inset-y-3 before:left-0 before:w-0.5 before:rounded-full", phaseMeta.focus.accent),
+                        )}
+                      >
                         <Button
-                          variant="ghost" size="icon-sm" className="mt-1"
+                          variant="ghost" size="icon-sm"
+                          className={cn("mt-0.5 text-muted-foreground hover:text-foreground", task.completed_at && "text-foreground")}
                           aria-label={(task.completed_at ? "Reopen " : "Complete ") + task.title}
                           disabled={pending}
                           onClick={() => updateTask.mutate({ uuid: task.uuid, input: { completed: !task.completed_at } })}
                         >
                           {task.completed_at ? <CircleCheck /> : <Circle />}
                         </Button>
-                        <div className="min-w-0 flex-1 py-1">
+                        <div className="flex min-w-0 flex-1 flex-col gap-1 py-0.5">
                           {status === "active" ? (
                             <Button
                               variant="ghost"
-                              className="h-auto w-full flex-col items-start gap-1 px-1 py-2 text-left whitespace-normal"
+                              className="h-auto w-full flex-col items-start gap-1 px-1.5 py-1.5 text-left whitespace-normal hover:bg-transparent"
                               aria-label={"Focus on " + task.title}
                               aria-pressed={selected}
                               disabled={sessionActive && !current}
                               onClick={() => onSelect(task)}
                             >
-                              <span className="max-w-full line-clamp-2 break-words leading-snug" title={task.title}>{task.title}</span>
-                              {source && <span className="flex min-w-0 max-w-full items-center gap-1 text-xs font-normal text-muted-foreground"><KanbanSquare aria-hidden="true" /><span className="truncate" title={source}>{source}</span></span>}
+                              <span className="line-clamp-2 max-w-full leading-snug break-words" title={task.title}>{task.title}</span>
+                              {source && <span className="flex max-w-full min-w-0 items-center gap-1 text-xs font-normal text-muted-foreground"><KanbanSquare aria-hidden="true" className="size-3.5" /><span className="truncate" title={source}>{source}</span></span>}
                             </Button>
                           ) : (
-                            <p className="line-clamp-2 px-1 py-2 leading-snug text-muted-foreground line-through" title={task.title}>{task.title}</p>
+                            <p className="line-clamp-2 px-1.5 py-1.5 leading-snug text-muted-foreground line-through" title={task.title}>{task.title}</p>
                           )}
-                          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 px-1 pb-1">
-                            {selected && <Badge variant="secondary">{current ? "Current" : "Selected"}</Badge>}
-                            <span className="text-xs tabular-nums text-muted-foreground">{task.session_count} {task.session_count === 1 ? "session" : "sessions"}</span>
+                          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 px-1.5 pb-1">
+                            <span className="flex items-center gap-1 text-xs text-muted-foreground tabular-nums">
+                              <Timer aria-hidden="true" className="size-3.5" />
+                              {task.session_count} {task.session_count === 1 ? "session" : "sessions"}
+                            </span>
+                            {selected && <Badge variant={current ? "default" : "secondary"}>{current ? "Current" : "Selected"}</Badge>}
                           </div>
                         </div>
                         <DropdownMenu>
-                          <DropdownMenuTrigger render={<Button variant="ghost" size="icon-sm" className="mt-1" />} aria-label={"Actions for " + task.title} disabled={pending}>
+                          <DropdownMenuTrigger render={<Button variant="ghost" size="icon-sm" className="mt-0.5 text-muted-foreground" />} aria-label={"Actions for " + task.title} disabled={pending}>
                             <MoreHorizontal />
                           </DropdownMenuTrigger>
-                          <DropdownMenuContent>
+                          <DropdownMenuContent align="end">
                             <DropdownMenuGroup>
                               <DropdownMenuItem onClick={() => updateTask.mutate({ uuid: task.uuid, input: { completed: !task.completed_at } })}>
                                 {task.completed_at ? <RotateCcw /> : <Check />}{task.completed_at ? "Reopen" : "Complete"}

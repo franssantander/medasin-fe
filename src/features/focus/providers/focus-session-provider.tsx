@@ -4,6 +4,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "@/components/ui/toast";
 import { useAmbientNoise } from "../hooks/use-ambient-noise";
+import { useFocusDocumentTitle } from "../hooks/use-focus-document-title";
 import { useFocusSessionFlow } from "../hooks/use-focus-session-flow";
 import { useFocusTimer } from "../hooks/use-focus-timer";
 import type { FocusSession } from "../type";
@@ -17,8 +18,9 @@ const CountdownContext = createContext<FocusCountdown | null>(null);
 const ViewContext = createContext<FocusView | null>(null);
 
 // Keep the ticking clock below the session provider so only timer consumers update each second.
-function FocusRuntime({ flow, children }: { flow: FocusSessionFlow; children: React.ReactNode }) {
+function FocusRuntime({ flow, pathname, children }: { flow: FocusSessionFlow; pathname: string; children: React.ReactNode }) {
   const countdown = useFocusTimer(flow.timerSession, flow.handleElapsed);
+  useFocusDocumentTitle(flow.activeSession, countdown.remaining, pathname);
   useAmbientNoise(flow.data?.settings.ambient_sound ?? "off", flow.activeSession?.status === "running" && countdown.remaining > 0);
   return <CountdownContext value={countdown}>{children}</CountdownContext>;
 }
@@ -106,7 +108,7 @@ export function FocusSessionProvider({ children }: { children: React.ReactNode }
   return (
     <SessionContext value={flow}>
       <ViewContext value={view}>
-        <FocusRuntime flow={flow}>{children}</FocusRuntime>
+        <FocusRuntime flow={flow} pathname={pathname}>{children}</FocusRuntime>
       </ViewContext>
     </SessionContext>
   );

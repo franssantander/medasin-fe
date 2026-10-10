@@ -1131,7 +1131,7 @@ for (const width of [390, 768, 1440, 1920]) {
       await dialog.getByLabel("Reflection note", { exact: false }).fill("A useful session. I know what to do next.");
       await dialog.getByRole("button", { name: "Calm", exact: true }).click();
       const finish = (await dialog.getByRole("button", { name: "Save & finish", exact: true }).boundingBox())!;
-      expect(finish.height).toBeGreaterThanOrEqual(44);
+      expect(finish.height).toBe(36);
       expect(finish.y + finish.height).toBeLessThanOrEqual(width === 390 ? 844 : 1000);
       expect(await dialog.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
       await page.screenshot({ path: testInfo.outputPath(`focus-reflection-${width}-${theme}.png`) });
@@ -1177,3 +1177,58 @@ for (const width of [390, 768]) {
     });
   }
 }
+
+test("Space starts and pauses the timer only when no control or dialog has focus", async ({ page }) => {
+  const api = await mockFocus(page);
+  await openFocus(page);
+  await page.getByRole("button", { name: "Add task", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Add focus task" });
+  const title = dialog.getByLabel("Task title", { exact: true });
+  await title.press("Space");
+  await expect(title).toHaveValue(" ");
+  await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  expect(api.calls("/focus/sessions", "POST")).toHaveLength(0);
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+  await page.keyboard.press("Space");
+  await expect(page.getByRole("button", { name: "Pause", exact: true })).toBeVisible();
+  expect(api.calls("/focus/sessions", "POST")).toHaveLength(1);
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+  await page.keyboard.press("Space");
+  await expect(page.getByRole("button", { name: "Resume", exact: true })).toBeVisible();
+});
+
+test("settings presets fill durations and steppers stay within limits", async ({ page }) => {
+  const api = await mockFocus(page);
+  await openFocus(page);
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Timer settings" });
+  const presets = dialog.getByRole("group", { name: "Presets" });
+  await expect(presets.getByRole("button", { name: /^Classic/ })).toHaveAttribute("aria-pressed", "true");
+  await presets.getByRole("button", { name: /^Deep work/ }).click();
+  await expect(dialog.getByLabel("Focus session", { exact: true })).toHaveValue("50");
+  await expect(dialog.getByLabel("Short break", { exact: true })).toHaveValue("10");
+  await expect(dialog.getByLabel("Long break", { exact: true })).toHaveValue("30");
+  await expect(dialog.getByLabel("Sessions before long break", { exact: true })).toHaveValue("2");
+  await dialog.getByRole("button", { name: "Increase focus session", exact: true }).click();
+  await expect(dialog.getByLabel("Focus session", { exact: true })).toHaveValue("51");
+  await expect(presets.getByRole("button", { name: /^Deep work/ })).toHaveAttribute("aria-pressed", "false");
+  await dialog.getByLabel("Sessions before long break", { exact: true }).fill("12");
+  await expect(dialog.getByRole("button", { name: "Increase sessions before long break", exact: true })).toBeDisabled();
+  await dialog.getByRole("button", { name: "Save settings", exact: true }).click();
+  await expect(dialog).toBeHidden();
+  expect(api.calls("/focus/settings", "PUT").at(-1)?.body).toMatchObject({ focus_minutes: 51, short_break_minutes: 10, long_break_minutes: 30, sessions_before_long_break: 12 });
+});
+
+test("the browser tab shows the countdown and restores the page title after reset", async ({ page }) => {
+  await mockFocus(page);
+  await openFocus(page);
+  const base = await page.title();
+  await page.getByRole("button", { name: "Start focus", exact: true }).click();
+  await expect(page).toHaveTitle(/^\d{2}:\d{2} · Focus/);
+  await page.getByRole("button", { name: "Pause", exact: true }).click();
+  await expect(page).toHaveTitle(/^⏸ \d{2}:\d{2} · Focus/);
+  await page.getByRole("button", { name: "Reset", exact: true }).click();
+  await page.getByRole("alertdialog", { name: "Reset this session?" }).getByRole("button", { name: "Reset session", exact: true }).click();
+  await expect(page).toHaveTitle(base);
+});

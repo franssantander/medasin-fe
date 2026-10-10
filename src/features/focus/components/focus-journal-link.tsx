@@ -38,7 +38,7 @@ export function FocusJournalLink({ sessionUuid }: { sessionUuid: string }) {
 
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <Button variant="outline" className="min-h-11" onClick={open} disabled={entry.isFetching}>
+      <Button variant="outline" size="sm" onClick={open} disabled={entry.isFetching}>
         {entry.isFetching
           ? <Loader2 data-icon="inline-start" className="animate-spin motion-reduce:animate-none" />
           : <BookOpen data-icon="inline-start" />}
@@ -47,7 +47,7 @@ export function FocusJournalLink({ sessionUuid }: { sessionUuid: string }) {
       {unavailable && (
         <div className="flex flex-wrap items-center gap-x-2 text-sm" role="status">
           <span className="text-muted-foreground">Saved, but this entry could not be opened.</span>
-          <Link href="/journal" className={buttonVariants({ variant: "link", className: "min-h-11" })}>
+          <Link href="/journal" className={buttonVariants({ variant: "link", size: "sm" })}>
             Open Journal
           </Link>
         </div>

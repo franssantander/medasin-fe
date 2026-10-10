@@ -33,11 +33,25 @@ export function FocusPage() {
   const [requestedSound, setRequestedSound] = useState<AmbientSound>("off");
 
   if (dashboard.isLoading && !data) return (
-    <div className="grid w-full min-w-0 gap-5">
-      <Skeleton className="h-12 w-64" />
-      <div className="grid min-w-0 gap-5 lg:grid-cols-[minmax(0,1fr)_20rem] xl:grid-cols-[minmax(0,1fr)_22rem]">
-        <Skeleton className="h-[34rem] rounded-xl" />
-        <Skeleton className="h-96 rounded-xl" />
+    <div className="grid w-full min-w-0 gap-5" role="status" aria-label="Loading Focus">
+      <div className="grid gap-2">
+        <Skeleton className="h-6 w-40" />
+        <Skeleton className="h-4 w-56" />
+      </div>
+      <div className="grid min-w-0 items-start gap-5 lg:grid-cols-[minmax(0,1fr)_20rem] xl:grid-cols-[minmax(0,1fr)_22rem]">
+        <div className="flex flex-col items-center gap-6 rounded-xl p-6 ring-1 ring-foreground/10">
+          <Skeleton className="h-8 w-full" />
+          <Skeleton className="h-11 w-full max-w-md rounded-lg" />
+          <Skeleton className="aspect-square w-full max-w-[min(15rem,42dvh)] rounded-full sm:max-w-[min(18rem,42dvh)]" />
+          <Skeleton className="h-6 w-56" />
+          <Skeleton className="h-9 w-36" />
+        </div>
+        <div className="flex flex-col gap-3 rounded-xl p-5 ring-1 ring-foreground/10">
+          <Skeleton className="h-6 w-32" />
+          <Skeleton className="h-9 w-full" />
+          <Skeleton className="h-16 w-full" />
+          <Skeleton className="h-16 w-full" />
+        </div>
       </div>
     </div>
   );
@@ -59,7 +73,7 @@ export function FocusPage() {
   };
 
   return (
-    <div className={cn("grid w-full min-w-0 gap-5", quiet && "mx-auto min-h-full max-w-2xl content-center py-2 sm:py-6 [&>header]:sticky [&>header]:top-0 [&>header]:z-10 [&>header]:bg-app-content [&>header]:py-2")}>
+    <div className={cn("grid w-full min-w-0 gap-5", quiet && "mx-auto min-h-full max-w-xl content-center py-2 sm:py-6 [&>header]:sticky [&>header]:top-0 [&>header]:z-10 [&>header]:bg-app-content [&>header]:py-2 [&>header]:backdrop-blur-md")}>
       <PageHeader
         title="Focus Timer"
         description={quiet ? "Quiet view. One thing at a time." : "One task. One focused session."}
@@ -119,6 +133,7 @@ export function FocusPage() {
           selectedTask={flow.selectedTask}
           settings={data.settings}
           stats={data.today}
+          suggestedNext={data.suggested_next_type}
           pending={flow.pending || Boolean(flow.completionFailure)}
           soundPending={updateSettings.isPending}
           quiet={quiet}
@@ -162,6 +177,7 @@ export function FocusPage() {
           completion={flow.completion}
           settings={data.settings}
           stats={data.today}
+          suggestedNext={data.suggested_next_type}
           hasActiveTask={data.tasks.length > 0}
           onResolve={flow.resolveReflection}
           onContinue={flow.continueSession}
