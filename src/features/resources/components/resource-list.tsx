@@ -50,7 +50,7 @@ export function ResourceList({
   const linkedResourceQuery = useResourceQuery(initialResourceUuid);
   const query = list.resourcesQuery;
   const showLinkedResource = Boolean(
-    initialResourceUuid && !list.selected && !list.creating && !list.archiving,
+    initialResourceUuid && !list.selected && !list.creating && !list.archiving && !list.deleting,
   );
   const closeLinkedResource = () => router.replace("/resources");
   const selectedTypeLabel = list.type
@@ -244,7 +244,8 @@ export function ResourceList({
             className="workspace-list-scrollbar min-w-0 p-1 lg:min-h-0 lg:flex-1 lg:overflow-x-hidden lg:overflow-y-auto lg:overscroll-contain"
           >
             <ResourceListResults
-              archiveDisabled={list.archiveResource.isPending}
+              archiveDisabled={list.archiveResource.isPending || list.deleteResource.isPending}
+              deleteDisabled={list.archiveResource.isPending || list.deleteResource.isPending}
               hasNextPage={Boolean(query.hasNextPage)}
               isError={query.isError}
               isFetchNextPageError={query.isFetchNextPageError}
@@ -255,6 +256,7 @@ export function ResourceList({
               loadMoreRef={list.loadMoreRef}
               resources={list.resources}
               onArchive={list.setArchiving}
+              onDelete={list.setDeleting}
               onClearFilters={list.clearFilters}
               onCreate={() => list.setCreating(true)}
               onLoadMore={() => {
@@ -334,6 +336,13 @@ export function ResourceList({
           }
         }}
         onConfirm={list.confirmArchive}
+      />
+      <ResourceActionDialog
+        action="delete"
+        resource={list.deleting}
+        isPending={list.deleteResource.isPending}
+        onOpenChange={(open) => { if (!open) list.setDeleting(undefined); }}
+        onConfirm={list.confirmDelete}
       />
     </div>
   );

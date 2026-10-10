@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "@/components/ui/toast";
+import { subscriptionKeys } from "@/features/subscription/queries/subscription-query";
 import { settingsService } from "../services/settings-service";
 import type { TrashFilters } from "../types";
 
@@ -29,10 +30,12 @@ function useTrashMutation(action: "restore" | "delete") {
         client.invalidateQueries({ queryKey: trashKeys.all }),
         client.invalidateQueries({ queryKey: ["areas"] }),
         client.invalidateQueries({ queryKey: ["projects"] }),
+        client.invalidateQueries({ queryKey: ["boards"] }),
         client.invalidateQueries({ queryKey: ["resources"] }),
         client.invalidateQueries({ queryKey: ["notes"] }),
         client.invalidateQueries({ queryKey: ["journal"] }),
         client.invalidateQueries({ queryKey: ["calendar-plans"] }),
+        client.invalidateQueries({ queryKey: subscriptionKeys.all }),
       ]);
       toast.add({ type: "success", description: response.message });
     },

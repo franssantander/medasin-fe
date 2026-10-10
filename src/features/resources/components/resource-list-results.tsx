@@ -16,6 +16,7 @@ import { ResourceListCard } from "./resource-list-card";
 
 type ResourceListResultsProps = {
   archiveDisabled: boolean;
+  deleteDisabled: boolean;
   hasNextPage: boolean;
   isError: boolean;
   isFetchNextPageError: boolean;
@@ -26,6 +27,7 @@ type ResourceListResultsProps = {
   loadMoreRef: RefObject<HTMLDivElement | null>;
   resources: Resource[];
   onArchive: (resource: Resource) => void;
+  onDelete: (resource: Resource) => void;
   onClearFilters: () => void;
   onCreate: () => void;
   onLoadMore: () => void;
@@ -36,6 +38,7 @@ type ResourceListResultsProps = {
 export function ResourceListResults(props: ResourceListResultsProps) {
   const {
     archiveDisabled,
+    deleteDisabled,
     hasNextPage,
     isError,
     isFetchNextPageError,
@@ -46,6 +49,7 @@ export function ResourceListResults(props: ResourceListResultsProps) {
     loadMoreRef,
     resources,
     onArchive,
+    onDelete,
     onClearFilters,
     onCreate,
     onLoadMore,
@@ -141,8 +145,10 @@ export function ResourceListResults(props: ResourceListResultsProps) {
         <ResourceListCard
           key={resource.uuid}
           archiveDisabled={archiveDisabled}
+          deleteDisabled={deleteDisabled}
           resource={resource}
           onArchive={onArchive}
+          onDelete={onDelete}
           onOpen={onOpen}
         />
       ))}

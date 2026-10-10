@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import { TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -12,15 +13,19 @@ import type { Resource } from "../type";
 
 export function ResourceActionDialog({
   resource,
+  action = "archive",
   isPending,
   onConfirm,
   onOpenChange,
 }: {
   resource?: Resource;
+  action?: "archive" | "delete";
   isPending: boolean;
   onConfirm: () => void;
   onOpenChange: (open: boolean) => void;
 }) {
+  const cancelRef = useRef<HTMLButtonElement>(null);
+  const isDelete = action === "delete";
   const linkedAreaNames = resource?.areas.map((area) => area.name) ?? [];
   const linkedProjectNames =
     resource?.projects.map((project) => project.name) ?? [];
@@ -28,17 +33,19 @@ export function ResourceActionDialog({
     linkedAreaNames.length > 0 || linkedProjectNames.length > 0;
 
   return (
-    <Dialog open={Boolean(resource)} onOpenChange={onOpenChange}>
-      <DialogContent className="w-full max-w-lg overflow-x-hidden">
+    <Dialog open={Boolean(resource)} onOpenChange={(open) => { if (!isPending) onOpenChange(open); }}>
+      <DialogContent initialFocus={cancelRef} showCloseButton={!isPending} className="w-full max-w-lg overflow-x-hidden">
         <DialogHeader>
-          <DialogTitle>Archive resource?</DialogTitle>
+          <DialogTitle>{isDelete ? "Delete resource?" : "Archive resource?"}</DialogTitle>
           <DialogDescription>
-            {resource
+            {isDelete
+              ? `“${resource?.title ?? "This resource"}” will move to Trash for 30 days. You can restore it from Settings before it is permanently deleted. Deleting frees a resource slot.`
+              : resource
               ? `“${resource.title}” will be archived and removed from your active resources.`
               : "This resource will be archived."}
           </DialogDescription>
         </DialogHeader>
-        <div
+        {!isDelete && <div
           role="note"
           className="grid gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-900 dark:text-amber-200"
         >
@@ -68,9 +75,11 @@ export function ResourceActionDialog({
             Any project task links will also be removed. Restoring the resource
             later will not reconnect these links.
           </p>
-        </div>
+          <p className="pl-6 text-xs">Archived resources still count toward your plan usage.</p>
+        </div>}
         <DialogFooter>
           <Button
+            ref={cancelRef}
             variant="outline"
             disabled={isPending}
             onClick={() => onOpenChange(false)}
@@ -82,7 +91,7 @@ export function ResourceActionDialog({
             disabled={isPending}
             onClick={onConfirm}
           >
-            {isPending ? "Archiving…" : "Archive resource"}
+            {isPending ? isDelete ? "Deleting…" : "Archiving…" : isDelete ? "Delete resource" : "Archive resource"}
           </Button>
         </DialogFooter>
       </DialogContent>

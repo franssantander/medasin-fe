@@ -167,6 +167,7 @@ export function TaskDetailsSheet({
   const [selectedResourceUuid, setSelectedResourceUuid] = useState<string>();
   const draftRef = useRef(initialDraft);
   const savedDraftRef = useRef(normalizeTaskDraft(initialDraft));
+  const deletedResourceUuidsRef = useRef(new Set<string>());
   const saveTimerRef = useRef<number | undefined>(undefined);
   const saveInFlightRef = useRef<Promise<void> | null>(null);
   const flushAgainRef = useRef(false);
@@ -241,6 +242,11 @@ export function TaskDetailsSheet({
       areaNotesQuery.isError ||
       standaloneNotesQuery.isError);
 
+  const withoutDeletedResources = (input: BoardTaskInput): BoardTaskInput => ({
+    ...input,
+    resource_uuids: input.resource_uuids.filter((uuid) => !deletedResourceUuidsRef.current.has(uuid)),
+  });
+
   const flushDraft = () => {
     if (saveTimerRef.current) {
       window.clearTimeout(saveTimerRef.current);
@@ -254,7 +260,7 @@ export function TaskDetailsSheet({
       return saveInFlightRef.current;
     }
 
-    const snapshot = normalizeTaskDraft(draftRef.current);
+    const snapshot = withoutDeletedResources(normalizeTaskDraft(draftRef.current));
     if (!snapshot.title) {
       if (mountedRef.current) setSaveState("dirty");
       return Promise.resolve();
@@ -266,14 +272,15 @@ export function TaskDetailsSheet({
 
     if (mountedRef.current) setSaveState("saving");
     let succeeded = false;
+    let retryAfterResourceDeletion = false;
     const request = onSave(snapshot)
       .then(() => {
         succeeded = true;
-        savedDraftRef.current = snapshot;
+        savedDraftRef.current = withoutDeletedResources(snapshot);
         if (mountedRef.current) {
           setSaveState(
             taskDraftsMatch(
-              normalizeTaskDraft(draftRef.current),
+              withoutDeletedResources(normalizeTaskDraft(draftRef.current)),
               savedDraftRef.current,
             )
               ? "saved"
@@ -282,13 +289,17 @@ export function TaskDetailsSheet({
         }
       })
       .catch(() => {
-        if (mountedRef.current) setSaveState("error");
+        // Deletion can finish while an older task save is still in flight.
+        // Retry that snapshot's ordinary edits with the current resource links.
+        retryAfterResourceDeletion = snapshot.resource_uuids.some((uuid) => deletedResourceUuidsRef.current.has(uuid));
+        if (retryAfterResourceDeletion) flushAgainRef.current = true;
+        else if (mountedRef.current) setSaveState("error");
       })
       .finally(() => {
         saveInFlightRef.current = null;
         const shouldFlushAgain = flushAgainRef.current;
         flushAgainRef.current = false;
-        if (succeeded && shouldFlushAgain) {
+        if ((succeeded || retryAfterResourceDeletion) && shouldFlushAgain) {
           void flushDraftRef.current();
         }
       });
@@ -356,6 +367,21 @@ export function TaskDetailsSheet({
       return;
     }
     setSelectedResourceUuid(resourceUuid);
+  };
+
+  const handleResourceDeleted = (resourceUuid: string) => {
+    deletedResourceUuidsRef.current.add(resourceUuid);
+    const nextDraft = withoutDeletedResources(draftRef.current);
+    draftRef.current = nextDraft;
+    savedDraftRef.current = withoutDeletedResources(savedDraftRef.current);
+    setDraft(nextDraft);
+    if (saveInFlightRef.current) {
+      flushAgainRef.current = true;
+    } else if (taskDraftsMatch(normalizeTaskDraft(nextDraft), savedDraftRef.current)) {
+      setSaveState("saved");
+    } else {
+      void flushDraftRef.current();
+    }
   };
 
   const cancelPendingAutosave = () => {
@@ -1043,6 +1069,7 @@ export function TaskDetailsSheet({
               <ResourceDetailDialog
                 resource={selectedResourceQuery.data.data}
                 onClose={() => setSelectedResourceUuid(undefined)}
+                onDeleted={handleResourceDeleted}
               />
             )}
           </>

@@ -5,6 +5,9 @@ import { LoaderCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { EMPTY_NOTE_DOCUMENT } from "@/components/ui/note-editor-document";
+import { PlanLimitAlert } from "@/features/subscription/components/plan-limit-alert";
+import { isPlanLimitError } from "@/features/subscription/plan-limit-error";
+import type { ApiError } from "@/lib/axios";
 import { useCreateResource } from "../queries/resource-query";
 import { useResourceFormOptions } from "../hooks/use-resource-form-options";
 import { includeResourceTag, resourceRequestErrors, resourceValidationErrors, type ResourceFormErrors, type ResourceMetadataValues } from "../resource-form-utils";
@@ -35,6 +38,8 @@ export function ResourceFormDialog({ onClose, initialProjectUuids = [] }: { onCl
   const [preview, setPreview] = useState<ResourceImagePreviewValue | null>(null);
   const [discardOpen, setDiscardOpen] = useState(false);
   const [errors, setErrors] = useState<ResourceFormErrors>({});
+  const [quotaError, setQuotaError] = useState<ApiError | null>(null);
+  const quotaAlertRef = useRef<HTMLDivElement>(null);
   const submitting = useRef(false);
   const options = useResourceFormOptions();
   const create = useCreateResource();
@@ -86,6 +91,7 @@ export function ResourceFormDialog({ onClose, initialProjectUuids = [] }: { onCl
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (submitting.current) return;
+    setQuotaError(null);
     const tags = includeResourceTag(draftTag, values.tagIds, values.tagNames, options.tagItems);
     const parsed = resourceSchema.safeParse({
       title: values.title, icon: values.icon, background: values.background,
@@ -99,8 +105,13 @@ export function ResourceFormDialog({ onClose, initialProjectUuids = [] }: { onCl
       await create.mutateAsync({ ...parsed.data, content: toResourceDocument(values.content) });
       setOpen(false);
     } catch (error) {
-      setErrors(resourceRequestErrors(error, "Resource could not be created. Try again."));
-      focusResourceErrors();
+      if (isPlanLimitError(error)) {
+        setQuotaError(error);
+        window.requestAnimationFrame(() => quotaAlertRef.current?.focus());
+      } else {
+        setErrors(resourceRequestErrors(error, "Resource could not be created. Try again."));
+        focusResourceErrors();
+      }
     } finally { submitting.current = false; }
   }
 
@@ -108,7 +119,11 @@ export function ResourceFormDialog({ onClose, initialProjectUuids = [] }: { onCl
     <ResourceDialogLayout open={open} title="New resource" description="Keep notes, links, and files together." icon={values.icon} background={values.background} busy={create.isPending} onRequestClose={close} onClose={onClose}>
       <form id="resource-create-form" noValidate onSubmit={submit} className="flex min-h-0 flex-1 flex-col">
         <ResourceDialogBody
-          summary={Object.keys(errors).length ? <ResourceErrorSummary errors={errors} /> : null}
+          summary={quotaError ? (
+            <div ref={quotaAlertRef} tabIndex={-1}>
+              <PlanLimitAlert error={quotaError} />
+            </div>
+          ) : Object.keys(errors).length ? <ResourceErrorSummary errors={errors} /> : null}
           main={
             <FieldGroup className="gap-6">
               <ResourceTitleField value={values.title} disabled={create.isPending} error={errors.title} onChange={(title) => update({ title })} />

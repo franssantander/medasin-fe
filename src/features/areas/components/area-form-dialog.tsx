@@ -2,7 +2,7 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Check, ImagePlus, Search } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { Button } from "@/components/ui/button";
 import {
@@ -17,6 +17,8 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { ImageCropDialog } from "@/components/ui/image-crop-dialog";
 import { ApiError } from "@/lib/axios";
+import { PlanLimitAlert } from "@/features/subscription/components/plan-limit-alert";
+import { isPlanLimitError } from "@/features/subscription/plan-limit-error";
 import {
   AREA_IMAGE_MAX_SIZE,
   AREA_IMAGE_TYPES,
@@ -71,6 +73,12 @@ export function AreaFormDialog({
   onSubmit: (input: AreaInput) => Promise<void>;
 }) {
   const [iconSearch, setIconSearch] = useState("");
+  const [quotaError, setQuotaError] = useState<ApiError | null>(null);
+  const quotaAlertRef = useRef<HTMLDivElement>(null);
+  const initializedAreaRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (quotaError) quotaAlertRef.current?.focus();
+  }, [quotaError]);
   const [cropSource, setCropSource] = useState<{
     file: File;
     url: string;
@@ -124,7 +132,13 @@ export function AreaFormDialog({
   );
 
   useEffect(() => {
-    if (open) {
+    if (!open) {
+      initializedAreaRef.current = null;
+      return;
+    }
+    const identity = area?.uuid ?? "create";
+    if (initializedAreaRef.current !== identity) {
+      initializedAreaRef.current = identity;
       reset({
         name: area?.name ?? "",
         description: area?.description ?? "",
@@ -136,16 +150,22 @@ export function AreaFormDialog({
   }, [area, open, reset]);
 
   const changeDialogOpen = (nextOpen: boolean) => {
-    if (!nextOpen) setCropSource(null);
+    if (!nextOpen) {
+      setCropSource(null);
+      setQuotaError(null);
+    }
     onOpenChange(nextOpen);
   };
 
   const submit = handleSubmit(async (values) => {
+    setQuotaError(null);
     try {
       await onSubmit(values);
       changeDialogOpen(false);
     } catch (error) {
-      if (error instanceof ApiError && error.validationErrors) {
+      if (isPlanLimitError(error)) {
+        setQuotaError(error);
+      } else if (error instanceof ApiError && error.validationErrors) {
         Object.entries(error.validationErrors).forEach(([field, messages]) => {
           setError(field as keyof AreaFormValues, { message: messages[0] });
         });
@@ -187,6 +207,11 @@ export function AreaFormDialog({
         </DialogHeader>
 
         <form id="area-form" onSubmit={submit} className="grid gap-5">
+          {quotaError && (
+            <div ref={quotaAlertRef} tabIndex={-1}>
+              <PlanLimitAlert error={quotaError} />
+            </div>
+          )}
           <FormField
             label="Background image"
             error={errors.background_image?.message}

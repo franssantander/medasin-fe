@@ -2,7 +2,7 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Check, Inbox, Search } from "lucide-react";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { Button } from "@/components/ui/button";
 import {
@@ -24,6 +24,8 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { useAreasQuery } from "@/features/areas/queries/area-query";
 import { ApiError } from "@/lib/axios";
+import { PlanLimitAlert } from "@/features/subscription/components/plan-limit-alert";
+import { isPlanLimitError } from "@/features/subscription/plan-limit-error";
 import {
   projectSchema,
   type ProjectFormValues,
@@ -70,6 +72,11 @@ export function ProjectFormDialog({
   onSubmit: (input: ProjectInput) => Promise<void>;
 }) {
   const [iconSearch, setIconSearch] = useState("");
+  const [quotaError, setQuotaError] = useState<ApiError | null>(null);
+  const quotaAlertRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (quotaError) quotaAlertRef.current?.focus();
+  }, [quotaError]);
   const areasQuery = useAreasQuery("active");
   const areas = areasQuery.data?.data ?? [];
   const {
@@ -127,11 +134,15 @@ export function ProjectFormDialog({
   }, [open, project, reset]);
 
   const handleOpenChange = (nextOpen: boolean) => {
-    if (!nextOpen) setIconSearch("");
+    if (!nextOpen) {
+      setIconSearch("");
+      setQuotaError(null);
+    }
     onOpenChange(nextOpen);
   };
 
   const submit = handleSubmit(async (values) => {
+    setQuotaError(null);
     const input: ProjectInput = {
       name: values.name.trim(),
       description: values.description?.trim() || null,
@@ -150,7 +161,9 @@ export function ProjectFormDialog({
       await onSubmit(input);
       handleOpenChange(false);
     } catch (error) {
-      if (error instanceof ApiError && error.validationErrors) {
+      if (isPlanLimitError(error)) {
+        setQuotaError(error);
+      } else if (error instanceof ApiError && error.validationErrors) {
         Object.entries(error.validationErrors).forEach(([field, messages]) => {
           setError(field as keyof ProjectFormValues, { message: messages[0] });
         });
@@ -170,6 +183,15 @@ export function ProjectFormDialog({
         </DialogHeader>
 
         <form id="project-form" onSubmit={submit} className="grid gap-5">
+          {quotaError && (
+            <div ref={quotaAlertRef} tabIndex={-1}>
+              <PlanLimitAlert error={quotaError}>
+                {project && (
+                  <p>Project details were saved, but the new Area was not created.</p>
+                )}
+              </PlanLimitAlert>
+            </div>
+          )}
           <div className="flex items-center gap-4 rounded-xl border bg-muted/30 p-4">
             <div
               className="flex size-14 shrink-0 items-center justify-center rounded-xl shadow-sm"

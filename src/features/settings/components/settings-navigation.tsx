@@ -1,6 +1,6 @@
 "use client";
 
-import { SlidersHorizontal, Trash2 } from "lucide-react";
+import { ChartNoAxesCombined, SlidersHorizontal, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
@@ -11,6 +11,7 @@ const settingsItems = [
     label: "Preferences",
     icon: SlidersHorizontal,
   },
+  { href: "/settings/plan", label: "Plan & usage", icon: ChartNoAxesCombined },
   { href: "/settings/trash", label: "Trash", icon: Trash2 },
 ];
 
@@ -19,7 +20,7 @@ export function SettingsNavigation() {
 
   return (
     <nav
-      className="grid w-full grid-cols-2 gap-1 md:grid-cols-1"
+      className="grid w-full grid-cols-1 gap-1 min-[380px]:grid-cols-3 md:grid-cols-1"
       aria-label="Settings navigation"
     >
       {settingsItems.map((item) => {

@@ -106,6 +106,11 @@ export const resourceService = {
       )
     ).data;
   },
+  async delete(resourceUuid: string): Promise<ApiResponse<null>> {
+    return (
+      await axiosClient.delete<ApiResponse<null>>(`/resource/${resourceUuid}`)
+    ).data;
+  },
   async restore(resourceUuid: string): Promise<ApiResponse<Resource>> {
     return (
       await axiosClient.post<ApiResponse<Resource>>(

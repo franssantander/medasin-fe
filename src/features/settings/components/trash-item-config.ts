@@ -1,5 +1,6 @@
 import {
   BookHeart,
+  BookOpen,
   CalendarDays,
   CheckSquare2,
   CirclePile,
@@ -23,6 +24,7 @@ export type TrashTypeOption = {
 
 export const trashTypeOptions: TrashTypeOption[] = [
   { value: "area", label: "Areas", singularLabel: "Area", icon: CirclePile },
+  { value: "resource", label: "Resources", singularLabel: "Resource", icon: BookOpen },
   {
     value: "project",
     label: "Projects",

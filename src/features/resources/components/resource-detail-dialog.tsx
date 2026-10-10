@@ -1,18 +1,19 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AlertCircle, Check, Circle, LoaderCircle, Pencil } from "lucide-react";
+import { AlertCircle, Check, Circle, LoaderCircle, Pencil, Trash2 } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { useResourceAutosave } from "../hooks/use-resource-autosave";
 import { useResourceFormOptions } from "../hooks/use-resource-form-options";
-import { useAddResourceAttachments, useDeleteResourceAttachment } from "../queries/resource-query";
+import { useAddResourceAttachments, useDeleteResource, useDeleteResourceAttachment } from "../queries/resource-query";
 import { resourceRequestErrors, type ResourceFormErrors, type ResourceMetadataValues } from "../resource-form-utils";
 import { fromResourceDocument, safeResourceUrl, toResourceDocument } from "../resource-document";
 import type { Resource, ResourceAttachment, ResourceUpdateInput } from "../type";
 import { ResourceAppearanceField } from "./resource-appearance-field";
+import { ResourceActionDialog } from "./resource-action-dialog";
 import { ResourceAttachmentCard, ResourceImagePreview, ResourceLinkCard, type ResourceImagePreviewValue } from "./resource-attachment-cards";
 import { ResourceLinkInput, ResourceNotesField, ResourceTitleField } from "./resource-content-fields";
 import { ResourceContentView, ResourceOrganizationView } from "./resource-content-view";
@@ -20,7 +21,7 @@ import { resourceFieldIds, ResourceDialogBody, ResourceDialogFooter, ResourceDia
 import { ResourceFileDropzone } from "./resource-file-dropzone";
 import { ResourceOrganizationFields } from "./resource-organization-fields";
 
-export function ResourceDetailDialog({ resource, onClose }: { resource: Resource; onClose: () => void }) {
+export function ResourceDetailDialog({ resource, onClose, onDeleted }: { resource: Resource; onClose: () => void; onDeleted?: (resourceUuid: string) => void }) {
   const canEdit = resource.archived_at === null;
   const [editing, setEditing] = useState(false);
   const editable = canEdit && editing;
@@ -36,6 +37,7 @@ export function ResourceDetailDialog({ resource, onClose }: { resource: Resource
   const [preview, setPreview] = useState<ResourceImagePreviewValue | null>(null);
   const [attachmentErrors, setAttachmentErrors] = useState<ResourceFormErrors>({});
   const [attachmentToDelete, setAttachmentToDelete] = useState<ResourceAttachment | null>(null);
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const [deletingId, setDeletingId] = useState("");
   const [closing, setClosing] = useState(false);
   const [discardOpen, setDiscardOpen] = useState(false);
@@ -46,6 +48,7 @@ export function ResourceDetailDialog({ resource, onClose }: { resource: Resource
   const options = useResourceFormOptions(editable, resource);
   const addAttachment = useAddResourceAttachments();
   const removeAttachment = useDeleteResourceAttachment();
+  const deleteResource = useDeleteResource(onDeleted);
   const draft = useMemo<ResourceUpdateInput>(() => ({
     resourceUuid: resource.uuid, title: values.title.trim(), icon: values.icon, background: values.background, content: toResourceDocument(values.content),
     tag_uuids: values.tagIds, tag_names: values.tagNames, project_uuids: values.projectUuids, area_uuids: values.areaUuids,
@@ -53,7 +56,7 @@ export function ResourceDetailDialog({ resource, onClose }: { resource: Resource
   const autosave = useResourceAutosave(draft, editable && open);
   const errors = { ...autosave.errors, ...attachmentErrors };
   const attachmentBusy = addAttachment.isPending || removeAttachment.isPending;
-  const busy = closing || attachmentBusy;
+  const busy = closing || attachmentBusy || deleteResource.isPending;
   const hasUnfinishedDraft = Boolean(link.trim() || draftTag.trim() || failedFiles.length);
   const images = attachments.filter((item) => item.kind === "image");
   const files = attachments.filter((item) => item.kind === "file");
@@ -196,13 +199,26 @@ export function ResourceDetailDialog({ resource, onClose }: { resource: Resource
       />
       <ResourceDialogFooter status={editable ? <span role="status" aria-live="polite" className="inline-flex items-center gap-1.5">{status === "Saved" ? <Check className="size-3.5" aria-hidden="true" /> : busy || autosave.saving ? <LoaderCircle className="size-3.5 animate-spin motion-reduce:animate-none" aria-hidden="true" /> : autosave.failed ? <AlertCircle className="size-3.5 text-destructive" aria-hidden="true" /> : <Circle className="size-3" aria-hidden="true" />}{status}</span> : canEdit ? "Select Edit to make changes." : "Archived resources are read-only."}>
         {editable && autosave.failed ? <Button type="button" variant="outline" disabled={busy} onClick={() => { void autosave.save(); }}>Retry save</Button> : null}
+        {!editable ? <Button type="button" variant="destructive" disabled={busy} onClick={() => setDeleteOpen(true)}><Trash2 data-icon="inline-start" aria-hidden="true" />Delete resource</Button> : null}
         <Button type="button" variant="outline" disabled={busy} onClick={() => { void close(); }}>Close</Button>
         {canEdit ? editable ? (
           <Button type="button" disabled={busy} onClick={() => { void finishEditing(); }}>Done</Button>
         ) : (
-          <Button ref={editButtonRef} type="button" onClick={() => setEditing(true)}><Pencil data-icon="inline-start" aria-hidden="true" />Edit resource</Button>
+          <Button ref={editButtonRef} type="button" disabled={busy} onClick={() => setEditing(true)}><Pencil data-icon="inline-start" aria-hidden="true" />Edit resource</Button>
         ) : null}
       </ResourceDialogFooter>
+      <ResourceActionDialog
+        action="delete"
+        resource={deleteOpen ? { ...resource, title: values.title } : undefined}
+        isPending={deleteResource.isPending}
+        onOpenChange={setDeleteOpen}
+        onConfirm={() => {
+          if (editable || busy) return;
+          deleteResource.mutate(resource.uuid, {
+            onSuccess: () => { setDeleteOpen(false); setOpen(false); },
+          });
+        }}
+      />
       <ResourceImagePreview image={preview} onClose={() => setPreview(null)} />
       <ResourceDiscardDialog open={discardOpen} editing onOpenChange={setDiscardOpen} onDiscard={() => { setDiscardOpen(false); setOpen(false); }} />
       <AlertDialog open={Boolean(attachmentToDelete)} onOpenChange={(next) => { if (!next && !deletingId) setAttachmentToDelete(null); }}>

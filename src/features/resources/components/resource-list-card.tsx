@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Archive, CirclePile, Paperclip, Target } from "lucide-react";
+import { Archive, CirclePile, Paperclip, Target, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -17,8 +17,10 @@ import { resourceTypeOptions } from "./resource-list-options";
 
 type ResourceListCardProps = {
   archiveDisabled: boolean;
+  deleteDisabled: boolean;
   resource: Resource;
   onArchive: (resource: Resource) => void;
+  onDelete: (resource: Resource) => void;
   onOpen: (resource: Resource) => void;
 };
 
@@ -47,8 +49,10 @@ function formatRelativeTimestamp(value: string | null) {
 
 export function ResourceListCard({
   archiveDisabled,
+  deleteDisabled,
   resource,
   onArchive,
+  onDelete,
   onOpen,
 }: ResourceListCardProps) {
   const timestamp = resource.updated_at ?? resource.created_at;
@@ -95,7 +99,7 @@ export function ResourceListCard({
             </div>
           </div>
         </div>
-        <CardAction className="pointer-events-auto -mr-1 -mt-1">
+        <CardAction className="pointer-events-auto -mr-1 -mt-1 flex gap-1">
           <Button
             type="button"
             variant="ghost"
@@ -107,6 +111,18 @@ export function ResourceListCard({
             onClick={() => onArchive(resource)}
           >
             <Archive aria-hidden="true" />
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            className="size-11 lg:size-8"
+            aria-label={`Delete ${resource.title}`}
+            title="Move resource to Trash"
+            disabled={deleteDisabled}
+            onClick={() => onDelete(resource)}
+          >
+            <Trash2 aria-hidden="true" />
           </Button>
         </CardAction>
       </CardHeader>

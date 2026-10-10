@@ -1,6 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "@/components/ui/toast";
 import { areaKeys } from "@/features/areas/queries/area-query";
+import { isPlanLimitError } from "@/features/subscription/plan-limit-error";
+import { subscriptionKeys } from "@/features/subscription/queries/subscription-query";
 import { projectService } from "../services/project-service";
 import type { ProjectArchiveFilter, ProjectInput } from "../type"; 
 
@@ -63,17 +65,29 @@ export function useProjectMutation(
       return projectService.remove(projectUuid!);
     },
     onSuccess: async (response) => {
-      await queryClient.invalidateQueries({ queryKey: projectKeys.all });
-      if (
-        action === "create" ||
-        action === "updateArea" ||
-        action === "restore"
-      ) {
-        await queryClient.invalidateQueries({ queryKey: areaKeys.all });
-      }
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: projectKeys.all }),
+        ...(["create", "updateArea", "restore", "remove"].includes(action)
+          ? [queryClient.invalidateQueries({ queryKey: areaKeys.all })]
+          : []),
+        ...(["create", "updateArea", "remove"].includes(action)
+          ? [queryClient.invalidateQueries({ queryKey: subscriptionKeys.all })]
+          : []),
+        ...(action === "remove"
+          ? [queryClient.invalidateQueries({ queryKey: ["trash"] })]
+          : []),
+      ]);
       toast.add({ type: "success", description: response.message });
     },
     onError: (error) => {
+      if (isPlanLimitError(error)) {
+        void Promise.all([
+          queryClient.invalidateQueries({ queryKey: subscriptionKeys.all }),
+          queryClient.invalidateQueries({ queryKey: projectKeys.all }),
+          queryClient.invalidateQueries({ queryKey: areaKeys.all }),
+        ]);
+        return;
+      }
       toast.add({ type: "error", description: error.message });
     },
   });

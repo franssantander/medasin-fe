@@ -1,5 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "@/components/ui/toast";
+import { isPlanLimitError } from "@/features/subscription/plan-limit-error";
+import { subscriptionKeys } from "@/features/subscription/queries/subscription-query";
 import { areaService } from "../services/area-service";
 import type { ApiResponse, Area, AreaInput, AreaStatusFilter } from "../type";
 
@@ -66,13 +68,26 @@ export function useAreaMutation(
     onSuccess: async (response) => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: areaKeys.all }),
-        ...(action === "archive"
+        ...(action === "archive" || action === "remove"
           ? [queryClient.invalidateQueries({ queryKey: ["projects"] })]
+          : []),
+        ...(action === "create" || action === "remove"
+          ? [queryClient.invalidateQueries({ queryKey: subscriptionKeys.all })]
+          : []),
+        ...(action === "remove"
+          ? [queryClient.invalidateQueries({ queryKey: ["trash"] })]
           : []),
       ]);
       toast.add({ type: "success", description: response.message });
     },
     onError: (error) => {
+      if (isPlanLimitError(error)) {
+        void Promise.all([
+          queryClient.invalidateQueries({ queryKey: subscriptionKeys.all }),
+          queryClient.invalidateQueries({ queryKey: areaKeys.all }),
+        ]);
+        return;
+      }
       toast.add({ type: "error", description: error.message });
     },
   });

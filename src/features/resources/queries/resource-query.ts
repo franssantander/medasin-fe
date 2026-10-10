@@ -5,6 +5,8 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import { toast } from "@/components/ui/toast";
+import { subscriptionKeys } from "@/features/subscription/queries/subscription-query";
+import { isPlanLimitError } from "@/features/subscription/plan-limit-error";
 import { resourceService } from "../services/resource-service";
 import type { ResourceFilters } from "../type";
 
@@ -43,7 +45,17 @@ export function useCreateResource() {
       void client.invalidateQueries({ queryKey: ["resources"] });
       void client.invalidateQueries({ queryKey: ["areas"] });
       void client.invalidateQueries({ queryKey: ["projects"] });
+      void client.invalidateQueries({ queryKey: subscriptionKeys.all });
       toast.add({ type: "success", description: response.message });
+    },
+    onError: (error) => {
+      if (!isPlanLimitError(error)) return;
+      void Promise.all([
+        client.invalidateQueries({ queryKey: subscriptionKeys.all }),
+        client.invalidateQueries({ queryKey: ["resources"] }),
+        client.invalidateQueries({ queryKey: ["areas"] }),
+        client.invalidateQueries({ queryKey: ["projects"] }),
+      ]);
     },
   });
 }
@@ -108,11 +120,58 @@ export function useRestoreResource() {
   return useMutation({
     mutationFn: resourceService.restore,
     onSuccess: async (response) => {
-      await client.invalidateQueries({ queryKey: ["resources"] });
+      await Promise.all([
+        client.invalidateQueries({ queryKey: ["resources"] }),
+        client.invalidateQueries({ queryKey: subscriptionKeys.all }),
+      ]);
       toast.add({ type: "success", description: response.message });
     },
     onError: (error) => {
       toast.add({ type: "error", description: error.message });
     },
+  });
+}
+
+export function useDeleteResource(onDeleted?: (resourceUuid: string) => void) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: resourceService.delete,
+    onSuccess: async (response, resourceUuid) => {
+      onDeleted?.(resourceUuid);
+      const detailKey = ["resources", "detail", resourceUuid];
+      await client.cancelQueries({ queryKey: detailKey, exact: true });
+      const cache = client.getQueryCache();
+      const detail = cache.find({ queryKey: detailKey, exact: true });
+
+      // A mounted detail remains available until its dialog closes. Refetching
+      // it after deletion would return 404 and interrupt dismissal.
+      if (detail && detail.getObserversCount() > 0) {
+        const unsubscribe = cache.subscribe((event) => {
+          if (event.query !== detail) return;
+          if (event.type === "removed") unsubscribe();
+          else if (event.type === "observerRemoved" && detail.getObserversCount() === 0) {
+            unsubscribe();
+            client.removeQueries({ queryKey: detailKey, exact: true });
+          }
+        });
+      } else {
+        client.removeQueries({ queryKey: detailKey, exact: true });
+      }
+
+      await Promise.all([
+        client.invalidateQueries({
+          queryKey: ["resources"],
+          predicate: (query) => query.queryKey[1] !== "detail" || query.queryKey[2] !== resourceUuid,
+        }),
+        client.invalidateQueries({ queryKey: ["trash"] }),
+        client.invalidateQueries({ queryKey: ["areas"] }),
+        client.invalidateQueries({ queryKey: ["projects"] }),
+        client.invalidateQueries({ queryKey: ["boards"] }),
+        client.invalidateQueries({ queryKey: ["journal"] }),
+        client.invalidateQueries({ queryKey: subscriptionKeys.all }),
+      ]);
+      toast.add({ type: "success", description: response.message });
+    },
+    onError: (error) => toast.add({ type: "error", description: error.message }),
   });
 }

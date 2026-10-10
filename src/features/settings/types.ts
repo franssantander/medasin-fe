@@ -17,6 +17,7 @@ export type TrashItemType =
   | "journal_entry"
   | "calendar_plan"
   | "board_label"
+  | "resource"
   | "resource_attachment";
 
 export type TrashItem = {

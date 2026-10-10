@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   useArchiveResource,
+  useDeleteResource,
   useResourcesQuery,
   useResourceTagsQuery,
 } from "../queries/resource-query";
@@ -18,9 +19,11 @@ export function useResourceList() {
   const [creating, setCreating] = useState(false);
   const [selected, setSelected] = useState<Resource>();
   const [archiving, setArchiving] = useState<Resource>();
+  const [deleting, setDeleting] = useState<Resource>();
   const loadMoreRef = useRef<HTMLDivElement>(null);
   const resultsScrollRef = useRef<HTMLDivElement>(null);
   const archiveResource = useArchiveResource();
+  const deleteResource = useDeleteResource();
   const tagsQuery = useResourceTagsQuery();
   const resourcesQuery = useResourcesQuery({
     search: debouncedSearch || undefined,
@@ -113,6 +116,12 @@ export function useResourceList() {
       onSuccess: () => setArchiving(undefined),
     });
   };
+  const confirmDelete = () => {
+    if (!deleting) return;
+    deleteResource.mutate(deleting.uuid, {
+      onSuccess: () => setDeleting(undefined),
+    });
+  };
 
   return {
     archiveResource,
@@ -120,7 +129,10 @@ export function useResourceList() {
     archiving,
     clearFilters,
     confirmArchive,
+    confirmDelete,
     creating,
+    deleting,
+    deleteResource,
     isFiltered,
     loadMoreRef,
     resultsScrollRef,
@@ -131,6 +143,7 @@ export function useResourceList() {
     selected,
     setArchiving,
     setCreating,
+    setDeleting,
     setSearch,
     setSelected,
     setTag,

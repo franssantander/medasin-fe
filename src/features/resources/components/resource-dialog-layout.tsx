@@ -91,7 +91,7 @@ export function ResourceDialogFooter({ status, children }: { status: ReactNode; 
   return (
     <div data-slot="resource-dialog-footer" className="flex shrink-0 flex-col gap-3 border-t bg-popover px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
       <div className="min-w-0 text-xs text-muted-foreground">{status}</div>
-      <div className="flex gap-2 [&>button]:h-11 [&>button]:flex-1 sm:[&>button]:flex-none">{children}</div>
+      <div className="flex flex-wrap gap-2 [&>button]:h-11 [&>button]:flex-1 sm:[&>button]:flex-none">{children}</div>
     </div>
   );
 }
