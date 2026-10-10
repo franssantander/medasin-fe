@@ -17,12 +17,17 @@ import {
   ChevronRight,
   CircleAlert,
   CircleDashed,
+  CircleDot,
   Clock3,
   Cloud,
   FileText,
+  Flag,
+  LayoutDashboard,
   Link2,
   LoaderCircle,
   Plus,
+  Search,
+  Tag,
   Trash2,
   XIcon,
 } from "lucide-react";
@@ -30,6 +35,15 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -55,6 +69,11 @@ import {
   FieldLabel,
   FieldTitle,
 } from "@/components/ui/field";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+} from "@/components/ui/input-group";
 import { NoteRichTextEditor } from "@/components/ui/note-rich-text-editor";
 import {
   Select,
@@ -102,6 +121,13 @@ import {
 
 type TaskSaveState = "idle" | "dirty" | "saving" | "saved" | "error";
 
+const propertyRowClassName =
+  "grid min-h-10 min-w-0 grid-cols-[6.5rem_minmax(0,1fr)] items-center gap-x-3 gap-y-1 rounded-lg px-2 py-0.5 sm:grid-cols-[7.5rem_minmax(0,1fr)]";
+const propertyLabelClassName =
+  "gap-2 font-normal text-muted-foreground [&_svg]:size-3.5 [&_svg]:shrink-0";
+const propertyTriggerClassName =
+  "min-h-11 w-fit min-w-0 max-w-full justify-start gap-2 border-transparent bg-transparent px-2 shadow-none hover:bg-muted aria-expanded:bg-muted sm:min-h-8 dark:bg-transparent";
+
 type NotePickerGroup = {
   key: string;
   label: string;
@@ -135,6 +161,7 @@ function taskDraftsMatch(left: BoardTaskInput, right: BoardTaskInput) {
 
 export function TaskDetailsSheet({
   task,
+  boardName,
   stages,
   labels,
   archived,
@@ -145,6 +172,7 @@ export function TaskDetailsSheet({
   onDelete,
 }: {
   task?: BoardTask;
+  boardName?: string;
   stages: BoardStage[];
   labels: BoardLabel[];
   archived: boolean;
@@ -163,6 +191,7 @@ export function TaskDetailsSheet({
   const [draft, setDraft] = useState(initialDraft);
   const [saveState, setSaveState] = useState<TaskSaveState>("idle");
   const [linkPicker, setLinkPicker] = useState<"resources" | "notes">();
+  const [pickerSearch, setPickerSearch] = useState("");
   const [deleteConfirmationOpen, setDeleteConfirmationOpen] = useState(false);
   const [selectedResourceUuid, setSelectedResourceUuid] = useState<string>();
   const draftRef = useRef(initialDraft);
@@ -241,6 +270,31 @@ export function TaskDetailsSheet({
     (areasQuery.isError ||
       areaNotesQuery.isError ||
       standaloneNotesQuery.isError);
+  const pickerQuery = pickerSearch.trim().toLowerCase();
+  const visibleResources = pickerQuery
+    ? availableResources.filter((resource) =>
+        resource.title.toLowerCase().includes(pickerQuery),
+      )
+    : availableResources;
+  const visibleNoteGroups = pickerQuery
+    ? noteGroups
+        .map((group) => ({
+          ...group,
+          notes: group.notes.filter((note) =>
+            note.title.toLowerCase().includes(pickerQuery),
+          ),
+        }))
+        .filter((group) => group.notes.length > 0)
+    : noteGroups;
+  const selectedLinkCount =
+    linkPicker === "notes"
+      ? draft.note_uuids.length
+      : draft.resource_uuids.length;
+  const closeLinkPicker = () => {
+    setLinkPicker(undefined);
+    setPickerSearch("");
+    void flushDraftRef.current();
+  };
 
   const withoutDeletedResources = (input: BoardTaskInput): BoardTaskInput => ({
     ...input,
@@ -464,9 +518,20 @@ export function TaskDetailsSheet({
           <>
             <DrawerHeader className="gap-3 border-b p-4 sm:p-6">
               <div className="flex items-center justify-between gap-3">
-                <div className="flex min-w-0 flex-wrap items-center gap-2">
-                  <span className="text-sm font-medium text-muted-foreground">
-                    Task details
+                <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
+                  {boardName && (
+                    <>
+                      <span className="flex min-w-0 items-center gap-1.5">
+                        <LayoutDashboard aria-hidden="true" className="size-3.5 shrink-0" />
+                        <span className="max-w-40 truncate">{boardName}</span>
+                      </span>
+                      <ChevronRight aria-hidden="true" className="size-3.5 shrink-0 opacity-60" />
+                    </>
+                  )}
+                  <span className="flex items-center gap-1.5 font-medium text-foreground">
+                    <StatusDot color={stageDotColors[draft.stage]} />
+                    {stages.find((item) => item.key === draft.stage)?.name ??
+                      draft.stage.replace("_", " ")}
                   </span>
                   {archived && (
                     <Badge variant="secondary">
@@ -541,12 +606,21 @@ export function TaskDetailsSheet({
             </DrawerHeader>
 
             <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-6 overflow-y-auto overscroll-contain p-4 sm:p-6">
-              <FieldGroup className="grid grid-cols-2 gap-3 rounded-xl bg-muted/40 p-3 sm:grid-cols-3 sm:gap-4 sm:p-4">
-                <Field className="min-w-0 gap-2">
+              <FieldGroup className="gap-0.5 rounded-xl border p-1.5">
+                <Field orientation="horizontal" className={propertyRowClassName}>
                   {archived ? (
-                    <FieldTitle>Status</FieldTitle>
+                    <FieldTitle className={propertyLabelClassName}>
+                      <CircleDot aria-hidden="true" />
+                      Status
+                    </FieldTitle>
                   ) : (
-                    <FieldLabel htmlFor={`${fieldId}-status`}>Status</FieldLabel>
+                    <FieldLabel
+                      htmlFor={`${fieldId}-status`}
+                      className={propertyLabelClassName}
+                    >
+                      <CircleDot aria-hidden="true" />
+                      Status
+                    </FieldLabel>
                   )}
                   {archived ? (
                     <Badge
@@ -567,7 +641,7 @@ export function TaskDetailsSheet({
                     >
                       <SelectTrigger
                         id={`${fieldId}-status`}
-                        className="min-h-11 w-full min-w-0 sm:min-h-9"
+                        className={propertyTriggerClassName}
                       >
                         <StatusValue
                           color={stageDotColors[draft.stage]}
@@ -593,11 +667,18 @@ export function TaskDetailsSheet({
                   )}
                 </Field>
 
-                <Field className="min-w-0 gap-2">
+                <Field orientation="horizontal" className={propertyRowClassName}>
                   {archived ? (
-                    <FieldTitle>Priority</FieldTitle>
+                    <FieldTitle className={propertyLabelClassName}>
+                      <Flag aria-hidden="true" />
+                      Priority
+                    </FieldTitle>
                   ) : (
-                    <FieldLabel htmlFor={`${fieldId}-priority`}>
+                    <FieldLabel
+                      htmlFor={`${fieldId}-priority`}
+                      className={propertyLabelClassName}
+                    >
+                      <Flag aria-hidden="true" />
                       Priority
                     </FieldLabel>
                   )}
@@ -621,7 +702,7 @@ export function TaskDetailsSheet({
                     >
                       <SelectTrigger
                         id={`${fieldId}-priority`}
-                        className="min-h-11 w-full min-w-0 sm:min-h-9"
+                        className={propertyTriggerClassName}
                       >
                         <StatusValue
                           color={priorityDotColors[draft.priority]}
@@ -657,11 +738,20 @@ export function TaskDetailsSheet({
                   )}
                 </Field>
 
-                <Field className="col-span-2 min-w-0 gap-2 sm:col-span-1">
+                <Field orientation="horizontal" className={propertyRowClassName}>
                   {archived ? (
-                    <FieldTitle>Label</FieldTitle>
+                    <FieldTitle className={propertyLabelClassName}>
+                      <Tag aria-hidden="true" />
+                      Label
+                    </FieldTitle>
                   ) : (
-                    <FieldLabel htmlFor={`${fieldId}-label`}>Label</FieldLabel>
+                    <FieldLabel
+                      htmlFor={`${fieldId}-label`}
+                      className={propertyLabelClassName}
+                    >
+                      <Tag aria-hidden="true" />
+                      Label
+                    </FieldLabel>
                   )}
                   {archived ? (
                     task.labels[0] ? (
@@ -679,9 +769,9 @@ export function TaskDetailsSheet({
                         render={
                           <Button
                             type="button"
-                            variant="outline"
+                            variant="ghost"
                             id={`${fieldId}-label`}
-                            className="h-11 w-full min-w-0 justify-between sm:h-9"
+                            className={cn(propertyTriggerClassName, "h-auto font-normal")}
                             disabled={labels.length === 0 && !selectedLabel}
                             aria-label={
                               selectedLabel ? "Update label" : "Add label"
@@ -739,8 +829,8 @@ export function TaskDetailsSheet({
                     </DropdownMenu>
                   )}
                   {!archived && labels.length === 0 && !selectedLabel && (
-                    <FieldDescription>
-                      No labels available for this board.
+                    <FieldDescription className="col-start-2 px-2 text-xs">
+                      No labels yet — add some from Labels on the board.
                     </FieldDescription>
                   )}
                 </Field>
@@ -922,14 +1012,11 @@ export function TaskDetailsSheet({
               <Dialog
                 open={Boolean(linkPicker)}
                 onOpenChange={(open) => {
-                  if (!open) {
-                    setLinkPicker(undefined);
-                    void flushDraftRef.current();
-                  }
+                  if (!open) closeLinkPicker();
                 }}
               >
-                <DialogContent className="max-w-lg">
-                  <DialogHeader>
+                <DialogContent className="max-h-[min(90dvh,44rem)] max-w-lg gap-0 overflow-hidden p-0">
+                  <DialogHeader className="shrink-0 gap-1 px-5 pb-3 pt-5 pr-12">
                     <DialogTitle>
                       Link {linkPicker === "notes" ? "notes" : "resources"}
                     </DialogTitle>
@@ -937,64 +1024,44 @@ export function TaskDetailsSheet({
                       Select one or more items to link to this task.
                     </DialogDescription>
                   </DialogHeader>
-                  {linkPicker === "resources" && resourcesQuery.isError && (
-                    <Button
-                      variant="outline"
-                      onClick={() =>
-                        resourcesQuery.isFetchNextPageError
-                          ? resourcesQuery.fetchNextPage()
-                          : resourcesQuery.refetch()
-                      }
-                    >
-                      Retry loading resources
-                    </Button>
-                  )}
-                  {linkPicker === "resources" && resourcesQuery.hasNextPage && (
-                    <Button
-                      variant="outline"
-                      disabled={resourcesQuery.isFetchingNextPage}
-                      onClick={() => resourcesQuery.fetchNextPage()}
-                    >
-                      {resourcesQuery.isFetchingNextPage
-                        ? "Loading…"
-                        : "Load more resources"}
-                    </Button>
-                  )}
-                  {linkPicker === "notes" && notesError && (
-                    <Button
-                      variant="outline"
-                      onClick={() => {
-                        if (areasQuery.isError) void areasQuery.refetch();
-                        if (areaNotesQuery.isError)
-                          void areaNotesQuery.refetch();
-                        if (standaloneNotesQuery.isError)
-                          void standaloneNotesQuery.refetch();
-                      }}
-                    >
-                      Retry loading notes
-                    </Button>
-                  )}
-                  <div className="grid max-h-[55vh] gap-3 overflow-y-auto pr-1">
+                  <div className="shrink-0 px-5 pb-3">
+                    <InputGroup>
+                      <InputGroupAddon>
+                        <Search aria-hidden="true" />
+                      </InputGroupAddon>
+                      <InputGroupInput
+                        autoFocus
+                        aria-label={`Search ${linkPicker === "notes" ? "notes" : "resources"}`}
+                        placeholder={`Search ${linkPicker === "notes" ? "notes" : "resources"}…`}
+                        value={pickerSearch}
+                        onChange={(event) => setPickerSearch(event.target.value)}
+                      />
+                    </InputGroup>
+                  </div>
+                  <Separator />
+                  <div className="workspace-list-scrollbar grid min-h-0 flex-1 content-start gap-3 overflow-y-auto overscroll-contain p-3">
                     {linkPicker === "resources" ? (
                       resourcesQuery.isLoading ? (
                         <EmptyTaskDetail>Loading resources…</EmptyTaskDetail>
-                      ) : availableResources.length ? (
+                      ) : visibleResources.length ? (
                         <ResourcePickerItems
-                          resources={availableResources}
+                          resources={visibleResources}
                           selectedUuids={draft.resource_uuids}
                           onToggle={handleToggleResource}
                         />
                       ) : (
                         <EmptyTaskDetail>
-                          No resources available.
+                          {pickerQuery
+                            ? "No resources match your search."
+                            : "No resources available."}
                         </EmptyTaskDetail>
                       )
                     ) : notesLoading ? (
                       <EmptyTaskDetail>Loading notes…</EmptyTaskDetail>
-                    ) : noteGroups.length ? (
-                      noteGroups.map(({ key, label, notes }) => (
+                    ) : visibleNoteGroups.length ? (
+                      visibleNoteGroups.map(({ key, label, notes }) => (
                         <div key={key} className="grid gap-2">
-                          <p className="text-xs font-medium text-muted-foreground">
+                          <p className="px-1 text-xs font-medium text-muted-foreground">
                             {label}
                           </p>
                           <NotePickerItems
@@ -1005,49 +1072,85 @@ export function TaskDetailsSheet({
                         </div>
                       ))
                     ) : (
-                      <EmptyTaskDetail>No notes available.</EmptyTaskDetail>
+                      <EmptyTaskDetail>
+                        {pickerQuery
+                          ? "No notes match your search."
+                          : "No notes available."}
+                      </EmptyTaskDetail>
+                    )}
+                    {linkPicker === "resources" && resourcesQuery.isError && (
+                      <Button
+                        variant="outline"
+                        onClick={() =>
+                          resourcesQuery.isFetchNextPageError
+                            ? resourcesQuery.fetchNextPage()
+                            : resourcesQuery.refetch()
+                        }
+                      >
+                        Retry loading resources
+                      </Button>
+                    )}
+                    {linkPicker === "resources" && resourcesQuery.hasNextPage && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        disabled={resourcesQuery.isFetchingNextPage}
+                        onClick={() => resourcesQuery.fetchNextPage()}
+                      >
+                        {resourcesQuery.isFetchingNextPage
+                          ? "Loading…"
+                          : "Load more resources"}
+                      </Button>
+                    )}
+                    {linkPicker === "notes" && notesError && (
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          if (areasQuery.isError) void areasQuery.refetch();
+                          if (areaNotesQuery.isError)
+                            void areaNotesQuery.refetch();
+                          if (standaloneNotesQuery.isError)
+                            void standaloneNotesQuery.refetch();
+                        }}
+                      >
+                        Retry loading notes
+                      </Button>
                     )}
                   </div>
-                  <DialogFooter>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => {
-                        setLinkPicker(undefined);
-                        void flushDraftRef.current();
-                      }}
-                    >
+                  <Separator />
+                  <DialogFooter className="shrink-0 flex-row items-center justify-between px-5 py-3">
+                    <p className="text-xs text-muted-foreground" aria-live="polite">
+                      {selectedLinkCount} linked
+                    </p>
+                    <Button type="button" onClick={closeLinkPicker}>
                       Done
                     </Button>
                   </DialogFooter>
                 </DialogContent>
               </Dialog>
             )}
-
             {!archived && (
-              <Dialog
+              <AlertDialog
                 open={deleteConfirmationOpen}
                 onOpenChange={(open) => {
                   if (!isDeleting) setDeleteConfirmationOpen(open);
                 }}
               >
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>Delete task?</DialogTitle>
-                    <DialogDescription>
+                <AlertDialogContent className="max-w-md">
+                  <AlertDialogHeader>
+                    <span className="flex size-10 items-center justify-center rounded-full bg-destructive/10 text-destructive">
+                      <Trash2 aria-hidden="true" className="size-5" />
+                    </span>
+                    <AlertDialogTitle>Delete task?</AlertDialogTitle>
+                    <AlertDialogDescription>
                       “{task.title}” will move to Trash for 30 days. You can
                       restore it from Settings before it is permanently deleted.
-                    </DialogDescription>
-                  </DialogHeader>
-                  <DialogFooter>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      disabled={isDeleting}
-                      onClick={() => setDeleteConfirmationOpen(false)}
-                    >
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel disabled={isDeleting}>
                       Cancel
-                    </Button>
+                    </AlertDialogCancel>
                     <Button
                       type="button"
                       variant="destructive"
@@ -1057,14 +1160,17 @@ export function TaskDetailsSheet({
                         onDelete();
                       }}
                     >
-                      <Trash2 />
+                      {isDeleting ? (
+                        <LoaderCircle aria-hidden="true" className="animate-spin" />
+                      ) : (
+                        <Trash2 aria-hidden="true" />
+                      )}
                       {isDeleting ? "Deleting…" : "Delete task"}
                     </Button>
-                  </DialogFooter>
-                </DialogContent>
-              </Dialog>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
             )}
-
             {selectedResourceQuery.data?.data && (
               <ResourceDetailDialog
                 resource={selectedResourceQuery.data.data}

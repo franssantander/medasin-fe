@@ -41,15 +41,15 @@ function ResourceImageCard({ url, name, size, disabled, deleting, saved, error, 
     <div className="relative aspect-[4/3] overflow-hidden rounded-xl border bg-muted/30">
       {url ? <Image src={url} alt={name} fill unoptimized className="object-cover" /> : (
         <div className="flex size-full flex-col items-center justify-center gap-2 p-3 text-center text-xs text-muted-foreground" role="status">
-          {error ? <><span>{error}</span><Button type="button" variant="outline" className="h-11" onClick={onRetry}>Retry preview</Button></> : <><LoaderCircle className="size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />Loading preview…</>}
+          {error ? <><span>{error}</span><Button type="button" variant="outline" size="sm" onClick={onRetry}>Retry preview</Button></> : <><LoaderCircle className="size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />Loading preview…</>}
         </div>
       )}
       {url ? (
         <button type="button" disabled={disabled} aria-label={`View ${name}`} className="absolute inset-0 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring disabled:pointer-events-none" onClick={onPreview}>
-          <span className="absolute left-2 top-2 flex size-9 items-center justify-center rounded-lg bg-background/90 text-foreground"><Eye className="size-4" aria-hidden="true" /></span>
+          <span className="absolute left-2 top-2 flex size-8 items-center justify-center rounded-lg bg-background/90 text-foreground"><Eye className="size-4" aria-hidden="true" /></span>
         </button>
       ) : null}
-      {onRemove ? <Button type="button" variant="secondary" size="icon" className="absolute right-2 top-2 size-11 shadow-sm" disabled={disabled || deleting} aria-label={`Remove ${name}`} onClick={onRemove}>{deleting ? <LoaderCircle className="animate-spin motion-reduce:animate-none" aria-hidden="true" /> : saved ? <Trash2 aria-hidden="true" /> : <X aria-hidden="true" />}</Button> : null}
+      {onRemove ? <Button type="button" variant="secondary" size="icon-sm" className="absolute right-2 top-2 shadow-sm" disabled={disabled || deleting} aria-label={`Remove ${name}`} onClick={onRemove}>{deleting ? <LoaderCircle className="animate-spin motion-reduce:animate-none" aria-hidden="true" /> : saved ? <Trash2 aria-hidden="true" /> : <X aria-hidden="true" />}</Button> : null}
       <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 to-transparent px-3 pb-3 pt-8 text-white">
         <p className="truncate text-xs font-medium">{name}</p>
         <p className="text-xs text-white/80">{formatResourceFileSize(size)}</p>
@@ -74,15 +74,15 @@ export function ResourceFileCard({ name, size, disabled, deleting, downloading, 
   onRemove?: () => void;
 }) {
   return (
-    <div className="flex min-w-0 items-center gap-2 rounded-xl border bg-background p-2.5">
-      <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted"><FileText className="size-4 text-muted-foreground" aria-hidden="true" /></div>
+    <div className="flex min-w-0 items-center gap-2.5 rounded-lg border bg-background p-2">
+      <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted"><FileText className="size-4 text-muted-foreground" aria-hidden="true" /></div>
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-medium" title={name}>{name}</p>
         <p className="text-xs text-muted-foreground">{formatResourceFileSize(size)}</p>
         {error ? <p className="text-xs text-destructive" role="alert">{error}</p> : null}
       </div>
-      {onDownload ? <Button type="button" variant="ghost" size="icon" className="size-11 shrink-0" disabled={downloading} aria-label={`Download ${name}`} onClick={onDownload}>{downloading ? <LoaderCircle className="animate-spin motion-reduce:animate-none" aria-hidden="true" /> : <Download aria-hidden="true" />}</Button> : null}
-      {onRemove ? <Button type="button" variant="ghost" size="icon" className="size-11 shrink-0" disabled={disabled || deleting} aria-label={`Remove ${name}`} onClick={onRemove}>{deleting ? <LoaderCircle className="animate-spin motion-reduce:animate-none" aria-hidden="true" /> : <X aria-hidden="true" />}</Button> : null}
+      {onDownload ? <Button type="button" variant="ghost" size="icon-sm" className="shrink-0 text-muted-foreground hover:text-foreground" disabled={downloading} aria-label={`Download ${name}`} onClick={onDownload}>{downloading ? <LoaderCircle className="animate-spin motion-reduce:animate-none" aria-hidden="true" /> : <Download aria-hidden="true" />}</Button> : null}
+      {onRemove ? <Button type="button" variant="ghost" size="icon-sm" className="shrink-0 text-muted-foreground hover:text-foreground" disabled={disabled || deleting} aria-label={`Remove ${name}`} onClick={onRemove}>{deleting ? <LoaderCircle className="animate-spin motion-reduce:animate-none" aria-hidden="true" /> : <X aria-hidden="true" />}</Button> : null}
     </div>
   );
 }
@@ -145,13 +145,13 @@ export function ResourceLinkCard({ url, name, disabled, deleting, onRemove }: { 
   const safeUrl = safeResourceUrl(url);
   const label = name || (safeUrl ? new URL(safeUrl).hostname.replace(/^www\./, "") : "Unavailable link");
   return (
-    <div className="flex min-w-0 items-center gap-3 rounded-xl border bg-background p-2.5">
-      <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted"><ExternalLink className="size-4 text-muted-foreground" aria-hidden="true" /></div>
+    <div className="flex min-w-0 items-center gap-2.5 rounded-lg border bg-background p-2">
+      <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted"><ExternalLink className="size-4 text-muted-foreground" aria-hidden="true" /></div>
       <div className="min-w-0 flex-1">
         {safeUrl ? <a href={safeUrl} target="_blank" rel="noopener noreferrer" aria-label={`Open ${name || url}`} className="block truncate text-sm font-medium underline-offset-4 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring">{label}</a> : <p className="truncate text-sm">{label}</p>}
         <p className="truncate text-xs text-muted-foreground" title={url}>{url}</p>
       </div>
-      {onRemove ? <Button type="button" variant="ghost" size="icon" className="size-11 shrink-0" disabled={disabled || deleting} aria-label={`Remove ${name || url}`} onClick={onRemove}>{deleting ? <LoaderCircle className="animate-spin motion-reduce:animate-none" aria-hidden="true" /> : <X aria-hidden="true" />}</Button> : null}
+      {onRemove ? <Button type="button" variant="ghost" size="icon-sm" className="shrink-0 text-muted-foreground hover:text-foreground" disabled={disabled || deleting} aria-label={`Remove ${name || url}`} onClick={onRemove}>{deleting ? <LoaderCircle className="animate-spin motion-reduce:animate-none" aria-hidden="true" /> : <X aria-hidden="true" />}</Button> : null}
     </div>
   );
 }
@@ -162,14 +162,14 @@ export function ResourceImagePreview({ image, onClose }: { image: ResourceImageP
   return (
     <Dialog open={Boolean(image)} onOpenChange={(open) => { if (!open) { onClose(); setError(""); } }}>
       <DialogContent className="max-w-5xl" showCloseButton={false}>
-        <Button type="button" variant="ghost" size="icon" className="absolute right-4 top-4 size-11" aria-label="Close" onClick={() => { onClose(); setError(""); }}><X aria-hidden="true" /></Button>
+        <Button type="button" variant="ghost" size="icon-sm" className="absolute right-4 top-4" aria-label="Close" onClick={() => { onClose(); setError(""); }}><X aria-hidden="true" /></Button>
         <DialogHeader className="pr-11">
           <DialogTitle className="break-words">{image?.name}</DialogTitle>
           <DialogDescription>{formatResourceFileSize(image?.size ?? null)}</DialogDescription>
         </DialogHeader>
         {image ? <div className="relative h-[min(60dvh,36rem)] min-h-40 rounded-lg bg-muted"><Image src={image.url} alt={image.name} fill unoptimized className="object-contain" /></div> : null}
         {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : null}
-        {image?.onDownload ? <Button type="button" variant="outline" className="h-11" disabled={downloading} onClick={async () => {
+        {image?.onDownload ? <Button type="button" variant="outline" disabled={downloading} onClick={async () => {
           setDownloading(true);
           try { await image.onDownload?.(); setError(""); }
           catch (cause) { setError(Object.values(resourceRequestErrors(cause)).join(" ")); }

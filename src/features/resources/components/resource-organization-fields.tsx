@@ -39,9 +39,9 @@ export function ResourceOrganizationFields({ values, options, disabled = false, 
 
   return (
     <FieldGroup className="gap-5">
-      <div className="grid gap-1">
+      <div className="grid gap-0.5 border-t pt-5">
         <h3 className="text-sm font-semibold">Organize</h3>
-        <p className="text-xs leading-relaxed text-muted-foreground">Connect this resource to your workspace.</p>
+        <p className="text-xs text-muted-foreground">Connect this resource to your workspace.</p>
       </div>
       <Field data-invalid={Boolean(errors.tags)} data-disabled={disabled}>
         <FieldLabel htmlFor={resourceFieldIds.tags}>Tags <span className="font-normal text-muted-foreground">(optional)</span></FieldLabel>
@@ -49,15 +49,15 @@ export function ResourceOrganizationFields({ values, options, disabled = false, 
           tagIds: selected.filter((item) => !item.startsWith("new:")),
           tagNames: selected.filter((item) => item.startsWith("new:")).map((item) => tagOptions.find((option) => option.value === item)!.label),
         })} />
-        <FieldDescription>Search existing tags or type a new name.</FieldDescription>
+        <FieldDescription className="text-xs">Search existing tags or type a new name.</FieldDescription>
         {errors.tags ? <FieldError id={`${resourceFieldIds.tags}-error`}>{errors.tags}</FieldError> : null}
         {options.tags.isLoading ? <p className="text-xs text-muted-foreground" role="status">Loading tags…</p> : null}
-        {options.tags.isError ? <Button type="button" variant="outline" className="h-11 w-full" disabled={disabled} onClick={() => { void options.tags.refetch(); }}>Retry loading tags</Button> : null}
+        {options.tags.isError ? <Button type="button" variant="outline" size="sm" className="w-full" disabled={disabled} onClick={() => { void options.tags.refetch(); }}>Retry loading tags</Button> : null}
       </Field>
       <ResourceAssignmentSelect id={resourceFieldIds.projects} label="Project" items={options.projectItems} value={values.projectUuids} loading={options.projects.isLoading} disabled={disabled || options.projects.isLoading || options.projects.isError} error={errors.projects} onValueChange={(projectUuids) => onChange({ projectUuids })} />
-      {options.projects.isError ? <Button type="button" variant="outline" className="h-11 w-full" disabled={disabled} onClick={() => { void options.projects.refetch(); }}>Retry loading projects</Button> : null}
+      {options.projects.isError ? <Button type="button" variant="outline" size="sm" className="w-full" disabled={disabled} onClick={() => { void options.projects.refetch(); }}>Retry loading projects</Button> : null}
       <ResourceAssignmentSelect id={resourceFieldIds.areas} label="Area" items={options.areaItems} value={values.areaUuids} loading={options.areas.isLoading} disabled={disabled || options.areas.isLoading || options.areas.isError} error={errors.areas} onValueChange={(areaUuids) => onChange({ areaUuids })} />
-      {options.areas.isError ? <Button type="button" variant="outline" className="h-11 w-full" disabled={disabled} onClick={() => { void options.areas.refetch(); }}>Retry loading areas</Button> : null}
+      {options.areas.isError ? <Button type="button" variant="outline" size="sm" className="w-full" disabled={disabled} onClick={() => { void options.areas.refetch(); }}>Retry loading areas</Button> : null}
     </FieldGroup>
   );
 }

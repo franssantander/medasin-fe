@@ -31,12 +31,12 @@ export function ResourceMultiSelect({ id, label, options, value, disabled, place
         if (onSearchChange && details.reason === "input-clear") { details.cancel(); return; }
         changeSearch(next);
       }} itemToStringLabel={(item) => labels.get(item)?.label ?? item} onValueChange={(next) => { onValueChange(next); changeSearch(""); }}>
-        <ComboboxInput id={id} aria-label={label} aria-invalid={Boolean(error)} aria-describedby={error ? `${id}-error` : undefined} disabled={disabled} placeholder={placeholder} className="h-11 w-full [&_button]:size-11 [&_input]:h-11" />
+        <ComboboxInput id={id} aria-label={label} aria-invalid={Boolean(error)} aria-describedby={error ? `${id}-error` : undefined} disabled={disabled} placeholder={placeholder} className="w-full" />
         <ComboboxContent>
           <ComboboxEmpty className="px-3 py-4">No matches found.</ComboboxEmpty>
           <ComboboxList>
             {(item: string) => (
-              <ComboboxItem key={item} value={item} aria-label={labels.get(item)?.create ? `Create “${labels.get(item)?.label}”` : labels.get(item)?.label} className="min-h-11 break-words">
+              <ComboboxItem key={item} value={item} aria-label={labels.get(item)?.create ? `Create “${labels.get(item)?.label}”` : labels.get(item)?.label} className="break-words">
                 {labels.get(item)?.create ? `Create “${labels.get(item)?.label}”` : labels.get(item)?.label}
               </ComboboxItem>
             )}
@@ -46,9 +46,9 @@ export function ResourceMultiSelect({ id, label, options, value, disabled, place
       {value.length ? (
         <div className="flex min-w-0 flex-wrap gap-1.5" aria-label={`Selected ${label.toLowerCase()}`}>
           {value.map((item) => (
-            <span key={item} className="inline-flex max-w-full items-center rounded-lg border bg-background text-xs">
-              <span className="min-w-0 break-words py-1.5 pl-2.5">{labels.get(item)?.label}</span>
-              <Button type="button" variant="ghost" size="icon" className="size-11 shrink-0" disabled={disabled} aria-label={`Remove ${labels.get(item)?.label}`} onClick={() => onValueChange(value.filter((selected) => selected !== item))}><X className="size-3.5" aria-hidden="true" /></Button>
+            <span key={item} className="inline-flex min-h-7 max-w-full items-center gap-0.5 rounded-md border bg-background pl-2 pr-0.5 text-xs font-medium shadow-xs">
+              <span className="min-w-0 break-words py-1">{labels.get(item)?.label}</span>
+              <Button type="button" variant="ghost" size="icon-xs" className="shrink-0 text-muted-foreground hover:text-foreground" disabled={disabled} aria-label={`Remove ${labels.get(item)?.label}`} onClick={() => onValueChange(value.filter((selected) => selected !== item))}><X aria-hidden="true" /></Button>
             </span>
           ))}
         </div>

@@ -179,7 +179,7 @@ test("creating a project with a new Area presents the Area quota and retains bot
   api.replies.set("POST /project", quota("areas", 5, 5));
   const dialog = await openCreate(page, forms[0]);
   await dialog.getByLabel("Name", { exact: true }).fill("Launch preparation");
-  await dialog.getByRole("button", { name: "Create new area", exact: true }).click();
+  await dialog.getByRole("button", { name: "New area", exact: true }).click();
   await dialog.getByLabel("New area name", { exact: true }).fill("Career growth");
   await dialog.getByRole("button", { name: "Create project", exact: true }).click();
   await expectQuota(page, dialog, "areas", 5, 5);
@@ -198,7 +198,7 @@ test("an Area quota denial after updating project details explains the partial s
   await expect(dialog).toBeVisible();
   await dialog.getByLabel("Name", { exact: true }).fill("Updated launch");
   await dialog.getByLabel("Description", { exact: true }).fill("Saved project details");
-  await dialog.getByRole("button", { name: "Create new area", exact: true }).click();
+  await dialog.getByRole("button", { name: "New area", exact: true }).click();
   await dialog.getByLabel("New area name", { exact: true }).fill("New responsibility");
   await dialog.getByRole("button", { name: "Save changes", exact: true }).click();
   const alert = dialog.getByRole("alert");

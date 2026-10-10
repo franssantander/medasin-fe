@@ -30,7 +30,7 @@ function AppLoadingSkeleton() {
         <div className="flex h-14 shrink-0 items-center border-b border-border px-4 sm:px-6">
           <Skeleton className="h-5 w-24" />
         </div>
-        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto bg-app-content p-4 sm:p-6">
+        <div className="relative min-h-0 flex-1 space-y-3 overflow-y-auto bg-app-content p-4 sm:p-6">
           <Skeleton className="h-24 w-full" />
           <Skeleton className="h-24 w-full" />
           <Skeleton className="h-24 w-full" />
@@ -81,7 +81,7 @@ function AppShell({ currentUser, children }: { currentUser: CurrentUser; childre
           quiet={quiet}
         />
         <FocusSessionBar pathname={pathname} />
-        <main className="min-h-0 flex-1 overflow-y-auto bg-app-content p-4 sm:p-6">
+        <main className="workspace-list-scrollbar relative min-h-0 flex-1 overflow-y-auto bg-app-content p-4 sm:p-6">
           {children}
         </main>
       </div>

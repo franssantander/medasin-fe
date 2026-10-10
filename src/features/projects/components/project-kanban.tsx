@@ -12,17 +12,19 @@ import {
   type DragStartEvent,
 } from "@dnd-kit/core";
 import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
+import { Info, Loader2, Trash2 } from "lucide-react";
 import { useState } from "react";
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardTitle } from "@/components/ui/card";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useProjectKanbanMutations } from "../hooks/use-project-kanban-mutations";
 import { useProjectBoardQuery } from "../queries/project-query";
@@ -37,7 +39,7 @@ import {
   ProjectKanbanToolbar,
   type BoardDialogValue,
 } from "./project-kanban-toolbar";
-import { kanbanGridStyles } from "./project-kanban-utils";
+import { filterBoardTasks, kanbanGridStyles } from "./project-kanban-utils";
 import { ProjectLabelDialog } from "./project-label-dialog";
 import { TaskDetailsSheet } from "./project-task-details-sheet";
 
@@ -59,6 +61,8 @@ export function ProjectKanban({
   const [deleteBoardOpen, setDeleteBoardOpen] = useState(false);
   const [activeTask, setActiveTask] = useState<BoardTask>();
   const [selectedTaskUuid, setSelectedTaskUuid] = useState<string>();
+  const [taskSearch, setTaskSearch] = useState("");
+  const searching = taskSearch.trim() !== "";
   const boardQuery = useProjectBoardQuery(projectUuid, selectedBoardUuid);
   const board = boardQuery.data?.data;
   const selectedTask = board?.stages
@@ -88,6 +92,7 @@ export function ProjectKanban({
   const handleSelectBoard = (boardUuid: string) => {
     setTaskDraft(undefined);
     setSelectedTaskUuid(undefined);
+    setTaskSearch("");
     setSelectedBoardUuid(boardUuid);
   };
 
@@ -154,16 +159,25 @@ export function ProjectKanban({
         archived={archived}
         boardName={board?.name}
         labelCount={board?.labels.length}
+        search={taskSearch}
+        onSearchChange={setTaskSearch}
         onSelectBoard={handleSelectBoard}
         onOpenLabels={() => setLabelsOpen(true)}
         onOpenBoardDialog={setBoardDialog}
         onDeleteBoard={() => setDeleteBoardOpen(true)}
       />
 
+      {searching && !archived && board && (
+        <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <Info className="size-3.5" aria-hidden="true" />
+          Showing matching tasks only. Clear the search to drag tasks.
+        </p>
+      )}
+
       {boardQuery.isLoading ? (
         <div className={kanbanGridStyles}>
           {[1, 2, 3, 4].map((item) => (
-            <Skeleton key={item} className="h-[32rem] rounded-xl" />
+            <Skeleton key={item} className="h-72 rounded-xl" />
           ))}
         </div>
       ) : boardQuery.isError || !board ? (
@@ -192,7 +206,9 @@ export function ProjectKanban({
               <KanbanColumn
                 key={stage.uuid}
                 stage={stage}
+                tasks={filterBoardTasks(stage.tasks, taskSearch)}
                 archived={archived}
+                searching={searching}
                 draft={taskDraft?.stage === stage.key ? taskDraft : undefined}
                 isCreating={mutations.createTask.isPending}
                 onAdd={() => setTaskDraft({ stage: stage.key, title: "" })}
@@ -216,6 +232,7 @@ export function ProjectKanban({
       <TaskDetailsSheet
         key={selectedTask?.uuid ?? "closed"}
         task={selectedTask}
+        boardName={board?.name}
         stages={board?.stages ?? []}
         labels={board?.labels ?? []}
         archived={archived}
@@ -268,28 +285,27 @@ export function ProjectKanban({
         }
       />
 
-      <Dialog
+      <AlertDialog
         open={deleteBoardOpen}
         onOpenChange={(open) => {
           if (!mutations.deleteBoard.isPending) setDeleteBoardOpen(open);
         }}
       >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Delete board?</DialogTitle>
-            <DialogDescription>
+        <AlertDialogContent className="max-w-md">
+          <AlertDialogHeader>
+            <span className="flex size-10 items-center justify-center rounded-full bg-destructive/10 text-destructive">
+              <Trash2 className="size-5" aria-hidden="true" />
+            </span>
+            <AlertDialogTitle>Delete board?</AlertDialogTitle>
+            <AlertDialogDescription>
               “{board?.name}” and all of its tasks will move to Trash for 30
               days and can be restored together.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              disabled={mutations.deleteBoard.isPending}
-              onClick={() => setDeleteBoardOpen(false)}
-            >
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={mutations.deleteBoard.isPending}>
               Cancel
-            </Button>
+            </AlertDialogCancel>
             <Button
               variant="destructive"
               disabled={mutations.deleteBoard.isPending}
@@ -299,11 +315,14 @@ export function ProjectKanban({
                 })
               }
             >
+              {mutations.deleteBoard.isPending && (
+                <Loader2 data-icon="inline-start" className="animate-spin" />
+              )}
               {mutations.deleteBoard.isPending ? "Deleting…" : "Delete board"}
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

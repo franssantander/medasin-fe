@@ -1,12 +1,14 @@
-import { BookOpen, LoaderCircle, Unlink } from "lucide-react";
+import { LoaderCircle, Unlink } from "lucide-react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { resourcePreview } from "@/features/resources/resource-document";
 import type { Resource } from "@/features/resources/type";
 import {
   ResourceIcon,
   resourceBadgeStyle,
 } from "@/features/resources/components/resource-icons";
+
+const COLLAPSED_COUNT = 4;
 
 export function ProjectResourceRow({
   resources,
@@ -19,71 +21,78 @@ export function ProjectResourceRow({
   onRemove?: (resource: Resource) => void;
   removingResourceUuid?: string;
 }) {
-  if (resources.length === 0) {
-    return (
-      <div className="flex items-center gap-2 rounded-lg border border-dashed px-3 py-4 text-sm text-muted-foreground">
-        <BookOpen className="size-4" />
-        No resources linked to this project or its tasks.
-      </div>
-    );
-  }
+  const [expanded, setExpanded] = useState(false);
+  const visible = expanded ? resources : resources.slice(0, COLLAPSED_COUNT);
+  const hiddenCount = resources.length - COLLAPSED_COUNT;
 
   return (
-    <div
-      className="flex min-w-0 gap-3 overflow-x-auto p-1"
-      aria-label="Project resources"
-    >
-      {resources.map((resource) => (
-        <Card
-          key={resource.uuid}
-          className="relative w-72 shrink-0 snap-start gap-3 p-4 transition-colors hover:border-primary/40 hover:bg-muted/30"
-        >
-          <button
-            type="button"
-            className="grid w-full min-w-0 gap-3 rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            aria-label={`Open ${resource.title}`}
-            aria-haspopup="dialog"
-            onClick={() => onOpen(resource)}
+    <div className="grid gap-3">
+      <ul
+        className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
+        aria-label="Project resources"
+      >
+        {visible.map((resource) => (
+          <li
+            key={resource.uuid}
+            className="group/resource relative min-w-0 rounded-xl border bg-card transition-colors hover:border-foreground/15 hover:bg-muted/30"
           >
-            <span className="flex min-w-0 items-center gap-3">
+            <button
+              type="button"
+              className="flex w-full min-w-0 items-start gap-3 rounded-xl p-3 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              aria-label={`Open ${resource.title}`}
+              aria-haspopup="dialog"
+              onClick={() => onOpen(resource)}
+            >
               <span
-                className="flex size-10 shrink-0 items-center justify-center rounded-xl shadow-sm"
+                className="flex size-9 shrink-0 items-center justify-center rounded-lg shadow-sm"
                 style={resourceBadgeStyle(resource.background)}
               >
-                <ResourceIcon name={resource.icon} className="size-5" />
+                <ResourceIcon name={resource.icon} className="size-4" />
               </span>
-              <span
-                className={`min-w-0 flex-1 truncate font-semibold ${onRemove ? "pr-8" : ""}`}
+              <span className={`grid min-w-0 flex-1 gap-0.5 ${onRemove ? "pr-7" : ""}`}>
+                <span className="truncate text-sm font-medium">
+                  {resource.title}
+                </span>
+                <span className="truncate text-xs text-muted-foreground">
+                  {resourcePreview(resource.content) ||
+                    resource.description ||
+                    resource.url ||
+                    "Open to view this resource."}
+                </span>
+              </span>
+            </button>
+            {onRemove && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-xs"
+                className="absolute right-2 top-2 text-muted-foreground opacity-0 transition-opacity hover:text-destructive focus-visible:opacity-100 group-hover/resource:opacity-100 group-focus-within/resource:opacity-100 disabled:opacity-100 [@media(hover:none)]:opacity-100"
+                aria-label={`Remove ${resource.title} from project`}
+                disabled={Boolean(removingResourceUuid)}
+                onClick={() => onRemove(resource)}
               >
-                {resource.title}
-              </span>
-            </span>
-            <span className="line-clamp-2 min-h-10 break-words text-sm text-muted-foreground">
-              {resourcePreview(resource.content) ||
-                resource.description ||
-                resource.url ||
-                "Open to view this resource."}
-            </span>
-          </button>
-          {onRemove && (
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              className="absolute right-3 top-3 text-muted-foreground hover:text-destructive"
-              aria-label={`Remove ${resource.title} from project`}
-              disabled={Boolean(removingResourceUuid)}
-              onClick={() => onRemove(resource)}
-            >
-              {removingResourceUuid === resource.uuid ? (
-                <LoaderCircle className="animate-spin" />
-              ) : (
-                <Unlink />
-              )}
-            </Button>
-          )}
-        </Card>
-      ))}
+                {removingResourceUuid === resource.uuid ? (
+                  <LoaderCircle className="animate-spin" />
+                ) : (
+                  <Unlink />
+                )}
+              </Button>
+            )}
+          </li>
+        ))}
+      </ul>
+      {hiddenCount > 0 && (
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="w-fit text-muted-foreground"
+          aria-expanded={expanded}
+          onClick={() => setExpanded((value) => !value)}
+        >
+          {expanded ? "Show fewer" : `Show all ${resources.length}`}
+        </Button>
+      )}
     </div>
   );
 }

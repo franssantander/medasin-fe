@@ -11,7 +11,7 @@ export function ResourceTitleField({ value, disabled, readOnly, error, onChange 
   return (
     <Field data-invalid={Boolean(error)} data-disabled={disabled}>
       <FieldLabel htmlFor={resourceFieldIds.title}>Title <span className="font-normal text-muted-foreground">(required)</span></FieldLabel>
-      <Input id={resourceFieldIds.title} value={value} disabled={disabled} readOnly={readOnly} required maxLength={255} autoFocus={!readOnly} aria-invalid={Boolean(error)} aria-describedby={error ? "resource-title-error" : undefined} placeholder="Give your resource a title" className="h-11 font-medium" onChange={(event) => onChange(event.target.value)} />
+      <Input id={resourceFieldIds.title} value={value} disabled={disabled} readOnly={readOnly} required maxLength={255} autoFocus={!readOnly} aria-invalid={Boolean(error)} aria-describedby={error ? "resource-title-error" : undefined} placeholder="Give your resource a title" className="font-medium" onChange={(event) => onChange(event.target.value)} />
       {error ? <FieldError id="resource-title-error">{error}</FieldError> : null}
     </Field>
   );
@@ -20,8 +20,10 @@ export function ResourceTitleField({ value, disabled, readOnly, error, onChange 
 export function ResourceNotesField({ documentId, content, readOnly, error, onChange }: { documentId: string; content: string; readOnly?: boolean; error?: string; onChange: (value: string) => void }) {
   return (
     <Field data-invalid={Boolean(error)}>
-      <FieldLabel id="resource-notes-label">Notes</FieldLabel>
-      <FieldDescription>Capture ideas, context, or a quick summary.</FieldDescription>
+      <div className="flex items-baseline justify-between gap-2">
+        <FieldLabel id="resource-notes-label">Notes</FieldLabel>
+        <span className="text-xs text-muted-foreground">Type / for formatting</span>
+      </div>
       <div id={resourceFieldIds.notes} role="group" aria-labelledby="resource-notes-label" tabIndex={-1}>
         <ResourceEditor id={documentId} content={content} onChange={onChange} readOnly={readOnly} />
       </div>
@@ -34,18 +36,17 @@ export function ResourceLinkInput({ value, disabled, pending, error, onChange, o
   return (
     <Field data-invalid={Boolean(error)} data-disabled={disabled || pending}>
       <FieldLabel htmlFor={resourceFieldIds.links}>Links</FieldLabel>
-      <FieldDescription>Add useful websites, documents, or references.</FieldDescription>
-      <InputGroup className="h-11">
-        <InputGroupInput id={resourceFieldIds.links} type="url" value={value} maxLength={4096} disabled={disabled || pending} aria-invalid={Boolean(error)} aria-describedby={error ? "resource-link-error" : "resource-link-hint"} placeholder="Paste an https:// link" className="h-11 min-w-0" onChange={(event) => onChange(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); onAdd(); } }} />
+      <InputGroup>
+        <InputGroupInput id={resourceFieldIds.links} type="url" value={value} maxLength={4096} disabled={disabled || pending} aria-invalid={Boolean(error)} aria-describedby={error ? "resource-link-error" : "resource-link-hint"} placeholder="Paste an https:// link" className="min-w-0" onChange={(event) => onChange(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); onAdd(); } }} />
         <InputGroupAddon><Link2 aria-hidden="true" /></InputGroupAddon>
         <InputGroupAddon align="inline-end">
-          <InputGroupButton className="h-11 px-3" disabled={disabled || pending || !value.trim()} aria-label="Add link" onClick={onAdd}>
+          <InputGroupButton variant="secondary" disabled={disabled || pending || !value.trim()} aria-label="Add link" onClick={onAdd}>
             {pending ? <LoaderCircle className="animate-spin motion-reduce:animate-none" aria-hidden="true" /> : <Plus aria-hidden="true" />}
             <span className="hidden sm:inline">Add link</span>
           </InputGroupButton>
         </InputGroupAddon>
       </InputGroup>
-      <FieldDescription id="resource-link-hint">Use a complete HTTP or HTTPS URL. Press Enter to add.</FieldDescription>
+      <FieldDescription id="resource-link-hint" className="text-xs">Websites, documents, or references. Paste a full http(s) URL and press Enter.</FieldDescription>
       {error ? <FieldError id="resource-link-error">{error}</FieldError> : null}
     </Field>
   );

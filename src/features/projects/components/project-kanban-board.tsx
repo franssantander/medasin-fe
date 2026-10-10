@@ -5,21 +5,19 @@ import {
 } from "@dnd-kit/sortable";
 import { useDndContext, useDroppable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
-import { FileText, Link2, Plus } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
+import { CircleCheck, FileText, Flag, Link2, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { getNoteDocumentPreview } from "@/components/ui/note-editor-document";
+import { cn } from "@/lib/utils";
 import type { BoardStage, BoardStageKey, BoardTask } from "../type";
-import { LabelBadge } from "./project-kanban-shared";
-import { priorityStyles, stageCountStyles } from "./project-kanban-utils";
+import {
+  priorityDotColors,
+  priorityLabels,
+  stageColumnStyles,
+  stageCountStyles,
+  stageDotColors,
+} from "./project-kanban-utils";
 
 export type TaskDraftValue = {
   stage: BoardStageKey;
@@ -28,7 +26,9 @@ export type TaskDraftValue = {
 
 export function KanbanColumn({
   stage,
+  tasks = stage.tasks,
   archived,
+  searching = false,
   draft,
   isCreating,
   onAdd,
@@ -38,7 +38,10 @@ export function KanbanColumn({
   onOpen,
 }: {
   stage: BoardStage;
+  /** Tasks to display; differs from `stage.tasks` while a search is active. */
+  tasks?: BoardTask[];
   archived: boolean;
+  searching?: boolean;
   draft?: TaskDraftValue;
   isCreating: boolean;
   onAdd: () => void;
@@ -48,10 +51,11 @@ export function KanbanColumn({
   onOpen: (task: BoardTask) => void;
 }) {
   const stageDroppableId = `stage:${stage.key}`;
+  const dragDisabled = archived || searching;
   const { active, over } = useDndContext();
   const { setNodeRef, isOver } = useDroppable({
     id: stageDroppableId,
-    disabled: archived,
+    disabled: dragDisabled,
   });
   const overId = over ? String(over.id) : undefined;
   const isDragOverStage = Boolean(
@@ -60,27 +64,48 @@ export function KanbanColumn({
       overId === stageDroppableId ||
       stage.tasks.some((task) => task.uuid === overId)),
   );
+  const countLabel = searching
+    ? `${tasks.length} of ${stage.tasks.length}`
+    : String(stage.tasks.length);
 
   return (
     <section
       ref={setNodeRef}
-      className={`flex h-[34rem] min-w-0 flex-col rounded-xl border bg-muted/25 transition-[border-color,background-color,box-shadow] ${isDragOverStage ? "border-primary/70 bg-primary/5 ring-2 ring-primary/15" : ""}`}
+      aria-label={stage.name}
+      className={cn(
+        "flex max-h-[40rem] min-h-64 min-w-0 flex-col overflow-hidden rounded-xl border transition-[background-color,box-shadow] motion-reduce:transition-none",
+        stageColumnStyles[stage.key].column,
+        isDragOverStage && "bg-primary/5 ring-2 ring-primary/30",
+      )}
     >
-      <div className="flex items-center justify-between border-b p-3">
-        <h3 className="flex items-center gap-1.5 font-semibold">
-          <span>{stage.name}</span>
-          <Badge
-            variant="secondary"
-            className={`h-5 min-w-5 justify-center rounded-full px-1.5 text-xs tabular-nums font-bold ${stageCountStyles[stage.key]}`}
+      <div
+        className={cn(
+          "flex shrink-0 items-center justify-between gap-2 border-b border-t-2 px-3 py-2",
+          stageColumnStyles[stage.key].header,
+        )}
+      >
+        <h3 className="flex min-w-0 items-center gap-2 text-sm font-semibold">
+          <span
+            className="size-2 shrink-0 rounded-full"
+            style={{ backgroundColor: stageDotColors[stage.key] }}
+            aria-hidden="true"
+          />
+          <span className="truncate">{stage.name}</span>
+          <span
+            className={cn(
+              "inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[11px] font-semibold tabular-nums",
+              stageCountStyles[stage.key],
+            )}
             aria-label={`${stage.tasks.length} ${stage.tasks.length === 1 ? "task" : "tasks"}`}
           >
-            {stage.tasks.length}
-          </Badge>
+            {countLabel}
+          </span>
         </h3>
         {!archived && (
           <Button
             variant="ghost"
             size="icon-sm"
+            className="text-muted-foreground hover:text-foreground"
             aria-label={`Add task to ${stage.name}`}
             onClick={onAdd}
           >
@@ -89,15 +114,15 @@ export function KanbanColumn({
         )}
       </div>
       <SortableContext
-        items={stage.tasks.map((task) => task.uuid)}
+        items={tasks.map((task) => task.uuid)}
         strategy={verticalListSortingStrategy}
       >
-        <div className="grid min-h-0 flex-1 content-start gap-3 overflow-y-auto p-3">
-          {stage.tasks.map((task) => (
+        <div className="workspace-list-scrollbar grid min-h-0 flex-1 content-start gap-2 overflow-y-auto p-2">
+          {tasks.map((task) => (
             <SortableTask
               key={task.uuid}
               task={task}
-              disabled={archived}
+              disabled={dragDisabled}
               onOpen={() => onOpen(task)}
             />
           ))}
@@ -110,13 +135,35 @@ export function KanbanColumn({
               onSubmit={onDraftSubmit}
             />
           )}
-          {stage.tasks.length === 0 && !draft && (
-            <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
-              {archived ? "No tasks" : "Drop a task here"}
+          {tasks.length === 0 && !draft && (
+            <div
+              className={cn(
+                "flex min-h-20 items-center justify-center rounded-lg border border-dashed border-border/70 bg-background/40 px-3 text-center text-xs text-muted-foreground transition-colors",
+                isDragOverStage && "border-primary/50 bg-primary/5 text-primary",
+              )}
+            >
+              {searching
+                ? "No tasks match"
+                : isDragOverStage
+                  ? "Drop here"
+                  : "No tasks"}
             </div>
           )}
         </div>
       </SortableContext>
+      {!archived && !draft && (
+        <div className={cn("shrink-0 border-t p-1.5", stageColumnStyles[stage.key].footer)}>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="w-full justify-start text-muted-foreground hover:bg-background hover:text-foreground"
+            onClick={onAdd}
+          >
+            <Plus data-icon="inline-start" />
+            Add task
+          </Button>
+        </div>
+      )}
     </section>
   );
 }
@@ -135,41 +182,43 @@ function TaskDraft({
   onSubmit: () => void;
 }) {
   return (
-    <Card size="sm" className="border-primary/40 shadow-sm">
-      <form
-        className="p-3"
-        onSubmit={(event) => {
-          event.preventDefault();
-          onSubmit();
-        }}
-        onBlur={(event) => {
-          if (
-            isPending ||
-            event.currentTarget.contains(event.relatedTarget as Node | null)
-          )
-            return;
+    <form
+      className="grid gap-1.5 rounded-lg border border-primary/40 bg-card p-2 shadow-sm"
+      onSubmit={(event) => {
+        event.preventDefault();
+        onSubmit();
+      }}
+      onBlur={(event) => {
+        if (
+          isPending ||
+          event.currentTarget.contains(event.relatedTarget as Node | null)
+        )
+          return;
 
-          if (title.trim()) onSubmit();
-          else onCancel();
+        if (title.trim()) onSubmit();
+        else onCancel();
+      }}
+    >
+      <Input
+        autoFocus
+        value={title}
+        onChange={(event) => onChange(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") {
+            event.preventDefault();
+            onCancel();
+          }
         }}
-      >
-        <Input
-          autoFocus
-          value={title}
-          onChange={(event) => onChange(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Escape") {
-              event.preventDefault();
-              onCancel();
-            }
-          }}
-          placeholder="Task title"
-          aria-label="Task title"
-          maxLength={120}
-          disabled={isPending}
-        />
-      </form>
-    </Card>
+        placeholder="What needs to be done?"
+        aria-label="Task title"
+        maxLength={120}
+        disabled={isPending}
+        className="border-transparent px-1.5 shadow-none focus-visible:ring-0"
+      />
+      <p className="px-1.5 text-[11px] text-muted-foreground">
+        {isPending ? "Adding…" : "Enter to add · Esc to cancel"}
+      </p>
+    </form>
   );
 }
 
@@ -224,16 +273,20 @@ export function TaskCard({
   onOpen?: () => void;
 }) {
   const { onKeyDown: onDragKeyDown, ...cardDragProps } = dragProps ?? {};
+  const done = task.stage === "done";
+  const extraLabels = task.labels.length - 2;
 
   return (
-    <Card
+    <div
       {...cardDragProps}
-      size="sm"
-      className={
+      data-slot="task-card"
+      className={cn(
+        "relative grid gap-2 rounded-lg border bg-card p-3 text-card-foreground shadow-xs outline-none",
         overlay
-          ? "w-[19rem] rotate-2 shadow-xl"
-          : `gap-3 transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${disabled ? "cursor-pointer" : "cursor-grab active:cursor-grabbing"}`
-      }
+          ? "w-[18rem] rotate-2 shadow-xl"
+          : "transition-[border-color,box-shadow] hover:border-foreground/15 hover:shadow-sm focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none",
+        !overlay && (disabled ? "cursor-pointer" : "cursor-grab active:cursor-grabbing"),
+      )}
       role={overlay ? undefined : "button"}
       tabIndex={overlay ? undefined : 0}
       onClick={overlay ? undefined : onOpen}
@@ -253,42 +306,79 @@ export function TaskCard({
             }
       }
     >
-      <CardHeader className="gap-2">
-        <div className="min-w-0">
-          <CardTitle className="text-sm leading-snug">{task.title}</CardTitle>
-          {task.description && (
-            <CardDescription className="mt-1 line-clamp-2 text-xs">
-              {getNoteDocumentPreview(task.description)}
-            </CardDescription>
+      <div className="grid min-w-0 gap-1">
+        <p
+          className={cn(
+            "flex items-start gap-1.5 text-sm font-medium leading-snug [overflow-wrap:anywhere]",
+            done && "text-muted-foreground",
           )}
-        </div>
-      </CardHeader>
-      <CardContent className="grid gap-2">
-        <div className="flex flex-wrap gap-1">
-          <Badge className={priorityStyles[task.priority]}>
-            {task.priority}
-          </Badge>
-          {task.labels.slice(0, 1).map((label) => (
-            <LabelBadge key={label.uuid} label={label} />
-          ))}
-        </div>
+        >
+          {done && (
+            <CircleCheck
+              className="mt-0.5 size-3.5 shrink-0 text-emerald-500"
+              aria-label="Done"
+            />
+          )}
+          {task.title}
+        </p>
+        {task.description && (
+          <p className="line-clamp-2 text-xs text-muted-foreground">
+            {getNoteDocumentPreview(task.description)}
+          </p>
+        )}
+      </div>
+
+      <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-muted-foreground">
+        <span
+          className="inline-flex items-center gap-1"
+          aria-label={`${priorityLabels[task.priority]} priority`}
+        >
+          <Flag
+            className="size-3"
+            style={{ color: priorityDotColors[task.priority] }}
+            fill="currentColor"
+            fillOpacity={0.2}
+            aria-hidden="true"
+          />
+          <span aria-hidden="true">{priorityLabels[task.priority]}</span>
+        </span>
+        {task.labels.slice(0, 2).map((label) => (
+          <span
+            key={label.uuid}
+            className="inline-flex min-w-0 max-w-32 items-center gap-1"
+          >
+            <span
+              className="size-2 shrink-0 rounded-full"
+              style={{ backgroundColor: label.hex }}
+              aria-hidden="true"
+            />
+            <span className="truncate">{label.name}</span>
+          </span>
+        ))}
+        {extraLabels > 0 && <span>+{extraLabels}</span>}
         {(task.resources.length > 0 || task.notes.length > 0) && (
-          <div className="flex gap-3 text-xs text-muted-foreground">
+          <span className="ml-auto flex items-center gap-2.5">
             {task.resources.length > 0 && (
-              <span className="flex items-center gap-1">
-                <Link2 className="size-3" />
+              <span
+                className="flex items-center gap-1"
+                aria-label={`${task.resources.length} linked resources`}
+              >
+                <Link2 className="size-3" aria-hidden="true" />
                 {task.resources.length}
               </span>
             )}
             {task.notes.length > 0 && (
-              <span className="flex items-center gap-1">
-                <FileText className="size-3" />
+              <span
+                className="flex items-center gap-1"
+                aria-label={`${task.notes.length} linked notes`}
+              >
+                <FileText className="size-3" aria-hidden="true" />
                 {task.notes.length}
               </span>
             )}
-          </div>
+          </span>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }

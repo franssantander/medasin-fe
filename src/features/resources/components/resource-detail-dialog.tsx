@@ -185,8 +185,8 @@ export function ResourceDetailDialog({ resource, onClose, onDeleted }: { resourc
                 <p className="text-sm font-medium">Upload didn’t finish</p>
                 <p className="break-words text-xs text-muted-foreground">{failedFiles.map((file) => file.name).join(", ")}</p>
                 <div className="flex gap-2">
-                  <Button type="button" variant="outline" className="h-11" disabled={busy} onClick={() => { void addFiles(failedFiles); }}>Retry upload</Button>
-                  <Button type="button" variant="ghost" className="h-11" disabled={busy} onClick={() => { setFailedFiles([]); clearAttachmentError("files"); }}>Clear files</Button>
+                  <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => { void addFiles(failedFiles); }}>Retry upload</Button>
+                  <Button type="button" variant="ghost" size="sm" disabled={busy} onClick={() => { setFailedFiles([]); clearAttachmentError("files"); }}>Clear files</Button>
                 </div>
               </div> : null}
               {images.length ? <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">{images.map((item) => <ResourceAttachmentCard key={item.uuid} resourceUuid={resource.uuid} attachment={item} disabled={busy} deleting={deletingId === item.uuid} onPreview={setPreview} onRemove={editable ? () => setAttachmentToDelete(item) : undefined} />)}</div> : null}
@@ -229,8 +229,8 @@ export function ResourceDetailDialog({ resource, onClose, onDeleted }: { resourc
           </AlertDialogHeader>
           {attachmentErrors.form ? <p role="alert" className="text-sm text-destructive">{attachmentErrors.form}</p> : null}
           <AlertDialogFooter>
-            <AlertDialogCancel ref={cancelDeleteRef} disabled={Boolean(deletingId)} className="h-11">Cancel</AlertDialogCancel>
-            <AlertDialogAction variant="destructive" className="h-11" disabled={Boolean(deletingId) || !attachmentToDelete} onClick={() => { if (attachmentToDelete) void remove(attachmentToDelete); }}>{deletingId ? "Deleting…" : "Delete attachment"}</AlertDialogAction>
+            <AlertDialogCancel ref={cancelDeleteRef} disabled={Boolean(deletingId)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" disabled={Boolean(deletingId) || !attachmentToDelete} onClick={() => { if (attachmentToDelete) void remove(attachmentToDelete); }}>{deletingId ? "Deleting…" : "Delete attachment"}</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

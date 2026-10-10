@@ -14,3 +14,9 @@ export const projectStatusBadgeClassNames: Record<ProjectStatus, string> = {
   completed:
     "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-300",
 };
+
+export const projectStatusDotClassNames: Record<ProjectStatus, string> = {
+  not_started: "bg-slate-300 dark:bg-slate-600",
+  in_progress: "bg-blue-500 dark:bg-blue-400",
+  completed: "bg-emerald-500 dark:bg-emerald-400",
+};

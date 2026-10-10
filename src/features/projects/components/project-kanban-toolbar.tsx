@@ -3,10 +3,13 @@ import {
   ChevronDown,
   Edit3,
   LayoutDashboard,
+  Loader2,
   MoreHorizontal,
   Plus,
+  Search,
   Tags,
   Trash2,
+  X,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -22,9 +25,17 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupInput,
+} from "@/components/ui/input-group";
 import type { BoardSummary } from "../type";
 
 export type BoardDialogValue = {
@@ -38,6 +49,8 @@ export function ProjectKanbanToolbar({
   archived,
   boardName,
   labelCount,
+  search = "",
+  onSearchChange,
   onSelectBoard,
   onOpenLabels,
   onOpenBoardDialog,
@@ -48,6 +61,8 @@ export function ProjectKanbanToolbar({
   archived: boolean;
   boardName?: string;
   labelCount?: number;
+  search?: string;
+  onSearchChange?: (value: string) => void;
   onSelectBoard: (boardUuid: string) => void;
   onOpenLabels: () => void;
   onOpenBoardDialog: (dialog: BoardDialogValue) => void;
@@ -56,13 +71,13 @@ export function ProjectKanbanToolbar({
   const selectedBoard = boards.find((item) => item.uuid === selectedBoardUuid);
 
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3">
+    <div className="flex flex-wrap items-center gap-2">
       <DropdownMenu>
         <DropdownMenuTrigger
           render={
             <Button
-              variant="outline"
-              className="w-fit max-w-full justify-between sm:max-w-96"
+              variant="ghost"
+              className="-ml-2 h-9 w-fit max-w-full justify-between gap-2 px-2 text-base font-semibold sm:max-w-96"
               aria-label="Select board"
             />
           }
@@ -73,9 +88,11 @@ export function ProjectKanbanToolbar({
               {selectedBoard?.name ?? "Select a board"}
             </span>
           </span>
-          <span className="flex shrink-0 items-center gap-2">
+          <span className="flex shrink-0 items-center gap-1.5">
             {selectedBoard && (
-              <Badge variant="secondary">{selectedBoard.task_count}</Badge>
+              <span className="text-sm font-normal tabular-nums text-muted-foreground">
+                {selectedBoard.task_count}
+              </span>
             )}
             <ChevronDown className="size-4 text-muted-foreground" />
           </span>
@@ -84,7 +101,7 @@ export function ProjectKanbanToolbar({
           side="bottom"
           align="start"
           sideOffset={4}
-          className="w-max min-w-(--anchor-width) max-w-[calc(100vw-2rem)] sm:max-w-96"
+          className="w-max min-w-56 max-w-[calc(100vw-2rem)] sm:max-w-96"
         >
           {boards.map((item) => (
             <DropdownMenuItem
@@ -101,65 +118,124 @@ export function ProjectKanbanToolbar({
               />
               <span className="flex min-w-0 flex-1 items-center justify-between gap-3">
                 <span className="truncate">{item.name}</span>
-                <Badge variant="secondary">{item.task_count}</Badge>
+                <span className="text-xs tabular-nums text-muted-foreground">
+                  {item.task_count}
+                </span>
               </span>
             </DropdownMenuItem>
           ))}
-        </DropdownMenuContent>
-      </DropdownMenu>
-      {!archived && (
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            aria-label="Manage board labels"
-            onClick={onOpenLabels}
-          >
-            <Tags />
-            Labels
-            {Boolean(labelCount) && (
-              <Badge variant="secondary">{labelCount}</Badge>
-            )}
-          </Button>
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              render={
-                <Button
-                  variant="outline"
-                  size="icon-sm"
-                  aria-label="Board actions"
-                />
-              }
-            >
-              <MoreHorizontal />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent>
+          {!archived && (
+            <>
+              <DropdownMenuSeparator />
               <DropdownMenuItem
                 onClick={() => onOpenBoardDialog({ mode: "create", name: "" })}
               >
                 <Plus />
                 New board
               </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() =>
-                  onOpenBoardDialog({ mode: "rename", name: boardName ?? "" })
+            </>
+          )}
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      <div
+        className={
+          onSearchChange
+            ? "ml-auto flex w-full items-center gap-2 sm:w-auto"
+            : "ml-auto flex items-center gap-2"
+        }
+      >
+        {onSearchChange && (
+          <InputGroup className="h-8 flex-1 sm:w-56 sm:flex-none">
+            <InputGroupAddon>
+              <Search aria-hidden="true" />
+            </InputGroupAddon>
+            <InputGroupInput
+              type="search"
+              aria-label="Search tasks"
+              placeholder="Search tasks…"
+              value={search}
+              onChange={(event) => onSearchChange(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Escape" && search) {
+                  event.preventDefault();
+                  onSearchChange("");
+                }
+              }}
+              className="[&::-webkit-search-cancel-button]:hidden"
+            />
+            {search && (
+              <InputGroupAddon align="inline-end">
+                <InputGroupButton
+                  size="icon-xs"
+                  aria-label="Clear task search"
+                  onClick={() => onSearchChange("")}
+                >
+                  <X />
+                </InputGroupButton>
+              </InputGroupAddon>
+            )}
+          </InputGroup>
+        )}
+        {!archived && (
+          <>
+            <Button
+              variant="outline"
+              size="sm"
+              aria-label="Manage board labels"
+              onClick={onOpenLabels}
+            >
+              <Tags />
+              <span className="max-sm:hidden">Labels</span>
+              {Boolean(labelCount) && (
+                <Badge variant="secondary" className="max-sm:hidden">
+                  {labelCount}
+                </Badge>
+              )}
+            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={
+                  <Button
+                    variant="outline"
+                    size="icon-sm"
+                    aria-label="Board actions"
+                  />
                 }
               >
-                <Edit3 />
-                Rename board
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                destructive
-                disabled={boards.length <= 1}
-                onClick={onDeleteBoard}
-              >
-                <Trash2 />
-                Delete board
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-      )}
+                <MoreHorizontal />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                  onClick={() =>
+                    onOpenBoardDialog({ mode: "create", name: "" })
+                  }
+                >
+                  <Plus />
+                  New board
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() =>
+                    onOpenBoardDialog({ mode: "rename", name: boardName ?? "" })
+                  }
+                >
+                  <Edit3 />
+                  Rename board
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  destructive
+                  disabled={boards.length <= 1}
+                  onClick={onDeleteBoard}
+                >
+                  <Trash2 />
+                  Delete board
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </>
+        )}
+      </div>
     </div>
   );
 }
@@ -177,39 +253,63 @@ export function ProjectBoardDialog({
   onClose: () => void;
   onSave: (dialog: BoardDialogValue) => void;
 }) {
+  const creating = dialog?.mode === "create";
+  const canSave = !isSaving && (creating || Boolean(dialog?.name.trim()));
+
   return (
-    <Dialog open={Boolean(dialog)} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-sm">
+    <Dialog
+      open={Boolean(dialog)}
+      onOpenChange={(open) => !open && !isSaving && onClose()}
+    >
+      <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>
-            {dialog?.mode === "create" ? "New board" : "Rename board"}
-          </DialogTitle>
+          <DialogTitle>{creating ? "New board" : "Rename board"}</DialogTitle>
           <DialogDescription>
-            Use a focused board name that describes this stream of work.
+            {creating
+              ? "Boards split a project into separate streams of work, each with its own stages and tasks."
+              : "Give this board a short name that describes its stream of work."}
           </DialogDescription>
         </DialogHeader>
-        <Input
-          value={dialog?.name ?? ""}
-          onChange={(event) =>
-            dialog && onChange({ ...dialog, name: event.target.value })
-          }
-          placeholder={
-            dialog?.mode === "create" ? "Board name (optional)" : "Board name"
-          }
-        />
+        <form
+          id="project-board-form"
+          className="grid gap-4"
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (dialog && canSave)
+              onSave({ ...dialog, name: dialog.name.trim() });
+          }}
+        >
+          <Field className="gap-2">
+            <FieldLabel htmlFor="project-board-name">Board name</FieldLabel>
+            <Input
+              id="project-board-name"
+              autoFocus
+              maxLength={120}
+              value={dialog?.name ?? ""}
+              disabled={isSaving}
+              onChange={(event) =>
+                dialog && onChange({ ...dialog, name: event.target.value })
+              }
+              placeholder={
+                creating ? "e.g. Launch, Research, Content" : "Board name"
+              }
+            />
+            {creating && (
+              <FieldDescription className="text-xs">
+                Optional — leave blank to use a numbered name.
+              </FieldDescription>
+            )}
+          </Field>
+        </form>
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
+          <Button variant="outline" disabled={isSaving} onClick={onClose}>
             Cancel
           </Button>
-          <Button
-            disabled={
-              isSaving || (dialog?.mode === "rename" && !dialog.name.trim())
-            }
-            onClick={() =>
-              dialog && onSave({ ...dialog, name: dialog.name.trim() })
-            }
-          >
-            Save
+          <Button type="submit" form="project-board-form" disabled={!canSave}>
+            {isSaving && (
+              <Loader2 data-icon="inline-start" className="animate-spin" />
+            )}
+            {isSaving ? "Saving…" : creating ? "Create board" : "Save name"}
           </Button>
         </DialogFooter>
       </DialogContent>

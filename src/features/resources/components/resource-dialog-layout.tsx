@@ -53,19 +53,19 @@ export function ResourceDialogLayout({
         showCloseButton={false}
         finalFocus={openerRef}
         className={cn(
-          "max-h-[92dvh] w-[calc(100%-1rem)] max-w-6xl gap-0 overflow-hidden p-0 motion-reduce:transition-none sm:w-[calc(100%-2rem)]",
-          fitContent ? "h-auto" : "h-[min(92dvh,56rem)]",
+          "max-h-[92dvh] w-[calc(100%-1rem)] max-w-5xl gap-0 overflow-hidden p-0 motion-reduce:transition-none sm:w-[calc(100%-2rem)]",
+          fitContent ? "h-auto" : "h-[min(90dvh,50rem)]",
         )}
       >
-        <DialogHeader className="flex shrink-0 flex-row items-center gap-3 border-b px-5 py-4 pr-5 sm:px-6">
-          <div className="flex size-11 shrink-0 items-center justify-center rounded-xl" style={resourceBadgeStyle(/^#[0-9a-f]{6}$/i.test(background) ? background : "#000000")}>
+        <DialogHeader className="flex shrink-0 flex-row items-center gap-3 border-b px-5 py-4 pr-4 sm:px-6 sm:pr-5">
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-lg shadow-sm transition-colors motion-reduce:transition-none" style={resourceBadgeStyle(/^#[0-9a-f]{6}$/i.test(background) ? background : "#000000")}>
             <ResourceIcon name={icon} className="size-5" />
           </div>
-          <div className="grid min-w-0 flex-1 gap-1">
+          <div className="grid min-w-0 flex-1 gap-0.5">
             <DialogTitle>{title}</DialogTitle>
-            <DialogDescription className="text-xs sm:text-sm">{description}</DialogDescription>
+            <DialogDescription className="truncate">{description}</DialogDescription>
           </div>
-          <Button type="button" variant="ghost" size="icon" className="size-11 shrink-0" disabled={busy} aria-label="Close resource dialog" onClick={onRequestClose}>
+          <Button type="button" variant="ghost" size="icon-sm" className="shrink-0 self-start" disabled={busy} aria-label="Close resource dialog" onClick={onRequestClose}>
             <X aria-hidden="true" />
           </Button>
         </DialogHeader>
@@ -79,9 +79,9 @@ export function ResourceDialogBody({ main, sidebar, summary }: { main: ReactNode
   return (
     <div data-slot="resource-dialog-body" className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain scroll-py-6">
       {summary ? <div className="px-5 pt-5 sm:px-6">{summary}</div> : null}
-      <div className="grid min-w-0 lg:grid-cols-[minmax(0,1fr)_20rem]">
+      <div className="grid min-h-full min-w-0 lg:grid-cols-[minmax(0,1fr)_19rem]">
         <div className="min-w-0 p-5 sm:p-6">{main}</div>
-        <aside aria-label="Resource organization" className="min-w-0 border-t bg-muted/20 p-5 sm:p-6 lg:border-l lg:border-t-0">{sidebar}</aside>
+        <aside aria-label="Resource organization" className="min-w-0 border-t bg-muted/30 p-5 sm:p-6 lg:border-l lg:border-t-0">{sidebar}</aside>
       </div>
     </div>
   );
@@ -89,9 +89,9 @@ export function ResourceDialogBody({ main, sidebar, summary }: { main: ReactNode
 
 export function ResourceDialogFooter({ status, children }: { status: ReactNode; children: ReactNode }) {
   return (
-    <div data-slot="resource-dialog-footer" className="flex shrink-0 flex-col gap-3 border-t bg-popover px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+    <div data-slot="resource-dialog-footer" className="flex shrink-0 flex-col gap-3 border-t bg-popover px-5 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6">
       <div className="min-w-0 text-xs text-muted-foreground">{status}</div>
-      <div className="flex flex-wrap gap-2 [&>button]:h-11 [&>button]:flex-1 sm:[&>button]:flex-none">{children}</div>
+      <div className="flex flex-wrap gap-2 [&>button]:flex-1 sm:[&>button]:flex-none">{children}</div>
     </div>
   );
 }
@@ -112,7 +112,7 @@ export function ResourceErrorSummary({ errors }: { errors: ResourceFormErrors })
           {entries.map(([field, error]) => (
             <li key={field}>
               {field === "form" ? error : (
-                <button type="button" className="min-h-11 text-left underline underline-offset-4 outline-none focus-visible:ring-2 focus-visible:ring-ring" onClick={() => document.getElementById(resourceFieldIds[field])?.focus()}>
+                <button type="button" className="text-left underline underline-offset-4 outline-none focus-visible:ring-2 focus-visible:ring-ring" onClick={() => document.getElementById(resourceFieldIds[field])?.focus()}>
                   {resourceFieldLabels[field]}: {error}
                 </button>
               )}
@@ -141,8 +141,8 @@ export function ResourceDiscardDialog({ open, editing = false, onOpenChange, onD
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel ref={cancelRef} className="h-11">Keep editing</AlertDialogCancel>
-          <AlertDialogAction variant="destructive" className="h-11" onClick={onDiscard}>{editing ? "Discard unsaved changes" : "Discard draft"}</AlertDialogAction>
+          <AlertDialogCancel ref={cancelRef}>Keep editing</AlertDialogCancel>
+          <AlertDialogAction variant="destructive" onClick={onDiscard}>{editing ? "Discard unsaved changes" : "Discard draft"}</AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>

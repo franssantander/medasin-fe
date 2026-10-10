@@ -39,7 +39,7 @@ export function ResourceEditor({
   return (
     <div className={cn(
       "resource-note-editor text-foreground",
-      presentation === "view" ? "resource-note-view" : "min-h-72 overflow-hidden rounded-xl border bg-background",
+      presentation === "view" ? "resource-note-view" : "min-h-56 overflow-hidden rounded-lg border bg-background shadow-xs transition-[border-color,box-shadow] focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50",
     )}>
       <NoteRichTextEditor
         mode="resource"

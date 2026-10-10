@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { LoaderCircle } from "lucide-react";
+import { FolderKanban, LoaderCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { EMPTY_NOTE_DOCUMENT } from "@/components/ui/note-editor-document";
@@ -46,6 +46,10 @@ export function ResourceFormDialog({ onClose, initialProjectUuids = [] }: { onCl
   const dirty = draftSignature(values) !== draftSignature(initial) || Boolean(links.length || files.length || link.trim() || draftTag.trim());
   const imageFiles = files.filter((file) => file.type.startsWith("image/"));
   const documentFiles = files.filter((file) => !file.type.startsWith("image/"));
+  const linkedProjectNames = initialProjectUuids
+    .filter((uuid) => values.projectUuids.includes(uuid))
+    .map((uuid) => options.projectItems.find((item) => item.uuid === uuid)?.name)
+    .filter((name): name is string => Boolean(name));
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => setOpen(true));
@@ -133,13 +137,13 @@ export function ResourceFormDialog({ onClose, initialProjectUuids = [] }: { onCl
                 {links.length ? <div className="grid gap-2">{links.map((value) => <ResourceLinkCard key={value} url={value} disabled={create.isPending} onRemove={() => { setLinks((current) => current.filter((item) => item !== value)); clearError("links"); }} />)}</div> : null}
               </FieldGroup>
               <Field id={resourceFieldIds.files} tabIndex={-1} data-invalid={Boolean(errors.files)}>
-                <div className="flex items-center justify-between gap-2">
+                <div className="flex items-baseline justify-between gap-2">
                   <FieldLabel>Images and files</FieldLabel>
-                  <span className="text-xs tabular-nums text-muted-foreground">{files.length}/10 selected</span>
+                  <span className="text-xs tabular-nums text-muted-foreground">{files.length}/10</span>
                 </div>
                 <ResourceFileDropzone id="resource-files" disabled={create.isPending} onFiles={addFiles} />
                 {errors.files ? <FieldError>{errors.files}</FieldError> : null}
-                {imageFiles.length ? <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">{imageFiles.map((file, index) => <SelectedResourceImage key={`${file.name}-${file.lastModified}-${index}`} file={file} disabled={create.isPending} onPreview={setPreview} onRemove={() => { setFiles((current) => current.filter((item) => item !== file)); clearError("files"); }} />)}</div> : null}
+                {imageFiles.length ? <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">{imageFiles.map((file, index) => <SelectedResourceImage key={`${file.name}-${file.lastModified}-${index}`} file={file} disabled={create.isPending} onPreview={setPreview} onRemove={() => { setFiles((current) => current.filter((item) => item !== file)); clearError("files"); }} />)}</div> : null}
                 {documentFiles.length ? <div className="grid gap-2">{documentFiles.map((file, index) => <ResourceFileCard key={`${file.name}-${file.lastModified}-${index}`} name={file.name} size={file.size} disabled={create.isPending} onRemove={() => { setFiles((current) => current.filter((item) => item !== file)); clearError("files"); }} />)}</div> : null}
               </Field>
             </FieldGroup>
@@ -151,7 +155,12 @@ export function ResourceFormDialog({ onClose, initialProjectUuids = [] }: { onCl
             </FieldGroup>
           }
         />
-        <ResourceDialogFooter status={"Only a title is required."}>
+        <ResourceDialogFooter status={linkedProjectNames.length ? (
+          <span className="flex min-w-0 items-center gap-1.5">
+            <FolderKanban className="size-3.5 shrink-0" aria-hidden="true" />
+            <span className="truncate">Will be added to <span className="font-medium text-foreground">{linkedProjectNames.join(", ")}</span> · Only a title is required.</span>
+          </span>
+        ) : "Only a title is required."}>
           <Button type="button" variant="outline" disabled={create.isPending} onClick={close}>Cancel</Button>
           <Button type="submit" disabled={create.isPending}>{create.isPending ? <LoaderCircle className="animate-spin motion-reduce:animate-none" data-icon="inline-start" aria-hidden="true" /> : null}{create.isPending ? "Creating…" : "Create resource"}</Button>
         </ResourceDialogFooter>
