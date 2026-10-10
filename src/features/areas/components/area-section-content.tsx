@@ -1,8 +1,15 @@
 "use client";
 
+import { CloudOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardTitle } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
 import type { Resource } from "@/features/resources/type";
 import type { Goal, GoalFilter, Habit, Paginated, Project } from "../type";
 import type {
@@ -10,6 +17,7 @@ import type {
   EditableAreaRecord,
   EditableAreaRecordKind,
 } from "./area-detail-types";
+import { TabContentSkeleton } from "./area-skeletons";
 import { GoalTracker } from "./goal-tracker";
 import { HabitSectionContent } from "./habit-section-content";
 import { LinkedRecordsSection } from "./linked-records-section";
@@ -55,15 +63,27 @@ export function AreaSectionContent({
   onLinkHabit: () => void;
   onChanged: (message: string) => Promise<void>;
 }) {
-  if (loading) return <Skeleton className="h-64 rounded-xl" />;
+  if (loading) {
+    return (
+      <TabContentSkeleton tab={tab} />
+    );
+  }
   if (error) {
     return (
-      <Card className="items-center py-12">
-        <CardTitle>Could not load {tab}</CardTitle>
-        <Button variant="outline" onClick={refetch}>
-          Try again
-        </Button>
-      </Card>
+      <Empty className="border">
+        <EmptyHeader>
+          <EmptyMedia variant="icon">
+            <CloudOff />
+          </EmptyMedia>
+          <EmptyTitle>Could not load {tab}</EmptyTitle>
+          <EmptyDescription>Check your connection and try again.</EmptyDescription>
+        </EmptyHeader>
+        <EmptyContent>
+          <Button variant="outline" onClick={refetch}>
+            Try again
+          </Button>
+        </EmptyContent>
+      </Empty>
     );
   }
 

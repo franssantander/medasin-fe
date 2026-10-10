@@ -1,8 +1,8 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Check, ImagePlus, Search } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Check, ImagePlus, LoaderCircle, Palette, Undo2 } from "lucide-react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { Button } from "@/components/ui/button";
 import {
@@ -13,12 +13,26 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
+import {
+  Field,
+  FieldDescription,
+  FieldError,
+  FieldGroup,
+  FieldLabel,
+} from "@/components/ui/field";
 import { ImageCropDialog } from "@/components/ui/image-crop-dialog";
-import { ApiError } from "@/lib/axios";
+import { Input } from "@/components/ui/input";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+} from "@/components/ui/input-group";
+import { Textarea } from "@/components/ui/textarea";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { PlanLimitAlert } from "@/features/subscription/components/plan-limit-alert";
 import { isPlanLimitError } from "@/features/subscription/plan-limit-error";
+import { ApiError } from "@/lib/axios";
+import { cn } from "@/lib/utils";
 import {
   AREA_IMAGE_MAX_SIZE,
   AREA_IMAGE_TYPES,
@@ -26,38 +40,32 @@ import {
   type AreaFormValues,
 } from "../schemas/area-schema";
 import type { Area, AreaInput } from "../type";
-import { AREA_ICONS, AreaIcon, areaBadgeStyle } from "./area-icons";
-import { FormField } from "./form-field";
+import { AreaIconPicker } from "./area-icon-picker";
+import { AreaIcon, areaBadgeStyle } from "./area-icons";
 
 export const DEFAULT_AREA_BACKGROUND =
   "https://images.unsplash.com/photo-1763936783251-4a3eb135f07f?auto=format&fit=crop&w=1200&q=80&sat=-100";
 
+const NAME_MAX_LENGTH = 120;
+const DEFAULT_BADGE_COLOR = "#000000";
+
 const AREA_BADGE_COLORS = [
+  { name: "Black", value: "#000000" },
   { name: "Rose", value: "#F43F5E" },
-  { name: "Pink", value: "#EC4899" },
-  { name: "Fuchsia", value: "#D946EF" },
-  { name: "Purple", value: "#A855F7" },
-  { name: "Violet", value: "#8B5CF6" },
-  { name: "Indigo", value: "#6366F1" },
-  { name: "Blue", value: "#3B82F6" },
-  { name: "Sky", value: "#0EA5E9" },
-  { name: "Cyan", value: "#06B6D4" },
-  { name: "Teal", value: "#14B8A6" },
-  { name: "Emerald", value: "#10B981" },
-  { name: "Green", value: "#22C55E" },
-  { name: "Lime", value: "#84CC16" },
-  { name: "Yellow", value: "#EAB308" },
-  { name: "Amber", value: "#F59E0B" },
   { name: "Orange", value: "#F97316" },
-  { name: "Coral", value: "#FB7185" },
-  { name: "Blush", value: "#F472B6" },
-  { name: "Lavender", value: "#C084FC" },
-  { name: "Periwinkle", value: "#818CF8" },
-  { name: "Ocean", value: "#0284C7" },
-  { name: "Aqua", value: "#2DD4BF" },
-  { name: "Meadow", value: "#4ADE80" },
-  { name: "Sunshine", value: "#FACC15" },
+  { name: "Amber", value: "#F59E0B" },
+  { name: "Lime", value: "#84CC16" },
+  { name: "Emerald", value: "#10B981" },
+  { name: "Teal", value: "#14B8A6" },
+  { name: "Sky", value: "#0EA5E9" },
+  { name: "Blue", value: "#3B82F6" },
+  { name: "Indigo", value: "#6366F1" },
+  { name: "Violet", value: "#8B5CF6" },
+  { name: "Pink", value: "#EC4899" },
 ] as const;
+
+const isHexColor = (value?: string | null): value is string =>
+  Boolean(value && /^#[0-9a-f]{6}$/i.test(value));
 
 export function AreaFormDialog({
   open,
@@ -72,9 +80,11 @@ export function AreaFormDialog({
   isPending: boolean;
   onSubmit: (input: AreaInput) => Promise<void>;
 }) {
-  const [iconSearch, setIconSearch] = useState("");
+  const id = useId();
   const [quotaError, setQuotaError] = useState<ApiError | null>(null);
+  const [isDraggingFile, setIsDraggingFile] = useState(false);
   const quotaAlertRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const initializedAreaRef = useRef<string | null>(null);
   useEffect(() => {
     if (quotaError) quotaAlertRef.current?.focus();
@@ -98,10 +108,12 @@ export function AreaFormDialog({
       name: "",
       description: "",
       icon: "Leaf",
-      background: "#000000",
+      background: DEFAULT_BADGE_COLOR,
       background_image: null,
     },
   });
+  const name = useWatch({ control, name: "name" }) ?? "";
+  const description = useWatch({ control, name: "description" });
   const selectedIcon = useWatch({ control, name: "icon" });
   const badgeColor = useWatch({ control, name: "background" });
   const selectedImage = useWatch({ control, name: "background_image" });
@@ -110,12 +122,11 @@ export function AreaFormDialog({
       selectedImage instanceof File ? URL.createObjectURL(selectedImage) : null,
     [selectedImage],
   );
-  const filteredIcons = useMemo(() => {
-    const query = iconSearch.trim().toLowerCase();
-    return query
-      ? AREA_ICONS.filter(({ name }) => name.toLowerCase().includes(query))
-      : AREA_ICONS;
-  }, [iconSearch]);
+  const presetColor = AREA_BADGE_COLORS.find(
+    (color) => color.value.toLowerCase() === badgeColor?.toLowerCase(),
+  );
+  const coverImage =
+    uploadPreview || area?.background_image_url || DEFAULT_AREA_BACKGROUND;
 
   useEffect(
     () => () => {
@@ -143,25 +154,29 @@ export function AreaFormDialog({
         name: area?.name ?? "",
         description: area?.description ?? "",
         icon: area?.icon ?? "Leaf",
-        background: area?.background ?? "#000000",
+        background: area?.background ?? DEFAULT_BADGE_COLOR,
         background_image: null,
       });
     }
   }, [area, open, reset]);
 
+  const closeDialog = () => {
+    setCropSource(null);
+    setQuotaError(null);
+    setIsDraggingFile(false);
+    onOpenChange(false);
+  };
+
   const changeDialogOpen = (nextOpen: boolean) => {
-    if (!nextOpen) {
-      setCropSource(null);
-      setQuotaError(null);
-    }
-    onOpenChange(nextOpen);
+    if (nextOpen) onOpenChange(true);
+    else if (!isPending) closeDialog();
   };
 
   const submit = handleSubmit(async (values) => {
     setQuotaError(null);
     try {
       await onSubmit(values);
-      changeDialogOpen(false);
+      closeDialog();
     } catch (error) {
       if (isPlanLimitError(error)) {
         setQuotaError(error);
@@ -196,196 +211,323 @@ export function AreaFormDialog({
     setCropSource({ file, url: URL.createObjectURL(file) });
   };
 
+  const setBadgeColor = (value: string) =>
+    setValue("background", value.toUpperCase(), {
+      shouldDirty: true,
+      shouldValidate: true,
+    });
+
   return (
     <Dialog open={open} onOpenChange={changeDialogOpen}>
-      <DialogContent>
-        <DialogHeader>
+      <DialogContent className="max-w-2xl gap-0 overflow-hidden p-0">
+        <DialogHeader className="shrink-0 border-b px-5 py-5 pr-12 sm:px-6 sm:pr-12">
           <DialogTitle>{area ? "Edit area" : "Create area"}</DialogTitle>
           <DialogDescription>
             Define an enduring part of life you want to tend with intention.
           </DialogDescription>
         </DialogHeader>
 
-        <form id="area-form" onSubmit={submit} className="grid gap-5">
-          {quotaError && (
-            <div ref={quotaAlertRef} tabIndex={-1}>
-              <PlanLimitAlert error={quotaError} />
-            </div>
-          )}
-          <FormField
-            label="Background image"
-            error={errors.background_image?.message}
-          >
-            <label className="group relative block h-36 cursor-pointer overflow-hidden rounded-xl border bg-muted">
-              <span
-                className="absolute inset-0 bg-cover bg-center transition-transform duration-300 group-hover:scale-[1.02]"
-                style={{
-                  backgroundImage: `url('${uploadPreview || area?.background_image_url || DEFAULT_AREA_BACKGROUND}')`,
+        <form
+          id="area-form"
+          onSubmit={submit}
+          className="min-h-0 overflow-y-auto overscroll-contain"
+        >
+          <FieldGroup className="gap-6 p-5 sm:p-6">
+            {quotaError && (
+              <div ref={quotaAlertRef} tabIndex={-1} className="outline-none">
+                <PlanLimitAlert error={quotaError} />
+              </div>
+            )}
+
+            <Field data-invalid={Boolean(errors.background_image)}>
+              <FieldLabel htmlFor={`${id}-cover`}>Cover image</FieldLabel>
+              <div
+                className={cn(
+                  "overflow-hidden rounded-xl border bg-card shadow-xs transition-shadow",
+                  isDraggingFile && "ring-3 ring-ring/50",
+                )}
+                onDragOver={(event) => {
+                  if (!event.dataTransfer.types.includes("Files")) return;
+                  event.preventDefault();
+                  event.dataTransfer.dropEffect = "copy";
+                  setIsDraggingFile(true);
                 }}
-              />
-              <span className="absolute inset-0 bg-black/25" />
-              <span
-                className="absolute bottom-3 left-3 flex size-11 items-center justify-center rounded-xl shadow-md ring-2 ring-white/80"
-                style={areaBadgeStyle(badgeColor)}
+                onDragLeave={(event) => {
+                  if (!event.currentTarget.contains(event.relatedTarget as Node)) {
+                    setIsDraggingFile(false);
+                  }
+                }}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  setIsDraggingFile(false);
+                  selectImage(event.dataTransfer.files[0]);
+                }}
               >
-                <AreaIcon name={selectedIcon} className="size-5" />
-              </span>
-              <span className="absolute inset-0 flex items-center justify-center">
-                <span className="flex items-center gap-2 rounded-full bg-black/80 px-4 py-2 text-xs font-medium text-white backdrop-blur-sm">
-                  <ImagePlus className="size-4" />
-                  {selectedImage ? "Change image" : "Upload image"}
-                </span>
-              </span>
-              <Input
+                <div className="relative aspect-16/7 overflow-hidden bg-muted">
+                  <div
+                    className="absolute inset-0 bg-cover bg-center"
+                    style={{ backgroundImage: `url('${coverImage}')` }}
+                  />
+                  <div className="absolute inset-0 bg-linear-to-t from-black/40 via-black/0 to-black/10" />
+                  {isDraggingFile && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/50 text-sm font-medium text-white">
+                      Drop to use as cover
+                    </div>
+                  )}
+                  <div className="absolute bottom-3 right-3 flex items-center gap-1.5">
+                    {selectedImage && (
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="icon-sm"
+                        aria-label="Undo new cover"
+                        title="Undo new cover"
+                        className="bg-background/90 shadow-sm backdrop-blur-sm hover:bg-background"
+                        onClick={() =>
+                          setValue("background_image", null, {
+                            shouldDirty: true,
+                          })
+                        }
+                      >
+                        <Undo2 />
+                      </Button>
+                    )}
+                    <Button
+                      id={`${id}-cover`}
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      className="bg-background/90 shadow-sm backdrop-blur-sm hover:bg-background"
+                      onClick={() => fileInputRef.current?.click()}
+                    >
+                      <ImagePlus />
+                      {selectedImage || area?.background_image_url
+                        ? "Change cover"
+                        : "Upload cover"}
+                    </Button>
+                  </div>
+                </div>
+                <div className="grid gap-1 px-4 pb-4" aria-hidden="true">
+                  <div
+                    className="relative z-1 -mt-6 mb-1.5 flex size-12 items-center justify-center rounded-xl shadow-md ring-4 ring-card"
+                    style={areaBadgeStyle(
+                      isHexColor(badgeColor) ? badgeColor : DEFAULT_BADGE_COLOR,
+                    )}
+                  >
+                    <AreaIcon name={selectedIcon} className="size-5" />
+                  </div>
+                  <p
+                    className={cn(
+                      "truncate font-semibold",
+                      !name.trim() && "text-muted-foreground",
+                    )}
+                  >
+                    {name.trim() || "Untitled area"}
+                  </p>
+                  <p className="line-clamp-2 text-sm text-muted-foreground">
+                    {description?.trim() || (
+                      <span className="italic">No description yet.</span>
+                    )}
+                  </p>
+                </div>
+              </div>
+              <input
+                ref={fileInputRef}
                 type="file"
-                accept="image/jpeg,image/png,image/webp"
+                accept={AREA_IMAGE_TYPES.join(",")}
                 className="sr-only"
+                tabIndex={-1}
+                aria-hidden="true"
                 onChange={(event) => {
                   selectImage(event.target.files?.[0]);
                   event.currentTarget.value = "";
                 }}
               />
-            </label>
-            <p className="text-xs text-muted-foreground">
-              JPG, PNG, or WebP up to 5 MB. A monochrome contemplative image is
-              used by default.
-            </p>
-          </FormField>
+              {errors.background_image ? (
+                <FieldError>{errors.background_image.message}</FieldError>
+              ) : (
+                <FieldDescription>
+                  JPG, PNG, or WebP up to 5 MB. Drag an image onto the preview
+                  or upload one. A calm monochrome image is used by default.
+                </FieldDescription>
+              )}
+            </Field>
 
-          <FormField label="Name" error={errors.name?.message}>
-            <Input
-              {...register("name")}
-              placeholder="Health, Career, Family…"
-              aria-invalid={Boolean(errors.name)}
-            />
-          </FormField>
-          <FormField label="Description" error={errors.description?.message}>
-            <Textarea
-              {...register("description")}
-              placeholder="What does this area help you maintain?"
-            />
-          </FormField>
-
-          <FormField
-            label="Icon badge color"
-            error={errors.background?.message}
-          >
-            <div className="grid gap-4 rounded-xl border p-4">
-              <div>
-                <p className="text-sm font-medium">Choose a color</p>
-                <p className="text-xs text-muted-foreground">
-                  Black is used by default. Icon contrast adjusts automatically.
-                </p>
+            <Field data-invalid={Boolean(errors.name)}>
+              <FieldLabel htmlFor={`${id}-name`}>Name</FieldLabel>
+              <Input
+                {...register("name")}
+                id={`${id}-name`}
+                autoFocus={!area}
+                maxLength={NAME_MAX_LENGTH}
+                placeholder="Health, Career, Family…"
+                aria-invalid={Boolean(errors.name)}
+                aria-describedby={`${id}-name-hint`}
+              />
+              <div className="flex items-start justify-between gap-3">
+                {errors.name ? (
+                  <FieldError id={`${id}-name-hint`}>{errors.name.message}</FieldError>
+                ) : (
+                  <FieldDescription id={`${id}-name-hint`}>
+                    A short name you&apos;ll recognize at a glance.
+                  </FieldDescription>
+                )}
+                <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+                  {name.length}/{NAME_MAX_LENGTH}
+                </span>
               </div>
-              <div className="grid grid-cols-8 gap-2 sm:grid-cols-12">
-                {AREA_BADGE_COLORS.map((color) => {
-                  const isSelected =
-                    badgeColor?.toLowerCase() === color.value.toLowerCase();
+            </Field>
 
-                  return (
-                    <button
-                      key={color.value}
-                      type="button"
-                      title={color.name}
-                      aria-label={`Use ${color.name} (${color.value})`}
-                      aria-pressed={isSelected}
-                      className="flex aspect-square items-center justify-center rounded-full border border-black/10 shadow-sm outline-none transition-transform hover:scale-110 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                      style={{ backgroundColor: color.value }}
-                      onClick={() =>
-                        setValue("background", color.value, {
-                          shouldDirty: true,
-                          shouldValidate: true,
-                        })
-                      }
-                    >
-                      {isSelected && (
-                        <Check
-                          className="size-4 drop-shadow-sm"
-                          strokeWidth={3}
-                          style={{ color: areaBadgeStyle(color.value).color }}
-                        />
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-              <div className="flex items-center gap-3">
-                <div
-                  className="flex size-10 shrink-0 items-center justify-center rounded-xl shadow-sm"
-                  style={areaBadgeStyle(badgeColor)}
-                >
-                  <AreaIcon name={selectedIcon} className="size-5" />
-                </div>
-                <div className="grid min-w-0 flex-1 gap-1.5">
-                  <label
-                    htmlFor="area-badge-color"
-                    className="text-xs font-medium"
-                  >
-                    Custom hex color
-                  </label>
-                  <Input
-                    {...register("background")}
-                    id="area-badge-color"
-                    maxLength={7}
-                    placeholder="#000000"
-                    spellCheck={false}
-                    aria-invalid={Boolean(errors.background)}
-                    className="font-mono uppercase"
-                  />
-                </div>
-              </div>
-            </div>
-          </FormField>
+            <Field data-invalid={Boolean(errors.description)}>
+              <FieldLabel htmlFor={`${id}-description`}>Description</FieldLabel>
+              <Textarea
+                {...register("description")}
+                id={`${id}-description`}
+                rows={3}
+                placeholder="What does this area help you maintain?"
+                aria-invalid={Boolean(errors.description)}
+              />
+              {errors.description ? (
+                <FieldError>{errors.description.message}</FieldError>
+              ) : (
+                <FieldDescription>
+                  Optional. Describe the standard you want to keep here.
+                </FieldDescription>
+              )}
+            </Field>
 
-          <FormField label="Icon" error={errors.icon?.message}>
-            <div className="overflow-hidden rounded-xl border">
-              <div className="relative border-b p-3">
-                <Search className="absolute left-5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  value={iconSearch}
-                  onChange={(event) => setIconSearch(event.target.value)}
-                  placeholder={`Search ${AREA_ICONS.length} Lucide icons…`}
-                  className="pl-9"
+            <section
+              aria-labelledby={`${id}-appearance`}
+              className="grid gap-4 rounded-xl border bg-muted/30 p-4 sm:p-5"
+            >
+              <div className="flex items-start gap-2.5">
+                <Palette
+                  className="mt-0.5 size-4 text-muted-foreground"
+                  aria-hidden="true"
                 />
+                <div className="grid gap-0.5">
+                  <h3 id={`${id}-appearance`} className="text-sm font-semibold">
+                    Appearance
+                  </h3>
+                  <p className="text-xs text-muted-foreground">
+                    Pick an icon and badge color. Icon contrast adjusts
+                    automatically.
+                  </p>
+                </div>
               </div>
-              <div className="grid max-h-56 grid-cols-[repeat(auto-fill,2rem)] justify-between gap-1 overflow-y-auto p-3">
-                {filteredIcons.map(({ name, icon: Icon }) => (
-                  <button
-                    key={name}
-                    type="button"
-                    title={name}
-                    aria-label={`Use ${name} icon`}
-                    aria-pressed={selectedIcon === name}
-                    className="flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground aria-pressed:bg-black aria-pressed:text-white"
-                    onClick={() =>
-                      setValue("icon", name, {
+
+              <div className="grid gap-5 sm:grid-cols-[minmax(0,14rem)_minmax(0,1fr)]">
+                <Field data-invalid={Boolean(errors.icon)}>
+                  <FieldLabel htmlFor={`${id}-icon`}>Icon</FieldLabel>
+                  <AreaIconPicker
+                    id={`${id}-icon`}
+                    value={selectedIcon}
+                    invalid={Boolean(errors.icon)}
+                    onChange={(icon) =>
+                      setValue("icon", icon, {
                         shouldDirty: true,
                         shouldValidate: true,
                       })
                     }
+                  />
+                  {errors.icon && <FieldError>{errors.icon.message}</FieldError>}
+                </Field>
+
+                <Field data-invalid={Boolean(errors.background)}>
+                  <FieldLabel id={`${id}-color-label`}>Badge color</FieldLabel>
+                  <ToggleGroup
+                    aria-labelledby={`${id}-color-label`}
+                    spacing={1}
+                    value={presetColor ? [presetColor.value] : []}
+                    onValueChange={(values) => {
+                      const next = values[0];
+                      if (next) setBadgeColor(next);
+                    }}
+                    className="flex-wrap"
                   >
-                    <Icon className="size-3.5" />
-                  </button>
-                ))}
+                    {AREA_BADGE_COLORS.map((color) => {
+                      const isSelected = presetColor?.value === color.value;
+
+                      return (
+                        <ToggleGroupItem
+                          key={color.value}
+                          value={color.value}
+                          title={color.name}
+                          aria-label={`${color.name} (${color.value})`}
+                          className="size-7 min-w-0 rounded-full border border-black/10 p-0 shadow-xs transition-transform hover:scale-110 aria-pressed:ring-2 aria-pressed:ring-ring aria-pressed:ring-offset-2 aria-pressed:ring-offset-background motion-reduce:hover:scale-100 dark:border-white/15"
+                          style={{ backgroundColor: color.value }}
+                        >
+                          {isSelected && (
+                            <Check
+                              className="size-3.5"
+                              strokeWidth={3}
+                              style={{ color: areaBadgeStyle(color.value).color }}
+                              aria-hidden="true"
+                            />
+                          )}
+                        </ToggleGroupItem>
+                      );
+                    })}
+                  </ToggleGroup>
+
+                  <InputGroup className="max-w-48 bg-background">
+                    <InputGroupAddon>
+                      <span className="relative size-5 overflow-hidden rounded-sm border border-black/10 dark:border-white/15">
+                        <input
+                          type="color"
+                          aria-label="Pick a custom color"
+                          value={
+                            isHexColor(badgeColor)
+                              ? badgeColor.toLowerCase()
+                              : DEFAULT_BADGE_COLOR
+                          }
+                          onChange={(event) => setBadgeColor(event.target.value)}
+                          className="absolute -inset-2 size-[calc(100%+1rem)] cursor-pointer border-0 p-0"
+                        />
+                      </span>
+                    </InputGroupAddon>
+                    <InputGroupInput
+                      {...register("background")}
+                      aria-label="Custom hex color"
+                      maxLength={7}
+                      placeholder="#000000"
+                      spellCheck={false}
+                      aria-invalid={Boolean(errors.background)}
+                      className="font-mono uppercase"
+                    />
+                  </InputGroup>
+                  {errors.background ? (
+                    <FieldError>{errors.background.message}</FieldError>
+                  ) : (
+                    <FieldDescription>
+                      {presetColor
+                        ? presetColor.name
+                        : "Custom color"}
+                    </FieldDescription>
+                  )}
+                </Field>
               </div>
-              {filteredIcons.length === 0 && (
-                <p className="px-3 pb-4 text-center text-sm text-muted-foreground">
-                  No icons match “{iconSearch}”.
-                </p>
-              )}
-            </div>
-          </FormField>
+            </section>
+          </FieldGroup>
         </form>
 
-        <DialogFooter>
+        <DialogFooter className="shrink-0 border-t bg-popover px-5 py-4 sm:px-6">
           <Button
             type="button"
             variant="outline"
-            onClick={() => changeDialogOpen(false)}
+            className="w-full sm:w-auto"
+            disabled={isPending}
+            onClick={closeDialog}
           >
             Cancel
           </Button>
-          <Button type="submit" form="area-form" disabled={isPending}>
+          <Button
+            type="submit"
+            form="area-form"
+            className="w-full sm:w-auto"
+            disabled={isPending}
+          >
+            {isPending && <LoaderCircle className="animate-spin" />}
             {isPending ? "Saving…" : area ? "Save changes" : "Create area"}
           </Button>
         </DialogFooter>

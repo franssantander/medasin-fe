@@ -2,7 +2,7 @@
 
 import { cn } from "@/lib/utils";
 import type { Habit, HabitCheckIn } from "../type";
-import { isScheduled } from "./habit-tracker-utils";
+import { dayState } from "./habit-tracker-utils";
 
 export function DayCell({
   date,
@@ -25,16 +25,7 @@ export function DayCell({
   selected?: boolean;
   onClick?: () => void;
 }) {
-  const scheduled = isScheduled(habit, date);
-  const past = date < today;
-  const state =
-    entry?.completed === true
-      ? "complete"
-      : entry?.completed === false || (scheduled && past)
-        ? "missed"
-        : scheduled
-          ? "pending"
-          : "off";
+  const state = dayState(habit, date, entry, today);
 
   return (
     <button
@@ -46,11 +37,13 @@ export function DayCell({
         compact ? "h-12 gap-1" : "h-10",
         outside && "opacity-30",
         selected && "ring-2 ring-primary ring-offset-1",
-        state === "complete" && "border-emerald-500 bg-emerald-500 text-white",
+        state === "done" && "border-emerald-500 bg-emerald-500 text-white",
         state === "missed" &&
           "border-destructive/40 bg-destructive/10 text-destructive",
-        state === "pending" && "border-primary/30 bg-primary/10 text-primary",
-        state === "off" &&
+        state === "skipped" && "border-border bg-muted text-muted-foreground",
+        (state === "due" || state === "upcoming") &&
+          "border-primary/30 bg-primary/10 text-primary",
+        state === "rest" &&
           "border-transparent bg-muted/50 text-muted-foreground",
         onClick && "hover:border-primary",
       )}
@@ -60,11 +53,11 @@ export function DayCell({
         <span
           className={cn(
             "size-1.5 rounded-full",
-            state === "complete"
+            state === "done"
               ? "bg-white"
               : state === "missed"
                 ? "bg-destructive"
-                : state === "pending"
+                : state === "due" || state === "upcoming"
                   ? "bg-primary"
                   : "bg-muted-foreground/30",
           )}

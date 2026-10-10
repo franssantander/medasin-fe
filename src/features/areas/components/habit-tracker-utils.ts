@@ -74,3 +74,44 @@ export function calendarCells(month: Date) {
   const start = addDays(first, -first.getDay());
   return Array.from({ length: 42 }, (_, index) => addDays(start, index));
 }
+
+export type HabitDayState =
+  | "done"
+  | "missed"
+  | "skipped"
+  | "due"
+  | "upcoming"
+  | "rest";
+
+export function dayState(
+  habit: Habit,
+  date: Date,
+  entry: HabitCheckIn | undefined,
+  today: Date,
+): HabitDayState {
+  if (entry?.completed === true) return "done";
+  const scheduled = isScheduled(habit, date);
+  const isToday = date.getTime() === today.getTime();
+  if (entry?.completed === false) return isToday ? "skipped" : "missed";
+  if (!scheduled) return "rest";
+  if (isToday) return "due";
+  return date < today ? "missed" : "upcoming";
+}
+
+export const dayStateLabels: Record<HabitDayState, string> = {
+  done: "done",
+  missed: "missed",
+  skipped: "not done",
+  due: "due today",
+  upcoming: "upcoming",
+  rest: "rest day",
+};
+
+export function pluralDays(count: number) {
+  return `${count} ${count === 1 ? "day" : "days"}`;
+}
+
+export function streakLabel(habit: Habit, count: number) {
+  if (count <= 0) return "Start a streak";
+  return habit.frequency === "daily" ? `${count}-day streak` : `${count} in a row`;
+}

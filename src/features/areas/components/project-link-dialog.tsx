@@ -18,6 +18,7 @@ import {
 } from "@/features/projects/project-status";
 import { useProjectLinkDialog } from "../hooks/use-area-section-actions";
 import type { Project } from "../type";
+import { LinkOptionsSkeleton } from "./area-skeletons";
 
 export function ProjectLinkDialog({
   areaUuid,
@@ -46,7 +47,7 @@ export function ProjectLinkDialog({
 
   return (
     <>
-      <Button type="button" size="sm" onClick={() => setOpen(true)}>
+      <Button type="button" onClick={() => setOpen(true)}>
         <Link2 />
         Link projects
       </Button>
@@ -78,10 +79,7 @@ export function ProjectLinkDialog({
           </div>
           <div className="grid max-h-[50vh] min-h-48 gap-2 overflow-y-auto overflow-x-hidden pr-1">
             {projectsQuery.isLoading ? (
-              <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
-                <LoaderCircle className="size-4 animate-spin" />
-                Loading projects…
-              </div>
+              <LinkOptionsSkeleton label="Loading projects" />
             ) : projectsQuery.isError ? (
               <div className="grid content-center justify-items-center gap-3 text-center">
                 <p className="text-sm text-muted-foreground">

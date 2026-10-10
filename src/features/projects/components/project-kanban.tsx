@@ -25,7 +25,6 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardTitle } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
 import { useProjectKanbanMutations } from "../hooks/use-project-kanban-mutations";
 import { useProjectBoardQuery } from "../queries/project-query";
 import type { BoardStageKey, BoardSummary, BoardTask } from "../type";
@@ -42,6 +41,7 @@ import {
 import { filterBoardTasks, kanbanGridStyles } from "./project-kanban-utils";
 import { ProjectLabelDialog } from "./project-label-dialog";
 import { TaskDetailsSheet } from "./project-task-details-sheet";
+import { KanbanBoardSkeleton } from "./project-skeletons";
 
 export function ProjectKanban({
   projectUuid,
@@ -175,11 +175,7 @@ export function ProjectKanban({
       )}
 
       {boardQuery.isLoading ? (
-        <div className={kanbanGridStyles}>
-          {[1, 2, 3, 4].map((item) => (
-            <Skeleton key={item} className="h-72 rounded-xl" />
-          ))}
-        </div>
+        <KanbanBoardSkeleton />
       ) : boardQuery.isError || !board ? (
         <Card className="items-center py-12">
           <CardTitle>Board could not be loaded</CardTitle>

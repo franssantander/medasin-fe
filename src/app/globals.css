@@ -859,3 +859,42 @@ html[data-app-font="inter"] {
   color: oklch(55.6% 0 0 / 55%);
   content: attr(data-placeholder);
 }
+
+/* Area notes read like one page: the title and the editor body share a
+   centered column and scroll together inside the workspace. */
+.notes-page-header {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: calc(44rem + 3.5rem);
+  margin-inline: auto;
+  padding: 2.5rem 1rem 0 2.5rem;
+}
+
+.notes-page-canvas .note-rich-text,
+.notes-page-canvas .note-rich-text > div,
+.notes-page-canvas .note-rich-text .bn-container,
+.notes-page-canvas .note-rich-text .bn-editor {
+  height: auto;
+  min-height: 0;
+  overflow: visible;
+}
+
+.notes-page-canvas .note-rich-text .bn-editor {
+  min-height: 16rem;
+  padding-block: 1rem 6rem;
+}
+
+.notes-page-canvas .note-rich-text .bn-editor > .bn-block-group {
+  max-width: 44rem;
+}
+
+@media (min-width: 640px) {
+  .notes-page-header {
+    max-width: calc(44rem + 6.5rem);
+    padding: 3rem 3.25rem 0;
+  }
+
+  .notes-page-canvas .note-rich-text .bn-editor {
+    padding-block: 1rem 6rem;
+  }
+}

@@ -113,6 +113,10 @@ export type Project = {
   name: string;
   description: string | null;
   status: ProjectStatus;
+  icon?: string | null;
+  background?: string | null;
+  due_date?: string | null;
+  completed_at?: string | null;
   area_id: number | null;
   area?: Pick<Area, "id" | "uuid" | "name"> | null;
 };

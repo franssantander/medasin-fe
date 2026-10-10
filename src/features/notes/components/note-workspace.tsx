@@ -14,6 +14,8 @@ import {
   Ellipsis,
   FileText,
   Folder,
+  LoaderCircle,
+  PanelLeft,
   PanelLeftClose,
   PanelLeftOpen,
   Pin,
@@ -24,7 +26,14 @@ import {
   Trash2,
   Undo2,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import type { ReactNode } from "react";
 import PageHeader from "@/components/shared/page-header";
 import {
@@ -34,23 +43,33 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
 import { Input } from "@/components/ui/input";
 import {
   EMPTY_NOTE_DOCUMENT,
@@ -61,10 +80,26 @@ import type {
   NoteEditorHistoryState,
   NoteRichTextEditorControls,
 } from "@/components/ui/note-rich-text-editor-client";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "@/components/ui/toast";
 import { parseApiError } from "@/lib/axios";
 import { cn } from "@/lib/utils";
+import {
+  buildNotePath,
+  countChildNotes,
+  findAncestorUuids,
+  findNoteNode,
+  flattenNotes,
+  formatNoteTimestamp,
+  type FlatNote,
+} from "../note-tree-utils";
 import type {
   NoteApiResponse,
   Note,
@@ -75,6 +110,12 @@ import type {
   NoteWorkspaceQueryKeys,
   NoteWorkspaceService,
 } from "../type";
+import { NotePageSidebar } from "./note-page-sidebar";
+import {
+  NotePageTopbar,
+  type NotePageMenu,
+  type NoteSaveStatus,
+} from "./note-page-topbar";
 
 const MAX_NOTE_MEDIA_REQUEST_BYTES = 8 * 1024 * 1024;
 
@@ -103,6 +144,39 @@ type NoteCollectionState = NoteWorkspaceCollection & {
 };
 
 type NoteWorkspacePresentation = "standard" | "journal";
+
+type StandardChrome = {
+  leading: ReactNode;
+  rootLabel: string;
+  menuFor: (uuid: string) => NotePageMenu | undefined;
+};
+
+const SIDEBAR_STORAGE_KEY = "medasin.notes.sidebar";
+const sidebarListeners = new Set<() => void>();
+
+function readSidebarOpen() {
+  try {
+    return window.localStorage.getItem(SIDEBAR_STORAGE_KEY) !== "closed";
+  } catch {
+    return true;
+  }
+}
+
+function subscribeToSidebar(listener: () => void) {
+  sidebarListeners.add(listener);
+  return () => {
+    sidebarListeners.delete(listener);
+  };
+}
+
+function storeSidebarOpen(open: boolean) {
+  try {
+    window.localStorage.setItem(SIDEBAR_STORAGE_KEY, open ? "open" : "closed");
+  } catch {
+    // Storage can be unavailable (private mode, blocked site data).
+  }
+  sidebarListeners.forEach((listener) => listener());
+}
 
 function NoteWorkspaceFrame({
   presentation,
@@ -147,7 +221,13 @@ export function NoteWorkspace({
   const [selection, setSelection] = useState<NoteSelection>();
   const [noteToDelete, setNoteToDelete] = useState<NoteToDelete>();
   const [notesListOpen, setNotesListOpen] = useState(true);
+  const [pagesSheetOpen, setPagesSheetOpen] = useState(false);
   const [draftKey, setDraftKey] = useState(0);
+  const pageSidebarOpen = useSyncExternalStore(
+    subscribeToSidebar,
+    readSidebarOpen,
+    () => true,
+  );
   const treeQueries = useQueries({
     queries: collections.map((collection) => ({
       queryKey: collection.queryKeys.tree,
@@ -212,9 +292,7 @@ export function NoteWorkspace({
     0,
   );
   const visibleCollections = collectionStates.filter(
-    (collection) =>
-      collection.tree.length > 0 ||
-      (presentation === "standard" && collection.canCreate),
+    (collection) => collection.tree.length > 0,
   );
   const showCollectionLabels = collections.length > 1;
 
@@ -277,6 +355,44 @@ export function NoteWorkspace({
     onError: (error) =>
       toast.add({ type: "error", description: error.message }),
   });
+  const createChildMutation = useMutation({
+    mutationFn: ({
+      collectionKey,
+      parentUuid,
+    }: {
+      collectionKey: string;
+      parentUuid: string;
+    }) => {
+      const collection = collectionByKey.get(collectionKey);
+      if (!collection) throw new Error("Note collection is unavailable.");
+
+      return collection.service.create({
+        title: "Untitled",
+        content: EMPTY_NOTE_DOCUMENT,
+        is_pinned: false,
+        parent_uuid: parentUuid,
+      });
+    },
+    onSuccess: async (response, variables) => {
+      const collection = collectionByKey.get(variables.collectionKey);
+      if (collection) {
+        queryClient.setQueryData(
+          collection.queryKeys.detail(response.data.uuid),
+          response,
+        );
+      }
+      await refreshTree(variables.collectionKey).catch(() => undefined);
+      setPagesSheetOpen(false);
+      setSelection({
+        kind: "note",
+        uuid: response.data.uuid,
+        collectionKey: variables.collectionKey,
+        focusTitle: true,
+      });
+    },
+    onError: (error) =>
+      toast.add({ type: "error", description: error.message }),
+  });
 
   const isTreeLoading = treeQueries.some((query) => query.isLoading);
   const treeError = treeQueries.find((query) => query.isError);
@@ -294,15 +410,41 @@ export function NoteWorkspace({
   };
 
   if (isTreeLoading) {
+    if (presentation === "standard") return <NotePagesSkeleton />;
+
     return (
       <NoteWorkspaceFrame presentation={presentation}>
-        <Skeleton
-          className={cn(
-            "flex-1 rounded-xl",
-            presentation === "journal" ? "min-h-0" : "min-h-[48rem]",
-          )}
-        />
+        <Skeleton className="min-h-0 flex-1 rounded-xl" />
       </NoteWorkspaceFrame>
+    );
+  }
+
+  if (treeError && presentation === "standard") {
+    return (
+      <Empty className="flex-1 border">
+        <EmptyHeader>
+          <EmptyMedia variant="icon">
+            <FileText />
+          </EmptyMedia>
+          <EmptyTitle>Couldn&apos;t load notes</EmptyTitle>
+          <EmptyDescription>
+            {treeError.error instanceof Error
+              ? treeError.error.message
+              : "Check your connection and try again."}
+          </EmptyDescription>
+        </EmptyHeader>
+        <EmptyContent>
+          <Button
+            variant="outline"
+            onClick={() => {
+              void Promise.all(treeQueries.map((query) => query.refetch()));
+            }}
+          >
+            <RefreshCw data-icon="inline-start" />
+            Try again
+          </Button>
+        </EmptyContent>
+      </Empty>
     );
   }
 
@@ -341,20 +483,223 @@ export function NoteWorkspace({
     );
   }
 
+  const deleteTitle = noteToDelete?.node.title || "Untitled";
+  const deleteDialog = (
+    <AlertDialog
+      open={Boolean(noteToDelete)}
+      onOpenChange={(open) => {
+        if (!open && !deleteMutation.isPending) setNoteToDelete(undefined);
+      }}
+    >
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Delete “{deleteTitle}”?</AlertDialogTitle>
+          <AlertDialogDescription>
+            {noteToDelete?.node.children.length
+              ? "This page and all of its sub-pages will move to Trash for 30 days and can be restored together."
+              : "This page will move to Trash for 30 days and can be restored from Settings."}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={deleteMutation.isPending}>
+            Cancel
+          </AlertDialogCancel>
+          <AlertDialogAction
+            variant="destructive"
+            disabled={deleteMutation.isPending || !noteToDelete}
+            onClick={() => {
+              if (!noteToDelete) return;
+
+              deleteMutation.mutate({
+                collectionKey: noteToDelete.collectionKey,
+                uuid: noteToDelete.node.uuid,
+                deletedUuids: flattenNotes([noteToDelete.node]).map(
+                  (note) => note.uuid,
+                ),
+              });
+            }}
+          >
+            {deleteMutation.isPending && (
+              <LoaderCircle className="animate-spin" data-icon="inline-start" />
+            )}
+            {deleteMutation.isPending ? "Deleting…" : "Delete"}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+
+  if (presentation === "standard") {
+    const collection = selectedCollection;
+    const editable = !collection.archived;
+    const requestDelete = (uuid: string) => {
+      const node = findNoteNode(collection.tree, uuid);
+      if (node) setNoteToDelete({ node, collectionKey: collection.key });
+    };
+    const addChild = (parentUuid: string) =>
+      createChildMutation.mutate({
+        collectionKey: collection.key,
+        parentUuid,
+      });
+    const pin = (uuid: string, pinned: boolean) =>
+      pinMutation.mutate({ collectionKey: collection.key, uuid, pinned });
+    const openNote = (uuid: string, options?: { focusTitle?: boolean }) => {
+      setPagesSheetOpen(false);
+      setSelection({
+        kind: "note",
+        uuid,
+        collectionKey: collection.key,
+        ...options,
+      });
+    };
+    const sidebarProps = {
+      tree: collection.tree,
+      flatNotes: collection.flatNotes,
+      selectedUuid,
+      archived: collection.archived,
+      canCreate: collection.canCreate,
+      createPending: createChildMutation.isPending,
+      onNewPage: () => {
+        setPagesSheetOpen(false);
+        startDraft();
+      },
+      onSelect: (uuid: string) => openNote(uuid),
+      onAddChild: addChild,
+      onPin: pin,
+      onDelete: requestDelete,
+    };
+    const chrome: StandardChrome = {
+      rootLabel: collection.label,
+      leading: (
+        <>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            className="md:hidden"
+            aria-label="Show pages"
+            onClick={() => setPagesSheetOpen(true)}
+          >
+            <PanelLeft />
+          </Button>
+          {!pageSidebarOpen && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              className="hidden md:inline-flex"
+              aria-label="Expand sidebar"
+              title="Expand sidebar"
+              onClick={() => storeSidebarOpen(true)}
+            >
+              <PanelLeftOpen />
+            </Button>
+          )}
+        </>
+      ),
+      menuFor: (uuid) => {
+        if (!editable) return undefined;
+        const note = collection.flatNotes.find((item) => item.uuid === uuid);
+        if (!note) return undefined;
+        return {
+          pinned: note.is_pinned,
+          createPending: createChildMutation.isPending,
+          onAddChild: () => addChild(uuid),
+          onPin: () => pin(uuid, !note.is_pinned),
+          onDelete: () => requestDelete(uuid),
+        };
+      },
+    };
+
+    return (
+      <div
+        className={cn(
+          "grid h-full min-h-0 min-w-0 flex-1 grid-rows-[minmax(0,1fr)] overflow-hidden rounded-xl border bg-card",
+          pageSidebarOpen
+            ? "md:grid-cols-[16rem_minmax(0,1fr)]"
+            : "md:grid-cols-[minmax(0,1fr)]",
+        )}
+      >
+        {pageSidebarOpen && (
+          <aside
+            aria-label="Pages sidebar"
+            className="hidden min-h-0 min-w-0 border-r bg-muted/30 md:block"
+          >
+            <NotePageSidebar
+              {...sidebarProps}
+              onCollapse={() => storeSidebarOpen(false)}
+            />
+          </aside>
+        )}
+        <Sheet open={pagesSheetOpen} onOpenChange={setPagesSheetOpen}>
+          <SheetContent side="left" showCloseButton={false} className="w-72 gap-0 p-0">
+            <SheetHeader className="sr-only">
+              <SheetTitle>Pages</SheetTitle>
+              <SheetDescription>Browse and organize this area&apos;s pages.</SheetDescription>
+            </SheetHeader>
+            <NotePageSidebar {...sidebarProps} />
+          </SheetContent>
+        </Sheet>
+        <main aria-label="Note editor" className="flex min-h-0 min-w-0 flex-col">
+          {derivedSelection.kind === "note" ? (
+            <PersistedNotePanel
+              presentation={presentation}
+              key={`${collection.key}:${derivedSelection.uuid}`}
+              service={collection.service}
+              queryKeys={collection.queryKeys}
+              noteUuid={derivedSelection.uuid}
+              archived={collection.archived}
+              focusTitle={derivedSelection.focusTitle}
+              noteOptions={selectedNotes}
+              chrome={chrome}
+              onOpenNote={openNote}
+              onTreeChanged={() => refreshTree(collection.key)}
+            />
+          ) : (
+            <NoteEditorPanel
+              presentation={presentation}
+              key={`draft-${derivedSelection.collectionKey}-${derivedSelection.key}`}
+              service={collection.service}
+              queryKeys={collection.queryKeys}
+              archived={collection.archived}
+              documentId={`draft-${derivedSelection.collectionKey}-${derivedSelection.key}`}
+              initialTitle=""
+              initialContent={EMPTY_NOTE_DOCUMENT}
+              initialPinned={false}
+              focusTitle={derivedSelection.key > 0}
+              persistedUuid={derivedSelection.uuid}
+              noteOptions={selectedNotes}
+              chrome={chrome}
+              onCreated={(note) => {
+                setSelection((current) =>
+                  current?.kind === "draft" &&
+                  current.collectionKey === collection.key
+                    ? { ...current, uuid: note.uuid }
+                    : {
+                        kind: "draft",
+                        key: derivedSelection.key,
+                        collectionKey: collection.key,
+                        uuid: note.uuid,
+                      },
+                );
+              }}
+              onOpenNote={openNote}
+              onTreeChanged={() => refreshTree(collection.key)}
+            />
+          )}
+        </main>
+        {deleteDialog}
+      </div>
+    );
+  }
+
   const workspace = (
     <div
       className={cn(
         "grid h-full min-h-0 min-w-0 flex-1 overflow-hidden rounded-xl border bg-card md:grid-rows-[minmax(0,1fr)]",
         notesListOpen
-          ? cn(
-              "grid-rows-[auto_minmax(0,1fr)]",
-              presentation === "journal"
-                ? "md:grid-cols-[23rem_minmax(0,1fr)]"
-                : "md:grid-cols-[24rem_minmax(0,1fr)]",
-            )
-          : presentation === "journal"
-            ? "grid-rows-[minmax(0,1fr)] md:grid-cols-[minmax(0,1fr)]"
-            : "grid-rows-[auto_minmax(0,1fr)] md:grid-cols-[minmax(0,1fr)]",
+          ? "grid-rows-[auto_minmax(0,1fr)] md:grid-cols-[23rem_minmax(0,1fr)]"
+          : "grid-rows-[minmax(0,1fr)] md:grid-cols-[minmax(0,1fr)]",
       )}
     >
       {notesListOpen && (
@@ -392,15 +737,7 @@ export function NoteWorkspace({
             </div>
           </div>
           <div className="workspace-list-scrollbar max-h-64 min-h-0 min-w-0 overflow-x-hidden overflow-y-auto p-2 md:max-h-none md:flex-1">
-            {visibleCollections.length === 0 ? (
-              presentation === "standard" ? (
-                <p className="px-2 py-6 text-center text-sm text-muted-foreground">
-                  {selectedCollection.archived
-                    ? "No notes in this collection."
-                    : "Start writing your first note."}
-                </p>
-              ) : null
-            ) : (
+            {visibleCollections.length === 0 ? null : (
               <div className="grid gap-5">
                 {visibleCollections.map((collection) => (
                   <section key={collection.key} className="grid gap-2">
@@ -470,11 +807,8 @@ export function NoteWorkspace({
       <main
         aria-label="Note editor"
         className={cn(
-          "relative flex min-h-0 min-w-0 justify-center overflow-hidden",
-          presentation === "journal"
-            ? "bg-card p-4 sm:p-6"
-            : "bg-white p-6",
-          !notesListOpen && presentation === "journal" && "pt-14 sm:pt-16",
+          "relative flex min-h-0 min-w-0 justify-center overflow-hidden bg-card p-4 sm:p-6",
+          !notesListOpen && "pt-14 sm:pt-16",
         )}
       >
         {!notesListOpen && (
@@ -482,12 +816,7 @@ export function NoteWorkspace({
             type="button"
             variant="ghost"
             size="icon-sm"
-            className={cn(
-              "absolute z-10",
-              presentation === "journal"
-                ? "top-4 left-4 sm:top-6 sm:left-6"
-                : "top-3 left-3",
-            )}
+            className="absolute top-4 left-4 z-10 sm:top-6 sm:left-6"
             aria-label="Open notes list"
             title="Open notes list"
             onClick={() => setNotesListOpen(true)}
@@ -495,12 +824,7 @@ export function NoteWorkspace({
             <PanelLeftOpen />
           </Button>
         )}
-        <div
-          className={cn(
-            "h-full min-h-0 min-w-0 flex-1",
-            !notesListOpen && presentation === "standard" && "md:max-w-[calc(100%-24rem)]",
-          )}
-        >
+        <div className="h-full min-h-0 min-w-0 flex-1">
           {derivedSelection.kind === "note" ? (
             <PersistedNotePanel
               presentation={presentation}
@@ -532,7 +856,7 @@ export function NoteWorkspace({
               initialTitle=""
               initialContent={EMPTY_NOTE_DOCUMENT}
               initialPinned={false}
-              focusTitle={presentation === "journal" && derivedSelection.key > 0}
+              focusTitle={derivedSelection.key > 0}
               persistedUuid={derivedSelection.uuid}
               noteOptions={selectedNotes}
               onCreated={(note) => {
@@ -567,49 +891,7 @@ export function NoteWorkspace({
           )}
         </div>
       </main>
-      <Dialog
-        open={Boolean(noteToDelete)}
-        onOpenChange={(open) => {
-          if (!open && !deleteMutation.isPending) setNoteToDelete(undefined);
-        }}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Delete note?</DialogTitle>
-            <DialogDescription>
-              {noteToDelete?.node.children.length
-                ? `“${noteToDelete.node.title || "Untitled"}” and all of its child pages will move to Trash for 30 days and can be restored together.`
-                : `“${noteToDelete?.node.title || "Untitled"}” will move to Trash for 30 days and can be restored from Settings.`}
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              disabled={deleteMutation.isPending}
-              onClick={() => setNoteToDelete(undefined)}
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              disabled={deleteMutation.isPending || !noteToDelete}
-              onClick={() => {
-                if (!noteToDelete) return;
-
-                deleteMutation.mutate({
-                  collectionKey: noteToDelete.collectionKey,
-                  uuid: noteToDelete.node.uuid,
-                  deletedUuids: flattenNotes([noteToDelete.node]).map(
-                    (note) => note.uuid,
-                  ),
-                });
-              }}
-            >
-              {deleteMutation.isPending ? "Deleting…" : "Delete note"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {deleteDialog}
     </div>
   );
 
@@ -631,6 +913,7 @@ function PersistedNotePanel({
   archived,
   focusTitle,
   noteOptions,
+  chrome,
   onOpenNote,
   onTreeChanged,
 }: {
@@ -641,6 +924,7 @@ function PersistedNotePanel({
   archived: boolean;
   focusTitle?: boolean;
   noteOptions: FlatNote[];
+  chrome?: StandardChrome;
   onOpenNote: (uuid: string, options?: { focusTitle?: boolean }) => void;
   onTreeChanged: () => Promise<void>;
 }) {
@@ -649,6 +933,38 @@ function PersistedNotePanel({
     queryFn: ({ signal }) => service.show(noteUuid, signal),
   });
 
+  if (chrome && noteQuery.isLoading) {
+    return (
+      <>
+        <NotePageTopbarSkeleton leading={chrome.leading} />
+        <NoteDocumentSkeleton />
+      </>
+    );
+  }
+  if (chrome && (noteQuery.isError || !noteQuery.data)) {
+    return (
+      <>
+        <NotePageTopbarSkeleton leading={chrome.leading} />
+        <Empty className="flex-1">
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <FileText />
+            </EmptyMedia>
+            <EmptyTitle>Couldn&apos;t open this page</EmptyTitle>
+            <EmptyDescription>
+              It may have been deleted, or the connection dropped.
+            </EmptyDescription>
+          </EmptyHeader>
+          <EmptyContent>
+            <Button variant="outline" onClick={() => void noteQuery.refetch()}>
+              <RefreshCw data-icon="inline-start" />
+              Try again
+            </Button>
+          </EmptyContent>
+        </Empty>
+      </>
+    );
+  }
   if (noteQuery.isLoading)
     return <Skeleton className="h-full min-h-80 rounded-xl" />;
   if (noteQuery.isError || !noteQuery.data) {
@@ -676,6 +992,7 @@ function PersistedNotePanel({
       focusTitle={focusTitle}
       persistedUuid={note.uuid}
       noteOptions={noteOptions}
+      chrome={chrome}
       onCreated={() => undefined}
       onOpenNote={onOpenNote}
       onTreeChanged={onTreeChanged}
@@ -695,6 +1012,7 @@ function NoteEditorPanel({
   focusTitle = false,
   persistedUuid,
   noteOptions,
+  chrome,
   onCreated,
   onOpenNote,
   onTreeChanged,
@@ -710,6 +1028,7 @@ function NoteEditorPanel({
   focusTitle?: boolean;
   persistedUuid?: string;
   noteOptions: FlatNote[];
+  chrome?: StandardChrome;
   onCreated: (note: Note) => void;
   onOpenNote: (uuid: string, options?: { focusTitle?: boolean }) => void;
   onTreeChanged: () => Promise<void>;
@@ -718,9 +1037,7 @@ function NoteEditorPanel({
   const { resolvedTheme } = useTheme();
   const journalStyle = presentation === "journal";
   const [title, setTitle] = useState(initialTitle);
-  const [saveStatus, setSaveStatus] = useState<
-    "idle" | "dirty" | "saving" | "saved" | "error"
-  >("idle");
+  const [saveStatus, setSaveStatus] = useState<NoteSaveStatus>("idle");
   const [activeUuid, setActiveUuid] = useState(persistedUuid);
   const [historyState, setHistoryState] = useState<NoteEditorHistoryState>({
     canUndo: false,
@@ -877,7 +1194,7 @@ function NoteEditorPanel({
 
   const editor = (
     <NoteRichTextEditor
-      theme={journalStyle && resolvedTheme === "dark" ? "dark" : "light"}
+      theme={resolvedTheme === "dark" ? "dark" : "light"}
       formattingToolbarMode={journalStyle ? "persistent" : "floating"}
       formattingToolbarContainer={
         journalStyle ? formattingToolbarContainer : undefined
@@ -947,6 +1264,77 @@ function NoteEditorPanel({
     />
   );
 
+  const handleTitleChange = (value: string) => {
+    setTitle(value);
+    titleRef.current = value;
+    scheduleSave();
+  };
+  const handleTitleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (archived || event.key !== "Enter" || event.nativeEvent.isComposing) {
+      return;
+    }
+
+    event.preventDefault();
+    const controls = editorControlsRef.current;
+    if (controls) {
+      controls.focusFirstBlock();
+    } else {
+      pendingEditorFocusRef.current = true;
+    }
+  };
+
+  if (chrome) {
+    const activeNote = noteOptions.find((note) => note.uuid === activeUuid);
+    const childCount = countChildNotes(noteOptions, activeUuid);
+    const meta = [
+      activeNote
+        ? `Edited ${formatNoteTimestamp(activeNote.updated_at)}`
+        : "New page",
+      childCount > 0 &&
+        `${childCount} ${childCount === 1 ? "sub-page" : "sub-pages"}`,
+      !archived && "Type / for blocks",
+    ].filter(Boolean);
+
+    return (
+      <>
+        <NotePageTopbar
+          leading={chrome.leading}
+          rootLabel={chrome.rootLabel}
+          ancestors={notePath.slice(0, -1)}
+          currentTitle={title}
+          onOpenNote={(uuid) => onOpenNote(uuid)}
+          archived={archived}
+          saveStatus={saveStatus}
+          onRetrySave={flush}
+          canUndo={historyState.canUndo}
+          canRedo={historyState.canRedo}
+          onUndo={() => editorControlsRef.current?.undo()}
+          onRedo={() => editorControlsRef.current?.redo()}
+          menu={activeUuid ? chrome.menuFor(activeUuid) : undefined}
+        />
+        <div className="workspace-list-scrollbar min-h-0 flex-1 overflow-y-auto">
+          <div className="notes-page-header">
+            <Input
+              ref={titleInputRef}
+              aria-label="Note title"
+              className="h-auto rounded-none border-0 bg-transparent px-0 py-1 text-3xl font-bold tracking-tight shadow-none focus-visible:ring-0 md:text-4xl dark:bg-transparent"
+              placeholder="Untitled"
+              maxLength={120}
+              value={title}
+              readOnly={archived}
+              onChange={(event) => handleTitleChange(event.target.value)}
+              onKeyDown={handleTitleKeyDown}
+            />
+            <p className="mt-1 text-xs text-muted-foreground">
+              {meta.join(" · ")}
+            </p>
+          </div>
+          <div className="notes-writing-canvas notes-page-canvas">{editor}</div>
+        </div>
+      </>
+    );
+  }
+
   return (
     <div className="flex h-full min-h-0 w-full min-w-0 flex-col gap-4">
       <div className={cn("w-full", journalStyle ? "grid shrink-0 gap-3" : "relative")}>
@@ -971,28 +1359,8 @@ function NoteEditorPanel({
             maxLength={120}
             value={title}
             readOnly={archived}
-            onChange={(event) => {
-              setTitle(event.target.value);
-              titleRef.current = event.target.value;
-              scheduleSave();
-            }}
-            onKeyDown={(event) => {
-              if (
-                archived ||
-                event.key !== "Enter" ||
-                event.nativeEvent.isComposing
-              ) {
-                return;
-              }
-
-              event.preventDefault();
-              const controls = editorControlsRef.current;
-              if (controls) {
-                controls.focusFirstBlock();
-              } else {
-                pendingEditorFocusRef.current = true;
-              }
-            }}
+            onChange={(event) => handleTitleChange(event.target.value)}
+            onKeyDown={handleTitleKeyDown}
           />
           <div
             className={cn(
@@ -1078,8 +1446,6 @@ function NoteEditorPanel({
     </div>
   );
 }
-
-type FlatNote = Omit<NoteTreeNode, "children"> & { depth: number };
 
 function NoteBreadcrumbs({
   path,
@@ -1186,32 +1552,6 @@ function BreadcrumbSeparator() {
       className="size-3 shrink-0 text-muted-foreground/60"
     />
   );
-}
-
-function flattenNotes(nodes: NoteTreeNode[], depth = 0): FlatNote[] {
-  return nodes.flatMap((node) => {
-    const { children, ...summary } = node;
-    return [{ ...summary, depth }, ...flattenNotes(children, depth + 1)];
-  });
-}
-
-function buildNotePath(notes: FlatNote[], noteUuid?: string) {
-  if (!noteUuid) return [];
-
-  const notesByUuid = new Map(notes.map((note) => [note.uuid, note]));
-  const path: FlatNote[] = [];
-  const visited = new Set<string>();
-  let current = notesByUuid.get(noteUuid);
-
-  while (current && !visited.has(current.uuid)) {
-    path.unshift(current);
-    visited.add(current.uuid);
-    current = current.parent_uuid
-      ? notesByUuid.get(current.parent_uuid)
-      : undefined;
-  }
-
-  return path;
 }
 
 function NoteTree({
@@ -1646,58 +1986,53 @@ function NoteActions({
   );
 }
 
-function findAncestorUuids(nodes: NoteTreeNode[], selectedUuid?: string) {
-  if (!selectedUuid) return [];
-
-  const ancestors: string[] = [];
-  const containsSelection = (node: NoteTreeNode): boolean => {
-    if (node.uuid === selectedUuid) return true;
-
-    if (node.children.some(containsSelection)) {
-      ancestors.push(node.uuid);
-      return true;
-    }
-
-    return false;
-  };
-
-  nodes.some(containsSelection);
-  return ancestors;
-}
-
-function formatNoteTimestamp(value: string, now = new Date()) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-
-  const dayDifference = calendarDayDifference(now, date);
-  if (dayDifference === 0) {
-    const time = new Intl.DateTimeFormat(undefined, {
-      hour: "numeric",
-      minute: "2-digit",
-    }).format(date);
-    return `Today ${time}`;
-  }
-
-  if (dayDifference >= 1 && dayDifference <= 7) {
-    return `${dayDifference} ${dayDifference === 1 ? "day" : "days"} ago`;
-  }
-
-  return new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(
-    date,
+function NotePageTopbarSkeleton({ leading }: { leading?: ReactNode }) {
+  return (
+    <div className="flex h-12 shrink-0 items-center gap-2 border-b px-2 sm:px-3">
+      {leading}
+      <Skeleton className="h-4 w-40" />
+    </div>
   );
 }
 
-function calendarDayDifference(later: Date, earlier: Date) {
-  const laterDay = Date.UTC(
-    later.getFullYear(),
-    later.getMonth(),
-    later.getDate(),
+function NoteDocumentSkeleton() {
+  return (
+    <div
+      role="status"
+      aria-label="Loading page"
+      className="notes-page-header grid gap-3"
+    >
+      <Skeleton className="h-9 w-2/3" />
+      <Skeleton className="h-3 w-40" />
+      <div className="mt-6 grid gap-3">
+        <Skeleton className="h-4 w-full" />
+        <Skeleton className="h-4 w-11/12" />
+        <Skeleton className="h-4 w-4/5" />
+        <Skeleton className="mt-3 h-4 w-full" />
+        <Skeleton className="h-4 w-3/4" />
+      </div>
+    </div>
   );
-  const earlierDay = Date.UTC(
-    earlier.getFullYear(),
-    earlier.getMonth(),
-    earlier.getDate(),
-  );
+}
 
-  return Math.round((laterDay - earlierDay) / 86_400_000);
+export function NotePagesSkeleton() {
+  return (
+    <div
+      role="status"
+      aria-label="Loading notes"
+      className="grid h-full min-h-0 min-w-0 flex-1 grid-rows-[minmax(0,1fr)] overflow-hidden rounded-xl border bg-card md:grid-cols-[16rem_minmax(0,1fr)]"
+    >
+      <div className="hidden gap-2 border-r bg-muted/30 p-3 md:grid md:content-start">
+        <Skeleton className="mb-2 h-5 w-20" />
+        <Skeleton className="mb-2 h-8 w-full" />
+        {[85, 70, 90, 60, 75, 65].map((width) => (
+          <Skeleton key={width} className="h-6" style={{ width: `${width}%` }} />
+        ))}
+      </div>
+      <div className="flex min-h-0 flex-col">
+        <NotePageTopbarSkeleton />
+        <NoteDocumentSkeleton />
+      </div>
+    </div>
+  );
 }

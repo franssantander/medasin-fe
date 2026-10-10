@@ -5,7 +5,14 @@ import { toast } from "@/components/ui/toast";
 import { ApiError } from "@/lib/axios";
 import { areaKeys } from "../queries/area-query";
 import { areaService } from "../services/area-service";
+import {
+  addDays,
+  localDate,
+  startOfDay,
+} from "../components/habit-tracker-utils";
 import type { ApiResponse, HabitHistory } from "../type";
+
+export const HABIT_HISTORY_DAYS = 90;
 
 export const habitHistoryPrefix = (areaUuid: string, habitUuid: string) =>
   ["areas", "detail", areaUuid, "habits", habitUuid, "history"] as const;
@@ -25,7 +32,15 @@ type HabitHistoryQueryOptions = {
   enabled?: boolean;
 };
 
-export function useHabitHistory({
+/** The window every habit card loads, so cards and the today summary share one cache entry. */
+export function habitHistoryRange(today = startOfDay(new Date())) {
+  return {
+    startDate: localDate(addDays(today, -(HABIT_HISTORY_DAYS - 1))),
+    endDate: localDate(today),
+  };
+}
+
+export function habitHistoryQueryOptions({
   areaUuid,
   habitUuid,
   startDate,
@@ -34,7 +49,7 @@ export function useHabitHistory({
 }: HabitHistoryQueryOptions) {
   const timezone = browserTimezone();
 
-  return useQuery({
+  return {
     queryKey: habitHistoryKey(areaUuid, habitUuid, startDate, endDate),
     queryFn: () =>
       areaService.habitHistory(
@@ -45,7 +60,11 @@ export function useHabitHistory({
         timezone,
       ),
     enabled,
-  });
+  };
+}
+
+export function useHabitHistory(options: HabitHistoryQueryOptions) {
+  return useQuery(habitHistoryQueryOptions(options));
 }
 
 type HabitCheckInInput = {

@@ -22,9 +22,9 @@ import { ProjectListRow } from "./project-list-row";
 import {
   ProjectListEmpty,
   ProjectListError,
-  ProjectListSkeleton,
 } from "./project-list-states";
 import { ProjectListToolbar } from "./project-list-toolbar";
+import { ProjectListSkeleton } from "./project-skeletons";
 
 const tabs: { value: ProjectListTab; label: string }[] = [
   { value: "active", label: "Active" },

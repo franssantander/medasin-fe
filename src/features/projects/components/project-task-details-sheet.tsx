@@ -118,6 +118,7 @@ import {
   toggleSelection,
   type FlatNote,
 } from "./project-kanban-utils";
+import { LinkPickerSkeleton } from "./project-skeletons";
 
 type TaskSaveState = "idle" | "dirty" | "saving" | "saved" | "error";
 
@@ -1042,7 +1043,7 @@ export function TaskDetailsSheet({
                   <div className="workspace-list-scrollbar grid min-h-0 flex-1 content-start gap-3 overflow-y-auto overscroll-contain p-3">
                     {linkPicker === "resources" ? (
                       resourcesQuery.isLoading ? (
-                        <EmptyTaskDetail>Loading resources…</EmptyTaskDetail>
+                        <LinkPickerSkeleton label="Loading resources" />
                       ) : visibleResources.length ? (
                         <ResourcePickerItems
                           resources={visibleResources}
@@ -1057,7 +1058,7 @@ export function TaskDetailsSheet({
                         </EmptyTaskDetail>
                       )
                     ) : notesLoading ? (
-                      <EmptyTaskDetail>Loading notes…</EmptyTaskDetail>
+                      <LinkPickerSkeleton label="Loading notes" />
                     ) : visibleNoteGroups.length ? (
                       visibleNoteGroups.map(({ key, label, notes }) => (
                         <div key={key} className="grid gap-2">

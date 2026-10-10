@@ -8,55 +8,6 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty";
-import { Skeleton } from "@/components/ui/skeleton";
-import type { ProjectView } from "../project-list-utils";
-
-export function ProjectListSkeleton({ view }: { view: ProjectView }) {
-  return (
-    <div role="status" aria-label="Loading projects" className="grid gap-5">
-      <div className="flex gap-2">
-        <Skeleton className="h-9 flex-1 sm:max-w-sm" />
-        <Skeleton className="h-9 w-28" />
-        <Skeleton className="h-9 w-[4.5rem]" />
-      </div>
-      {view === "list" ? (
-        <div className="divide-y rounded-xl ring-1 ring-foreground/10">
-          {[1, 2, 3, 4, 5].map((item) => (
-            <div key={item} className="flex items-center gap-4 px-4 py-3.5">
-              <Skeleton className="size-8 rounded-lg" />
-              <div className="grid flex-1 gap-1.5">
-                <Skeleton className="h-3.5 w-1/3" />
-                <Skeleton className="h-3 w-1/5" />
-              </div>
-              <Skeleton className="hidden h-1 w-36 md:block" />
-            </div>
-          ))}
-        </div>
-      ) : (
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {[1, 2, 3, 4, 5, 6].map((item) => (
-            <div
-              key={item}
-              className="grid gap-4 rounded-xl p-5 ring-1 ring-foreground/10"
-            >
-              <div className="flex items-center gap-3">
-                <Skeleton className="size-9 rounded-lg" />
-                <div className="grid flex-1 gap-1.5">
-                  <Skeleton className="h-3.5 w-2/3" />
-                  <Skeleton className="h-3 w-1/3" />
-                </div>
-              </div>
-              <Skeleton className="h-3 w-full" />
-              <Skeleton className="h-1 w-full" />
-              <Skeleton className="h-3 w-1/2" />
-            </div>
-          ))}
-        </div>
-      )}
-      <span className="sr-only">Loading projects…</span>
-    </div>
-  );
-}
 
 const emptyContent = {
   active: {

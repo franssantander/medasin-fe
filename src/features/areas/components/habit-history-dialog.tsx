@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { Check, ChevronLeft, ChevronRight, X } from "lucide-react";
+import { LoadingRegion } from "@/components/shared/loading-region";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -10,6 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { useHabitHistory } from "../hooks/use-habit-tracker";
 import type { Habit } from "../type";
@@ -104,7 +106,22 @@ export function HabitHistoryDialog({
               {label}
             </span>
           ))}
-          {cells.map((date) => (
+          {historyQuery.isLoading ? (
+            <LoadingRegion
+              label="Loading check-ins"
+              className="col-span-7 grid grid-cols-7 gap-1"
+            >
+              {cells.map((date) => (
+                <Skeleton
+                  key={localDate(date)}
+                  className={cn(
+                    "h-10 rounded-lg",
+                    date.getMonth() !== month.getMonth() && "opacity-30",
+                  )}
+                />
+              ))}
+            </LoadingRegion>
+          ) : cells.map((date) => (
             <DayCell
               key={localDate(date)}
               date={date}
@@ -143,7 +160,7 @@ export function HabitHistoryDialog({
                     ? "default"
                     : "outline"
                 }
-                disabled={isPending}
+                disabled={isPending || historyQuery.isLoading}
                 onClick={() => onCheckIn(localDate(selected), true)}
               >
                 <Check />
@@ -156,7 +173,7 @@ export function HabitHistoryDialog({
                     ? "destructive"
                     : "outline"
                 }
-                disabled={isPending}
+                disabled={isPending || historyQuery.isLoading}
                 onClick={() => onCheckIn(localDate(selected), false)}
               >
                 <X />

@@ -17,6 +17,7 @@ import {
   resourceBadgeStyle,
 } from "@/features/resources/components/resource-icons";
 import { useResourceLinkDialog } from "../hooks/use-area-section-actions";
+import { LinkOptionsSkeleton } from "./area-skeletons";
 
 export function ResourceLinkDialog({
   areaUuid,
@@ -44,7 +45,7 @@ export function ResourceLinkDialog({
 
   return (
     <>
-      <Button type="button" size="sm" onClick={() => setOpen(true)}>
+      <Button type="button" onClick={() => setOpen(true)}>
         <Link2 />
         Link resources
       </Button>
@@ -76,10 +77,7 @@ export function ResourceLinkDialog({
           </div>
           <div className="grid max-h-[50vh] min-h-48 gap-2 overflow-y-auto overflow-x-hidden pr-1">
             {resourcesQuery.isLoading ? (
-              <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
-                <LoaderCircle className="size-4 animate-spin" />
-                Loading resources…
-              </div>
+              <LinkOptionsSkeleton label="Loading resources" />
             ) : resourcesQuery.isError ? (
               <div className="grid content-center justify-items-center gap-3 text-center">
                 <p className="text-sm text-muted-foreground">

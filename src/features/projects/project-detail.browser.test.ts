@@ -55,7 +55,7 @@ const project: ProjectDetail = {
   resources: [linkedResource] as unknown as ProjectDetail["resources"],
 };
 
-async function fixture(page: Page) {
+async function fixture(page: Page, options: { delayMs?: number } = {}) {
   let deleted = false;
   await page.context().addCookies([{ name: "auth_token", value: "project-detail-test", url: "http://127.0.0.1:3107" }]);
   await page.route("**/api-test/v1/**", async (route) => {
@@ -64,6 +64,9 @@ async function fixture(page: Page) {
     const path = new URL(request.url()).pathname.replace("/api-test/v1", "");
     let data: unknown = [];
     let status = 200;
+    if (options.delayMs && method === "GET" && path.startsWith(`/project/${projectUuid}`)) {
+      await new Promise((resolve) => setTimeout(resolve, options.delayMs));
+    }
     if (path === "/auth/me") data = { id: 1, uuid: "10000000-0000-4000-8000-000000000001", first_name: "Ada", last_name: "Lovelace", username: "ada", email: "ada@example.com", font_family: "manrope" };
     else if (path === "/notifications") data = { current_page: 1, data: [], last_page: 1, per_page: 15, total: 0 };
     else if (path === "/focus") data = idleFocusDashboard();
@@ -150,4 +153,15 @@ test("link resources dialog searches and counts the selection", async ({ page })
   await dialog.getByText("Interview prep checklist", { exact: true }).click();
   await expect(dialog.getByText("1 selected", { exact: true })).toBeVisible();
   await expect(dialog.getByRole("button", { name: "Link resource", exact: true })).toBeEnabled();
+});
+
+test("shows a page-shaped skeleton while the project and board load", async ({ page }) => {
+  await fixture(page, { delayMs: 1_500 });
+  await page.goto(`/projects/${projectUuid}`);
+
+  await expect(page.getByRole("status", { name: "Loading project" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+  await expect(page.getByRole("status", { name: "Loading project" })).toHaveCount(0);
+  await expect(page.getByRole("status", { name: "Loading board" })).toBeVisible();
+  await expect(page.getByRole("status", { name: "Loading board" })).toHaveCount(0);
 });

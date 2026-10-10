@@ -9,7 +9,6 @@ import {
   CardDescription,
   CardTitle,
 } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
 import { ResourceDetailDialog } from "@/features/resources/components/resource-detail-dialog";
 import { ResourceFormDialog } from "@/features/resources/components/resource-form-dialog";
 import type { Resource } from "@/features/resources/type";
@@ -26,6 +25,7 @@ import { ProjectGoalsDialog } from "./project-goals-dialog";
 import { ProjectKanban } from "./project-kanban";
 import { ProjectLinkResourcesDialog } from "./project-link-resources-dialog";
 import { ProjectUnlinkResourceDialog } from "./project-unlink-resource-dialog";
+import { ProjectDetailSkeleton } from "./project-skeletons";
 
 export function ProjectDetail({
   projectUuid,
@@ -50,18 +50,7 @@ export function ProjectDetail({
   const project = projectQuery.data?.data;
 
   if (projectQuery.isLoading)
-    return (
-      <div className="grid gap-6" aria-label="Loading project">
-        <Skeleton className="h-5 w-48" />
-        <Skeleton className="h-56 rounded-xl" />
-        <Skeleton className="h-32 rounded-xl" />
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          {[1, 2, 3, 4].map((item) => (
-            <Skeleton key={item} className="h-72 rounded-xl" />
-          ))}
-        </div>
-      </div>
-    );
+    return <ProjectDetailSkeleton />;
   if (projectQuery.isError || !project)
     return (
       <Card className="items-center py-14 text-center">

@@ -2,6 +2,7 @@
 
 import { ArchiveRestore, CalendarDays, CirclePile } from "lucide-react";
 import Link from "next/link";
+import { LoadingRegion } from "@/components/shared/loading-region";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -10,10 +11,10 @@ import {
   CardDescription,
   CardTitle,
 } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
 import { useAreaMutation, useAreasQuery } from "../queries/area-query";
 import type { Area } from "../type";
 import { AreaIcon, areaBadgeStyle } from "./area-icons";
+import { ArchivedAreaCardSkeleton } from "./area-skeletons";
 import PageHeader from "@/components/shared/page-header";
 
 export function AreaArchives() {
@@ -35,11 +36,14 @@ export function AreaArchives() {
       />
 
       {query.isLoading && (
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <LoadingRegion
+          label="Loading archived areas"
+          className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3"
+        >
           {[1, 2, 3].map((item) => (
-            <Skeleton key={item} className="h-56 rounded-xl" />
+            <ArchivedAreaCardSkeleton key={item} />
           ))}
-        </div>
+        </LoadingRegion>
       )}
 
       {query.isError && (

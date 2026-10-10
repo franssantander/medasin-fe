@@ -16,7 +16,6 @@ import {
   CardDescription,
   CardTitle,
 } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
 import {
   projectStatusBadgeClassNames,
   projectStatusLabels,
@@ -25,6 +24,7 @@ import { useProjectMutation, useProjectsQuery } from "../queries/project-query";
 import type { ProjectListCard } from "../type";
 import { ProjectIcon, projectBadgeStyle } from "./project-icons";
 import PageHeader from "@/components/shared/page-header";
+import { ArchivedProjectsSkeleton } from "./project-skeletons";
 
 export function ProjectArchives() {
   const query = useProjectsQuery("archived");
@@ -44,11 +44,7 @@ export function ProjectArchives() {
         }
       />
       {query.isLoading && (
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {[1, 2, 3].map((item) => (
-            <Skeleton key={item} className="h-64 rounded-xl" />
-          ))}
-        </div>
+        <ArchivedProjectsSkeleton />
       )}
 
       {query.isError && (

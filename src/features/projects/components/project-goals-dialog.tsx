@@ -12,8 +12,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "@/components/ui/toast";
+import { GoalsSkeleton } from "@/features/areas/components/area-skeletons";
 import { GoalFormDialog } from "@/features/areas/components/goal-form-dialog";
 import { GoalTracker } from "@/features/areas/components/goal-tracker";
 import { areaKeys } from "@/features/areas/queries/area-query";
@@ -101,12 +101,7 @@ export function ProjectGoalsDialog({
           </DialogHeader>
 
           {goalsQuery.isLoading ? (
-            <div className="grid gap-3" aria-label="Loading goals">
-              <Skeleton className="h-9 w-full sm:w-96" />
-              {[1, 2, 3].map((item) => (
-                <Skeleton key={item} className="h-24 rounded-xl" />
-              ))}
-            </div>
+            <GoalsSkeleton showHeader={false} />
           ) : goalsQuery.isError ? (
             <Card className="items-center py-12 text-center">
               <CardTitle>Goals could not be loaded</CardTitle>

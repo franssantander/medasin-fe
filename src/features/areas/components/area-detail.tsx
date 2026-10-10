@@ -3,6 +3,8 @@
 import { useMutation } from "@tanstack/react-query";
 import {
   ArrowLeft,
+  ChevronRight,
+  CloudOff,
   FileText,
   Flame,
   FolderKanban,
@@ -14,8 +16,18 @@ import {
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
+import { LoadingRegion } from "@/components/shared/loading-region";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Card, CardTitle } from "@/components/ui/card";
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
+import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { Resource } from "@/features/resources/type";
@@ -49,6 +61,7 @@ import { AreaDetailHeader } from "./area-detail-header";
 import { AreaFormDialog } from "./area-form-dialog";
 import { AreaNotesWorkspace } from "./area-notes-workspace";
 import { AreaSectionContent } from "./area-section-content";
+import { TabContentSkeleton } from "./area-skeletons";
 import { GoalFormDialog } from "./goal-form-dialog";
 import { HabitFormDialog } from "./habit-form-dialog";
 
@@ -134,22 +147,52 @@ export function AreaDetail({
     onSuccess: (response) => invalidate(response.message),
   });
 
-  if (areaQuery.isLoading)
-    return (
-      <div className="grid gap-4">
-        <Skeleton className="h-28 rounded-xl" />
-        <Skeleton className="h-64 rounded-xl" />
-      </div>
-    );
+  const backContext =
+    routeContext === "areas" && area?.archived_at ? "archives" : routeContext;
+  const backHref =
+    backContext === "archives"
+      ? "/archives"
+      : backContext === "projects"
+        ? sourceProjectUuid
+          ? `/projects/${sourceProjectUuid}`
+          : "/projects"
+        : "/areas";
+  const backLabel =
+    backContext === "projects" && sourceProjectUuid
+      ? "project details"
+      : backContext;
+
+  if (areaQuery.isLoading) return <AreaDetailSkeleton tab={activeTab} />;
   if (areaQuery.isError || !area)
     return (
-      <Card className="items-center py-14 text-center">
-        <CardTitle>Area could not be loaded</CardTitle>
-        <Button variant="outline" onClick={() => areaQuery.refetch()}>
-          <RefreshCw />
-          Try again
-        </Button>
-      </Card>
+      <Empty className="border">
+        <EmptyHeader>
+          <EmptyMedia variant="icon">
+            <CloudOff />
+          </EmptyMedia>
+          <EmptyTitle>Area could not be loaded</EmptyTitle>
+          <EmptyDescription>
+            It may have been deleted, or your connection dropped.
+          </EmptyDescription>
+        </EmptyHeader>
+        <EmptyContent className="flex-row justify-center">
+          <Button
+            variant="outline"
+            nativeButton={false}
+            render={<Link href={backHref} />}
+          >
+            <ArrowLeft />
+            Back to {backLabel}
+          </Button>
+          <Button
+            disabled={areaQuery.isFetching}
+            onClick={() => areaQuery.refetch()}
+          >
+            <RefreshCw />
+            Try again
+          </Button>
+        </EmptyContent>
+      </Empty>
     );
 
   const changeTab = (tab: AreaTab) => {
@@ -196,20 +239,6 @@ export function AreaDetail({
     await linkHabitMutation.mutateAsync(habit.uuid);
   };
 
-  const backContext =
-    routeContext === "areas" && archived ? "archives" : routeContext;
-  const backHref =
-    backContext === "archives"
-      ? "/archives"
-      : backContext === "projects"
-        ? sourceProjectUuid
-          ? `/projects/${sourceProjectUuid}`
-          : "/projects"
-        : "/areas";
-  const backLabel =
-    backContext === "projects" && sourceProjectUuid
-      ? "project details"
-      : backContext;
   const projectDetailBasePath =
     routeContext === "archives"
       ? "/archives/projects"
@@ -219,50 +248,73 @@ export function AreaDetail({
 
   return (
     <div className="flex min-h-full flex-col gap-5">
-      <div>
-        <Button
-          render={<Link href={backHref} />}
-          nativeButton={false}
-          variant="ghost"
-          size="sm"
+      <nav
+        aria-label="Breadcrumb"
+        className="flex min-w-0 items-center gap-1 text-sm"
+      >
+        <Link
+          href={backHref}
+          aria-label={`Back to ${backLabel}`}
+          className="inline-flex shrink-0 items-center gap-1.5 rounded-md px-1.5 py-1 text-muted-foreground outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
         >
-          <ArrowLeft />
-          Back to {backLabel}
-        </Button>
-      </div>
-      <div>
-        <AreaDetailHeader
-          area={area}
-          archived={archived}
-          restorePending={restoreArea.isPending}
-          onRestore={restoreArchivedArea}
-          onEdit={() => setAreaFormOpen(true)}
-          onAction={setConfirmationAction}
+          <ArrowLeft className="size-4" aria-hidden="true" />
+          <span className="capitalize">{backLabel}</span>
+        </Link>
+        <ChevronRight
+          className="size-3.5 shrink-0 text-muted-foreground/60"
+          aria-hidden="true"
         />
-      </div>
+        <span aria-current="page" className="truncate font-medium">
+          {area.name}
+        </span>
+      </nav>
+      <AreaDetailHeader
+        area={area}
+        archived={archived}
+        restorePending={restoreArea.isPending}
+        onRestore={restoreArchivedArea}
+        onEdit={() => setAreaFormOpen(true)}
+        onAction={setConfirmationAction}
+      />
       <Tabs
         value={activeTab}
         onValueChange={(value) => changeTab(value as AreaTab)}
       >
-        <TabsList variant="line">
-          {tabs.map(({ value, label, icon: Icon }) => (
-            <TabsTrigger key={value} value={value}>
-              <Icon />
-              {label}
-            </TabsTrigger>
-          ))}
-        </TabsList>
+        <div className="overflow-x-auto border-b">
+          <TabsList variant="line" className="justify-start">
+            {tabs.map(({ value, label, icon: Icon }) => (
+              <TabsTrigger key={value} value={value} className="flex-none px-3">
+                <Icon />
+                {label}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </div>
       </Tabs>
       {initialGoalUuid && linkedGoalQuery.isError && (
-        <Card className="items-center gap-3 py-5 text-center">
-          <CardTitle>Goal could not be loaded</CardTitle>
-          <Button variant="outline" onClick={() => void linkedGoalQuery.refetch()}>
-            <RefreshCw />
-            Try again
-          </Button>
-        </Card>
+        <Alert variant="destructive">
+          <CloudOff aria-hidden="true" />
+          <AlertTitle>Goal could not be loaded</AlertTitle>
+          <AlertDescription className="flex flex-col items-start gap-3">
+            <span>The linked goal may have been removed.</span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void linkedGoalQuery.refetch()}
+            >
+              <RefreshCw />
+              Try again
+            </Button>
+          </AlertDescription>
+        </Alert>
       )}
-      <div className="flex h-[48rem] min-h-0 min-w-0">
+      <div
+        className={
+          activeTab === "notes"
+            ? "flex h-[min(48rem,calc(100dvh-14rem))] min-h-[32rem] min-w-0"
+            : "min-w-0"
+        }
+      >
         {activeTab === "notes" ? (
           <AreaNotesWorkspace
             areaUuid={uuid}
@@ -270,7 +322,7 @@ export function AreaDetail({
             initialNoteUuid={initialNoteUuid}
           />
         ) : (
-          <div className="h-full w-full">
+          <div className="w-full">
             <AreaSectionContent
               tab={activeTab}
               data={
@@ -423,5 +475,53 @@ function LinkedGoalDialog({
       }}
       onSubmit={onSubmit}
     />
+  );
+}
+
+function AreaDetailSkeleton({ tab }: { tab: AreaTab }) {
+  return (
+    <LoadingRegion label="Loading area" className="flex flex-col gap-5">
+      <div className="flex items-center gap-2 py-1">
+        <Skeleton className="h-5 w-20" />
+        <Skeleton className="h-4 w-32" />
+      </div>
+      <Card className="gap-0 py-0">
+        <Skeleton className="h-32 rounded-none sm:h-40" />
+        <CardContent className="grid gap-4 p-5 sm:p-6">
+          <div className="flex items-start justify-between gap-3">
+            <Skeleton className="relative z-1 -mt-12 size-16 rounded-2xl ring-4 ring-card sm:-mt-14" />
+            <div className="flex gap-2">
+              <Skeleton className="h-9 w-20" />
+              <Skeleton className="size-9" />
+            </div>
+          </div>
+          <div className="grid gap-2">
+            <Skeleton className="h-7 w-56 max-w-full" />
+            <Skeleton className="h-4 w-full max-w-xl" />
+          </div>
+          <div className="flex flex-wrap gap-4">
+            <Skeleton className="h-3.5 w-20" />
+            <Skeleton className="h-3.5 w-24" />
+            <Skeleton className="h-3.5 w-28" />
+          </div>
+        </CardContent>
+      </Card>
+      <div className="flex gap-1 overflow-hidden border-b pb-2">
+        {tabs.map(({ value, label }) => (
+          <Skeleton
+            key={value}
+            className="h-7 shrink-0"
+            style={{ width: `${label.length * 0.5 + 2.5}rem` }}
+          />
+        ))}
+      </div>
+      {tab === "notes" ? (
+        <div className="flex h-[min(48rem,calc(100dvh-14rem))] min-h-[32rem] min-w-0">
+          <TabContentSkeleton tab={tab} />
+        </div>
+      ) : (
+        <TabContentSkeleton tab={tab} />
+      )}
+    </LoadingRegion>
   );
 }

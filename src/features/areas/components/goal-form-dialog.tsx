@@ -1,9 +1,19 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Search } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import {
+  addMonths,
+  addWeeks,
+  differenceInCalendarDays,
+  endOfYear,
+  format,
+  formatDistanceStrict,
+  startOfDay,
+} from "date-fns";
+import { CalendarRange, CircleAlert, LoaderCircle } from "lucide-react";
+import { useEffect, useId } from "react";
 import { Controller, useForm, useWatch } from "react-hook-form";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -13,27 +23,75 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  Field,
+  FieldDescription,
+  FieldError,
+  FieldGroup,
+  FieldLabel,
+} from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { ProjectDateField } from "@/features/projects/components/project-date-field";
 import { ApiError } from "@/lib/axios";
+import { cn } from "@/lib/utils";
+import {
+  goalStatusIcons,
+  goalStatusOptions,
+  goalStatusTintClassNames,
+  parseGoalDate,
+} from "../goal-status";
 import { goalSchema, type GoalFormValues } from "../schemas/area-schema";
 import type { Goal, GoalInput, GoalStatus } from "../type";
-import { AREA_ICONS, AreaIcon } from "./area-icons";
-import { FormField } from "./form-field";
+import { AreaIconPicker } from "./area-icon-picker";
+import { AreaIcon } from "./area-icons";
 
-const goalStatuses: { value: GoalStatus; label: string }[] = [
-  { value: "pending", label: "Pending" },
-  { value: "in_progress", label: "In progress" },
-  { value: "completed", label: "Completed" },
-  { value: "cancelled", label: "Cancelled" },
+const TITLE_MAX_LENGTH = 120;
+const DEFAULT_GOAL_ICON = "Star";
+
+const GOAL_SUGGESTED_ICONS = [
+  "Target",
+  "Trophy",
+  "Flag",
+  "Mountain",
+  "Rocket",
+  "Star",
+  "Medal",
+  "Award",
+  "CircleCheckBig",
+  "Footprints",
+  "Dumbbell",
+  "PiggyBank",
+  "BookOpen",
+  "GraduationCap",
+  "Heart",
+  "Briefcase",
+  "Lightbulb",
+  "Sprout",
+  "Compass",
+  "Zap",
+] as const;
+
+const duePresets: { label: string; from: (base: Date) => Date }[] = [
+  { label: "In 1 week", from: (base) => addWeeks(base, 1) },
+  { label: "In 1 month", from: (base) => addMonths(base, 1) },
+  { label: "In 3 months", from: (base) => addMonths(base, 3) },
+  { label: "End of year", from: (base) => endOfYear(base) },
 ];
+
+function timelineSummary(start?: Date, due?: Date) {
+  if (!due) return "Add a due date to track the time remaining.";
+  if (start) {
+    const days = differenceInCalendarDays(due, start);
+    if (days < 0) return null;
+    return `Spans ${formatDistanceStrict(due, start, { unit: days >= 60 ? "month" : "day" })} · ${days} ${days === 1 ? "day" : "days"}`;
+  }
+  const days = differenceInCalendarDays(due, startOfDay(new Date()));
+  if (days < 0) return `Due date is ${-days} ${days === -1 ? "day" : "days"} ago`;
+  if (days === 0) return "Due today";
+  return `Due in ${days} ${days === 1 ? "day" : "days"}`;
+}
 
 export function GoalFormDialog({
   open,
@@ -48,7 +106,7 @@ export function GoalFormDialog({
   isPending: boolean;
   onSubmit: (input: GoalInput) => Promise<void>;
 }) {
-  const [iconSearch, setIconSearch] = useState("");
+  const id = useId();
   const {
     control,
     register,
@@ -61,27 +119,25 @@ export function GoalFormDialog({
     resolver: zodResolver(goalSchema),
     defaultValues: {
       title: "",
-      icon: "Star",
+      icon: DEFAULT_GOAL_ICON,
       description: "",
       status: "pending",
       start_date: "",
       due_date: "",
     },
   });
-  const startDate = useWatch({ control, name: "start_date" });
-  const selectedIcon = useWatch({ control, name: "icon" });
-  const filteredIcons = useMemo(() => {
-    const query = iconSearch.trim().toLowerCase();
-    return query
-      ? AREA_ICONS.filter(({ name }) => name.toLowerCase().includes(query))
-      : AREA_ICONS;
-  }, [iconSearch]);
+  const title = useWatch({ control, name: "title" }) ?? "";
+  const selectedIcon = useWatch({ control, name: "icon" }) || DEFAULT_GOAL_ICON;
+  const status = (useWatch({ control, name: "status" }) ?? "pending") as GoalStatus;
+  const startDate = parseGoalDate(useWatch({ control, name: "start_date" }));
+  const dueDate = parseGoalDate(useWatch({ control, name: "due_date" }));
+  const summary = timelineSummary(startDate, dueDate);
 
   useEffect(() => {
     if (open) {
       reset({
         title: goal?.title ?? "",
-        icon: goal?.icon || "Star",
+        icon: goal?.icon || DEFAULT_GOAL_ICON,
         description: goal?.description ?? "",
         status: goal?.status ?? "pending",
         start_date: goal?.start_date?.slice(0, 10) ?? "",
@@ -92,7 +148,7 @@ export function GoalFormDialog({
 
   const submit = handleSubmit(async (values) => {
     try {
-      await onSubmit({ ...values, icon: values.icon || "Star" });
+      await onSubmit({ ...values, icon: values.icon || DEFAULT_GOAL_ICON });
       onOpenChange(false);
     } catch (error) {
       if (error instanceof ApiError && error.validationErrors) {
@@ -106,6 +162,13 @@ export function GoalFormDialog({
     }
   });
 
+  const applyDuePreset = (preset: (typeof duePresets)[number]) =>
+    setValue(
+      "due_date",
+      format(preset.from(startDate ?? startOfDay(new Date())), "yyyy-MM-dd"),
+      { shouldDirty: true, shouldValidate: true },
+    );
+
   return (
     <Dialog
       open={open}
@@ -113,148 +176,235 @@ export function GoalFormDialog({
         if (!isPending) onOpenChange(nextOpen);
       }}
     >
-      <DialogContent className="max-w-2xl">
-        <DialogHeader>
-          <div className="mb-2 flex size-10 items-center justify-center rounded-xl bg-primary text-primary-foreground">
-            <AreaIcon name={selectedIcon || "Star"} className="size-5" />
+      <DialogContent className="max-w-2xl gap-0 overflow-hidden p-0">
+        <DialogHeader className="shrink-0 flex-row items-center gap-3 border-b px-5 py-5 pr-12 sm:px-6 sm:pr-12">
+          <div
+            className={cn(
+              "flex size-10 shrink-0 items-center justify-center rounded-xl transition-colors",
+              goalStatusTintClassNames[status],
+            )}
+            aria-hidden="true"
+          >
+            <AreaIcon name={selectedIcon} className="size-5" />
           </div>
-          <DialogTitle>{goal ? "Edit goal" : "Add goal"}</DialogTitle>
-          <DialogDescription>
-            {goal
-              ? "Update the goal details and keep its progress accurate."
-              : "Define a clear outcome and give it a realistic timeline."}
-          </DialogDescription>
+          <div className="grid gap-1">
+            <DialogTitle>{goal ? "Edit goal" : "Add goal"}</DialogTitle>
+            <DialogDescription>
+              {goal
+                ? "Update the details and keep its progress accurate."
+                : "Name a clear outcome and give it a realistic timeline."}
+            </DialogDescription>
+          </div>
         </DialogHeader>
 
-        <form id="goal-form" onSubmit={submit} className="grid gap-5">
-          <FormField label="Title" error={errors.title?.message}>
-            <Input
-              {...register("title")}
-              autoFocus
-              placeholder="What do you want to accomplish?"
-              aria-invalid={Boolean(errors.title)}
-            />
-          </FormField>
+        <form
+          id="goal-form"
+          onSubmit={submit}
+          className="min-h-0 overflow-y-auto overscroll-contain"
+        >
+          <FieldGroup className="gap-6 p-5 sm:p-6">
+            {errors.root?.message && (
+              <Alert variant="destructive">
+                <CircleAlert aria-hidden="true" />
+                <AlertTitle>Something went wrong</AlertTitle>
+                <AlertDescription>{errors.root.message}</AlertDescription>
+              </Alert>
+            )}
 
-          <FormField label="Icon" error={errors.icon?.message}>
-            <div className="overflow-hidden rounded-xl border">
-              <div className="flex items-center gap-3 border-b p-3">
-                <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground">
-                  <AreaIcon
-                    name={selectedIcon || "Star"}
-                    className="size-3.5"
-                  />
-                </div>
-                <div className="relative min-w-0 flex-1">
-                  <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    value={iconSearch}
-                    onChange={(event) => setIconSearch(event.target.value)}
-                    placeholder={`Search ${AREA_ICONS.length} Lucide icons…`}
-                    className="pl-9"
-                  />
+            <Field data-invalid={Boolean(errors.title)}>
+              <FieldLabel htmlFor={`${id}-title`}>Title</FieldLabel>
+              <Input
+                {...register("title")}
+                id={`${id}-title`}
+                autoFocus
+                maxLength={TITLE_MAX_LENGTH}
+                placeholder="What do you want to accomplish?"
+                aria-invalid={Boolean(errors.title)}
+                aria-describedby={`${id}-title-hint`}
+              />
+              <div className="flex items-start justify-between gap-3">
+                {errors.title ? (
+                  <FieldError id={`${id}-title-hint`}>{errors.title.message}</FieldError>
+                ) : (
+                  <FieldDescription id={`${id}-title-hint`}>
+                    Make it specific, like &ldquo;Save a 6-month emergency fund&rdquo;.
+                  </FieldDescription>
+                )}
+                <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+                  {title.length}/{TITLE_MAX_LENGTH}
+                </span>
+              </div>
+            </Field>
+
+            <div className="grid gap-6 sm:grid-cols-[minmax(0,12rem)_minmax(0,1fr)]">
+              <Field data-invalid={Boolean(errors.icon)}>
+                <FieldLabel htmlFor={`${id}-icon`}>Icon</FieldLabel>
+                <AreaIconPicker
+                  id={`${id}-icon`}
+                  value={selectedIcon}
+                  fallback={DEFAULT_GOAL_ICON}
+                  suggested={GOAL_SUGGESTED_ICONS}
+                  invalid={Boolean(errors.icon)}
+                  onChange={(icon) =>
+                    setValue("icon", icon, {
+                      shouldDirty: true,
+                      shouldValidate: true,
+                    })
+                  }
+                />
+                {errors.icon && <FieldError>{errors.icon.message}</FieldError>}
+              </Field>
+
+              <Field data-invalid={Boolean(errors.status)}>
+                <FieldLabel id={`${id}-status-label`}>Status</FieldLabel>
+                <Controller
+                  control={control}
+                  name="status"
+                  render={({ field }) => (
+                    <ToggleGroup
+                      variant="outline"
+                      spacing={1}
+                      aria-labelledby={`${id}-status-label`}
+                      value={[field.value]}
+                      onValueChange={(values) => {
+                        const next = values[0];
+                        if (next) field.onChange(next);
+                      }}
+                      className="w-full flex-wrap"
+                    >
+                      {goalStatusOptions.map((option) => {
+                        const Icon = goalStatusIcons[option.value];
+                        return (
+                          <ToggleGroupItem
+                            key={option.value}
+                            value={option.value}
+                            className="flex-1 gap-1.5 px-2.5 font-normal text-muted-foreground aria-pressed:font-medium aria-pressed:text-foreground"
+                          >
+                            <Icon aria-hidden="true" />
+                            {option.label}
+                          </ToggleGroupItem>
+                        );
+                      })}
+                    </ToggleGroup>
+                  )}
+                />
+                {errors.status && <FieldError>{errors.status.message}</FieldError>}
+              </Field>
+            </div>
+
+            <Field data-invalid={Boolean(errors.description)}>
+              <FieldLabel htmlFor={`${id}-description`}>Description</FieldLabel>
+              <Textarea
+                {...register("description")}
+                id={`${id}-description`}
+                rows={3}
+                placeholder="Add context, motivation, or a definition of success…"
+                aria-invalid={Boolean(errors.description)}
+              />
+              {errors.description ? (
+                <FieldError>{errors.description.message}</FieldError>
+              ) : (
+                <FieldDescription>
+                  Optional. What does success look like, and why does it matter?
+                </FieldDescription>
+              )}
+            </Field>
+
+            <section
+              aria-labelledby={`${id}-timeline`}
+              className="grid gap-4 rounded-xl border bg-muted/30 p-4 sm:p-5"
+            >
+              <div className="flex items-start gap-2.5">
+                <CalendarRange
+                  className="mt-0.5 size-4 text-muted-foreground"
+                  aria-hidden="true"
+                />
+                <div className="grid gap-0.5">
+                  <h3 id={`${id}-timeline`} className="text-sm font-semibold">
+                    Timeline
+                  </h3>
+                  <p className="text-xs text-muted-foreground">
+                    Optional. Dates turn on the progress bar in the tracker.
+                  </p>
                 </div>
               </div>
-              <div className="grid max-h-48 grid-cols-[repeat(auto-fill,2rem)] justify-between gap-1 overflow-y-auto p-3">
-                {filteredIcons.map(({ name, icon: Icon }) => (
-                  <button
-                    key={name}
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Controller
+                  control={control}
+                  name="start_date"
+                  render={({ field }) => (
+                    <ProjectDateField
+                      id={`${id}-start`}
+                      label="Start date"
+                      placeholder="Pick a start date"
+                      value={field.value ?? ""}
+                      error={errors.start_date?.message}
+                      onChange={field.onChange}
+                    />
+                  )}
+                />
+                <Controller
+                  control={control}
+                  name="due_date"
+                  render={({ field }) => (
+                    <ProjectDateField
+                      id={`${id}-due`}
+                      label="Due date"
+                      placeholder="Pick a due date"
+                      value={field.value ?? ""}
+                      min={startDate}
+                      error={errors.due_date?.message}
+                      onChange={field.onChange}
+                    />
+                  )}
+                />
+              </div>
+
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="mr-1 text-xs text-muted-foreground">
+                  Quick due date
+                </span>
+                {duePresets.map((preset) => (
+                  <Button
+                    key={preset.label}
                     type="button"
-                    title={name}
-                    aria-label={`Use ${name} icon`}
-                    aria-pressed={(selectedIcon || "Star") === name}
-                    className="flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground aria-pressed:bg-primary aria-pressed:text-primary-foreground"
-                    onClick={() =>
-                      setValue("icon", name, {
-                        shouldDirty: true,
-                        shouldValidate: true,
-                      })
-                    }
+                    variant="outline"
+                    size="xs"
+                    className="bg-background"
+                    onClick={() => applyDuePreset(preset)}
                   >
-                    <Icon className="size-3.5" />
-                  </button>
+                    {preset.label}
+                  </Button>
                 ))}
               </div>
-              {filteredIcons.length === 0 && (
-                <p className="px-3 pb-4 text-center text-sm text-muted-foreground">
-                  No icons match “{iconSearch}”.
+
+              {summary && (
+                <p className="text-xs text-muted-foreground" aria-live="polite">
+                  {summary}
                 </p>
               )}
-            </div>
-          </FormField>
-
-          <FormField label="Description" error={errors.description?.message}>
-            <Textarea
-              {...register("description")}
-              className="min-h-24 resize-y"
-              placeholder="Add context, motivation, or a definition of success…"
-              aria-invalid={Boolean(errors.description)}
-            />
-          </FormField>
-
-          <div className="grid gap-4 sm:grid-cols-2">
-            <FormField label="Status" error={errors.status?.message}>
-              <Controller
-                control={control}
-                name="status"
-                render={({ field }) => (
-                  <Select
-                    items={goalStatuses}
-                    value={field.value}
-                    onValueChange={(value) => value && field.onChange(value)}
-                  >
-                    <SelectTrigger
-                      className="w-full"
-                      aria-invalid={Boolean(errors.status)}
-                    >
-                      <SelectValue placeholder="Choose a status" />
-                    </SelectTrigger>
-                    <SelectContent align="start">
-                      {goalStatuses.map((status) => (
-                        <SelectItem key={status.value} value={status.value}>
-                          {status.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
-              />
-            </FormField>
-
-            <div className="grid grid-cols-2 gap-3">
-              <FormField label="Start date" error={errors.start_date?.message}>
-                <Input
-                  {...register("start_date")}
-                  type="date"
-                  aria-invalid={Boolean(errors.start_date)}
-                />
-              </FormField>
-              <FormField label="Due date" error={errors.due_date?.message}>
-                <Input
-                  {...register("due_date")}
-                  type="date"
-                  min={startDate || undefined}
-                  aria-invalid={Boolean(errors.due_date)}
-                />
-              </FormField>
-            </div>
-          </div>
-
-          {errors.root?.message && (
-            <p className="text-sm text-destructive">{errors.root.message}</p>
-          )}
+            </section>
+          </FieldGroup>
         </form>
 
-        <DialogFooter>
+        <DialogFooter className="shrink-0 border-t bg-popover px-5 py-4 sm:px-6">
           <Button
             type="button"
             variant="outline"
+            className="w-full sm:w-auto"
             disabled={isPending}
             onClick={() => onOpenChange(false)}
           >
             Cancel
           </Button>
-          <Button form="goal-form" type="submit" disabled={isPending}>
+          <Button
+            form="goal-form"
+            type="submit"
+            className="w-full sm:w-auto"
+            disabled={isPending}
+          >
+            {isPending && <LoaderCircle className="animate-spin" />}
             {isPending ? "Saving…" : goal ? "Save changes" : "Add goal"}
           </Button>
         </DialogFooter>

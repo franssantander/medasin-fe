@@ -25,6 +25,7 @@ import {
   resourceBadgeStyle,
 } from "@/features/resources/components/resource-icons";
 import { useAttachProjectResources } from "../queries/project-query";
+import { ResourceOptionsSkeleton } from "./project-skeletons";
 
 export function ProjectLinkResourcesDialog({
   projectUuid,
@@ -97,10 +98,7 @@ export function ProjectLinkResourcesDialog({
 
         <div className="workspace-list-scrollbar grid min-h-0 flex-1 content-start gap-1 overflow-y-auto overscroll-contain p-2">
           {resourcesQuery.isLoading ? (
-            <div className="flex items-center justify-center gap-2 py-12 text-sm text-muted-foreground">
-              <LoaderCircle className="size-4 animate-spin" />
-              Loading resources…
-            </div>
+            <ResourceOptionsSkeleton />
           ) : resourcesQuery.isError && !resourcesQuery.isFetchNextPageError ? (
             <div className="grid justify-items-center gap-3 py-10 text-center">
               <p className="text-sm text-muted-foreground">

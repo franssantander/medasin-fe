@@ -1,6 +1,6 @@
 "use client";
 
-import { LoaderCircle, StarCheck } from "lucide-react";
+import { StarCheck } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { useState } from "react";
@@ -19,6 +19,7 @@ import {
 import { areaKeys } from "@/features/areas/queries/area-query";
 import { areaService } from "@/features/areas/services/area-service";
 import type { ProjectListCard } from "../type";
+import { GoalsMenuSkeleton } from "./project-skeletons";
 
 function goalCountLabel(count: number) {
   return `${count} ${count === 1 ? "goal" : "goals"}`;
@@ -63,10 +64,7 @@ export function ProjectGoalsMenu({ project }: { project: ProjectListCard }) {
         className="w-72 max-w-[calc(100vw-2rem)]"
       >
         {goalsQuery.isLoading ? (
-          <div className="flex min-h-16 items-center justify-center gap-2 px-3 text-sm text-muted-foreground">
-            <LoaderCircle className="size-4 animate-spin motion-reduce:animate-none" />
-            Loading goals…
-          </div>
+          <GoalsMenuSkeleton />
         ) : goalsQuery.isError ? (
           <div className="px-3 py-4 text-center text-sm text-muted-foreground">
             Goals could not be loaded.
