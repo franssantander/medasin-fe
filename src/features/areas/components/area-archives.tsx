@@ -1,140 +1,63 @@
 "use client";
 
-import { ArchiveRestore, CalendarDays, CirclePile } from "lucide-react";
-import Link from "next/link";
-import { LoadingRegion } from "@/components/shared/loading-region";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardTitle,
-} from "@/components/ui/card";
+import { useMemo, useState } from "react";
+import { RestoreConfirmDialog } from "@/components/shared/restore-confirm-dialog";
+import { ArchiveRow } from "@/features/archives/components/archive-list";
 import { useAreaMutation, useAreasQuery } from "../queries/area-query";
 import type { Area } from "../type";
 import { AreaIcon, areaBadgeStyle } from "./area-icons";
-import { ArchivedAreaCardSkeleton } from "./area-skeletons";
-import PageHeader from "@/components/shared/page-header";
 
-export function AreaArchives() {
+function archivedTime(value: string | null) {
+  return value ? new Date(value).getTime() || 0 : 0;
+}
+
+export function useArchivedAreas(search: string) {
   const query = useAreasQuery("archived");
+  const term = search.trim().toLowerCase();
+  const items = useMemo(
+    () =>
+      (query.data?.data ?? [])
+        .filter((area) => !term || area.name.toLowerCase().includes(term))
+        .sort((a, b) => archivedTime(b.archived_at) - archivedTime(a.archived_at)),
+    [query.data, term],
+  );
+  return { query, items, total: query.data?.data.length };
+}
+
+export function ArchivedAreaRow({ area }: { area: Area }) {
+  const restore = useAreaMutation("restore", area.uuid);
+  const [confirming, setConfirming] = useState(false);
 
   return (
-    <section className="grid gap-5" aria-labelledby="archived-areas-title">
-      <PageHeader
-        title="Archived areas"
-        description="Restore an area to continue organizing its projects, goals,
-              habits, notes, and resources."
-        action={
-          query.data && (
-            <Badge variant="secondary" className="tabular-nums">
-              {query.data.data.length} archived
-            </Badge>
-          )
+    <>
+      <ArchiveRow
+        media={
+          <div
+            className="flex size-9 shrink-0 items-center justify-center rounded-lg"
+            style={areaBadgeStyle(area.background)}
+            aria-hidden="true"
+          >
+            <AreaIcon name={area.icon} className="size-4" />
+          </div>
+        }
+        title={area.name}
+        secondary={area.description || "No description"}
+        archivedAt={area.archived_at}
+        openLabel={`Open ${area.name}`}
+        href={`/archives/areas/${area.uuid}`}
+        restoring={restore.isPending}
+        onRestore={() => setConfirming(true)}
+      />
+      <RestoreConfirmDialog
+        open={confirming}
+        kind="area"
+        name={area.name}
+        isPending={restore.isPending}
+        onOpenChange={setConfirming}
+        onConfirm={() =>
+          restore.mutate(undefined, { onSuccess: () => setConfirming(false) })
         }
       />
-
-      {query.isLoading && (
-        <LoadingRegion
-          label="Loading archived areas"
-          className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3"
-        >
-          {[1, 2, 3].map((item) => (
-            <ArchivedAreaCardSkeleton key={item} />
-          ))}
-        </LoadingRegion>
-      )}
-
-      {query.isError && (
-        <Card className="items-center py-12 text-center">
-          <CardTitle>Archived areas could not be loaded</CardTitle>
-          <CardDescription>
-            Check your connection and try again.
-          </CardDescription>
-          <Button variant="outline" onClick={() => query.refetch()}>
-            Try again
-          </Button>
-        </Card>
-      )}
-
-      {query.data?.data.length === 0 && (
-        <Card className="items-center py-14 text-center">
-          <div className="rounded-full bg-muted p-3">
-            <CirclePile className="size-6" />
-          </div>
-          <CardTitle>No archived areas</CardTitle>
-          <CardDescription className="max-w-sm">
-            Areas you archive will appear here until you restore them.
-          </CardDescription>
-        </Card>
-      )}
-
-      {query.data && query.data.data.length > 0 && (
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {query.data.data.map((area) => (
-            <ArchivedAreaCard key={area.uuid} area={area} />
-          ))}
-        </div>
-      )}
-    </section>
-  );
-}
-
-function ArchivedAreaCard({ area }: { area: Area }) {
-  const restore = useAreaMutation("restore", area.uuid);
-
-  return (
-    <Card className="relative h-full gap-0 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md">
-      <Link
-        href={`/archives/areas/${area.uuid}`}
-        className="absolute inset-0 z-0 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-        aria-label={`Open ${area.name}`}
-      />
-      <CardContent className="pointer-events-none h-full gap-4">
-        <div className="flex items-center gap-3">
-          <div
-            className="flex size-11 shrink-0 items-center justify-center rounded-xl shadow-sm"
-            style={areaBadgeStyle(area.background)}
-          >
-            <AreaIcon name={area.icon} className="size-5" />
-          </div>
-          <div className="min-w-0">
-            <CardTitle className="truncate">{area.name}</CardTitle>
-            <CardDescription>Archived area</CardDescription>
-          </div>
-        </div>
-        <p className="line-clamp-2 min-h-10 text-sm text-muted-foreground">
-          {area.description || "No description was added to this area."}
-        </p>
-        <div>
-          <Badge variant="outline">Area</Badge>
-        </div>
-        <div className="mt-auto flex flex-wrap items-center justify-between gap-3 border-t pt-3">
-          <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <CalendarDays className="size-3.5" />
-            {area.archived_at
-              ? `Archived ${formatDate(area.archived_at)}`
-              : "Archived"}
-          </span>
-          <Button
-            variant="outline"
-            size="sm"
-            className="pointer-events-auto relative z-10"
-            disabled={restore.isPending}
-            onClick={() => restore.mutate()}
-          >
-            <ArchiveRestore />
-            {restore.isPending ? "Restoring…" : "Restore"}
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-function formatDate(value: string) {
-  return new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(
-    new Date(value),
+    </>
   );
 }

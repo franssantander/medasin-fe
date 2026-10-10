@@ -175,6 +175,11 @@ test("archived areas are read-only with a restore action", async ({ page }) => {
   await expect(page.getByRole("link", { name: "Back to archives", exact: true })).toHaveAttribute("href", "/archives");
   await expect(page.getByText("This area is archived")).toBeVisible();
   await expect(page.getByRole("button", { name: "Restore", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Restore", exact: true }).click();
+  const confirm = page.getByRole("alertdialog", { name: "Restore area?", exact: true });
+  await expect(confirm).toContainText("stay in Inbox");
+  await confirm.getByRole("button", { name: "Cancel", exact: true }).click();
+  await expect(confirm).toBeHidden();
   await expect(page.getByRole("button", { name: "Link projects" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: /^Actions for / })).toHaveCount(0);
 });

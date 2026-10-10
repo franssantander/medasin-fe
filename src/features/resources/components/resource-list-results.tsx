@@ -1,7 +1,6 @@
 import type { RefObject } from "react";
 import { BookOpen, CircleAlert, LoaderCircle, Plus, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import {
   Empty,
   EmptyContent,
@@ -10,9 +9,11 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty";
-import { Skeleton } from "@/components/ui/skeleton";
+import type { ResourceView } from "../hooks/use-resource-list";
 import type { Resource } from "../type";
 import { ResourceListCard } from "./resource-list-card";
+import { ResourceListRow } from "./resource-list-row";
+import { ResourceListSkeleton } from "./resource-skeletons";
 
 type ResourceListResultsProps = {
   archiveDisabled: boolean;
@@ -26,6 +27,7 @@ type ResourceListResultsProps = {
   isLoading: boolean;
   loadMoreRef: RefObject<HTMLDivElement | null>;
   resources: Resource[];
+  view: ResourceView;
   onArchive: (resource: Resource) => void;
   onDelete: (resource: Resource) => void;
   onClearFilters: () => void;
@@ -48,6 +50,7 @@ export function ResourceListResults(props: ResourceListResultsProps) {
     isLoading,
     loadMoreRef,
     resources,
+    view,
     onArchive,
     onDelete,
     onClearFilters,
@@ -56,32 +59,14 @@ export function ResourceListResults(props: ResourceListResultsProps) {
     onOpen,
     onRetry,
   } = props;
+  const actions = { archiveDisabled, deleteDisabled, onArchive, onDelete, onOpen };
 
   return (
-    <div className="flex min-w-0 flex-col gap-3 lg:min-h-full">
-      {isLoading && (
-        <div className="grid gap-3" role="status" aria-label="Loading resources">
-          {[1, 2, 3, 4].map((item) => (
-            <Card key={item} size="sm" aria-hidden="true">
-              <CardHeader className="flex flex-row items-start gap-3">
-                <Skeleton className="size-10 shrink-0 rounded-lg" />
-                <div className="grid w-full gap-2">
-                  <Skeleton className="h-4 w-2/3" />
-                  <Skeleton className="h-3 w-24" />
-                </div>
-              </CardHeader>
-              <CardContent className="gap-2">
-                <Skeleton className="h-4 w-full" />
-                <Skeleton className="h-4 w-4/5" />
-                <Skeleton className="mt-1 h-5 w-20" />
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      )}
+    <div className="flex min-w-0 flex-col gap-4">
+      {isLoading && <ResourceListSkeleton view={view} />}
       {isError && !isFetchNextPageError && (
         <Empty
-          className="min-h-64 rounded-xl border bg-card lg:flex-1"
+          className="min-h-72 rounded-xl border border-dashed"
           role="alert"
         >
           <EmptyHeader>
@@ -94,18 +79,14 @@ export function ResourceListResults(props: ResourceListResultsProps) {
             </EmptyDescription>
           </EmptyHeader>
           <EmptyContent>
-            <Button
-              variant="outline"
-              className="h-11 lg:h-9"
-              onClick={onRetry}
-            >
+            <Button variant="outline" onClick={onRetry}>
               Try again
             </Button>
           </EmptyContent>
         </Empty>
       )}
       {!isLoading && !isError && resources.length === 0 && (
-        <Empty className="min-h-64 rounded-xl border bg-card lg:flex-1">
+        <Empty className="min-h-72 rounded-xl border border-dashed">
           <EmptyHeader>
             <EmptyMedia variant="icon">
               {isFiltered ? (
@@ -125,15 +106,11 @@ export function ResourceListResults(props: ResourceListResultsProps) {
           </EmptyHeader>
           <EmptyContent>
             {isFiltered ? (
-              <Button
-                variant="outline"
-                className="h-11 lg:h-9"
-                onClick={onClearFilters}
-              >
+              <Button variant="outline" onClick={onClearFilters}>
                 Clear filters
               </Button>
             ) : (
-              <Button className="h-11 lg:h-9" onClick={onCreate}>
+              <Button onClick={onCreate}>
                 <Plus data-icon="inline-start" aria-hidden="true" />
                 New resource
               </Button>
@@ -141,21 +118,30 @@ export function ResourceListResults(props: ResourceListResultsProps) {
           </EmptyContent>
         </Empty>
       )}
-      {resources.map((resource) => (
-        <ResourceListCard
-          key={resource.uuid}
-          archiveDisabled={archiveDisabled}
-          deleteDisabled={deleteDisabled}
-          resource={resource}
-          onArchive={onArchive}
-          onDelete={onDelete}
-          onOpen={onOpen}
-        />
-      ))}
+      {resources.length > 0 &&
+        (view === "list" ? (
+          <ul className="divide-y overflow-hidden rounded-xl bg-card ring-1 ring-foreground/10">
+            {resources.map((resource) => (
+              <ResourceListRow
+                key={resource.uuid}
+                resource={resource}
+                {...actions}
+              />
+            ))}
+          </ul>
+        ) : (
+          <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            {resources.map((resource) => (
+              <li key={resource.uuid} className="min-w-0">
+                <ResourceListCard resource={resource} {...actions} />
+              </li>
+            ))}
+          </ul>
+        ))}
       {(hasNextPage || isFetchNextPageError) && (
         <div
           ref={loadMoreRef}
-          className="flex min-h-11 shrink-0 flex-col items-center justify-center gap-2 py-2"
+          className="flex min-h-11 flex-col items-center justify-center gap-2 py-2"
         >
           {isFetchNextPageError && (
             <p role="alert" className="text-sm text-destructive">
@@ -165,7 +151,6 @@ export function ResourceListResults(props: ResourceListResultsProps) {
           {hasNextPage && (
             <Button
               variant="outline"
-              className="h-11 lg:h-9"
               disabled={isFetching}
               onClick={onLoadMore}
             >

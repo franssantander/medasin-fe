@@ -8,6 +8,7 @@ import type { ResourceUpdateInput } from "../type";
 export function useResourceAutosave(input: ResourceUpdateInput, enabled: boolean) {
   const signature = JSON.stringify(input);
   const [savedSignature, setSavedSignature] = useState(signature);
+  const [hasSavedChanges, setHasSavedChanges] = useState(false);
   const [state, setState] = useState<"saved" | "saving" | "error">("saved");
   const [failure, setFailure] = useState<{ signature: string; errors: ResourceFormErrors } | null>(null);
   const latest = useRef({ input, signature, enabled });
@@ -42,6 +43,7 @@ export function useResourceAutosave(input: ResourceUpdateInput, enabled: boolean
           await mutateAsync(snapshot.input);
           saved.current = snapshot.signature;
           setSavedSignature(snapshot.signature);
+          setHasSavedChanges(true);
         } catch (error) {
           if (snapshot.signature !== latest.current.signature) continue;
           setFailure({ signature: snapshot.signature, errors: resourceRequestErrors(error) });
@@ -79,6 +81,7 @@ export function useResourceAutosave(input: ResourceUpdateInput, enabled: boolean
     errors: failure?.signature === signature ? failure.errors : {},
     save,
     dirty: signature !== savedSignature,
+    hasSavedChanges,
     saving: state === "saving",
     failed: state === "error" && failure?.signature === signature && signature !== savedSignature,
     status: state === "saving" ? "Saving…"

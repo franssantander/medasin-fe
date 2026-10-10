@@ -254,31 +254,6 @@ export function HabitsSkeleton({ label = "Loading habits" }: { label?: string })
   );
 }
 
-export function ArchivedAreaCardSkeleton() {
-  return (
-    <Card className="h-full gap-0">
-      <CardContent className="grid h-full gap-4">
-        <div className="flex items-center gap-3">
-          <Skeleton className="size-11 shrink-0 rounded-xl" />
-          <div className="grid flex-1 gap-1.5">
-            <Skeleton className="h-4 w-2/5" />
-            <Skeleton className="h-3.5 w-24" />
-          </div>
-        </div>
-        <div className="grid min-h-10 gap-1.5">
-          <Skeleton className="h-4 w-full" />
-          <Skeleton className="h-4 w-3/4" />
-        </div>
-        <Skeleton className="h-5 w-12 rounded-full" />
-        <div className="mt-auto flex items-center justify-between gap-3 border-t pt-3">
-          <Skeleton className="h-3.5 w-32" />
-          <Skeleton className="h-8 w-24" />
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
 export function TabContentSkeleton({ tab }: { tab: AreaTab }) {
   if (tab === "goals") return <GoalsSkeleton />;
   if (tab === "habits") return <HabitsSkeleton />;

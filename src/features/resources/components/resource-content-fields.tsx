@@ -7,11 +7,27 @@ import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "
 import { resourceFieldIds } from "./resource-dialog-layout";
 import { ResourceEditor } from "./resource-editor";
 
-export function ResourceTitleField({ value, disabled, readOnly, error, onChange }: { value: string; disabled?: boolean; readOnly?: boolean; error?: string; onChange: (value: string) => void }) {
+export function ResourceTitleField({ value, disabled, readOnly, error, variant = "field", onChange }: { value: string; disabled?: boolean; readOnly?: boolean; error?: string; variant?: "field" | "inline"; onChange: (value: string) => void }) {
+  const inline = variant === "inline";
   return (
     <Field data-invalid={Boolean(error)} data-disabled={disabled}>
-      <FieldLabel htmlFor={resourceFieldIds.title}>Title <span className="font-normal text-muted-foreground">(required)</span></FieldLabel>
-      <Input id={resourceFieldIds.title} value={value} disabled={disabled} readOnly={readOnly} required maxLength={255} autoFocus={!readOnly} aria-invalid={Boolean(error)} aria-describedby={error ? "resource-title-error" : undefined} placeholder="Give your resource a title" className="font-medium" onChange={(event) => onChange(event.target.value)} />
+      <FieldLabel htmlFor={resourceFieldIds.title} className={inline ? "sr-only" : undefined}>Title <span className="font-normal text-muted-foreground">(required)</span></FieldLabel>
+      <Input
+        id={resourceFieldIds.title}
+        value={value}
+        disabled={disabled}
+        readOnly={readOnly}
+        required
+        maxLength={255}
+        autoFocus={!inline && !readOnly}
+        aria-invalid={Boolean(error)}
+        aria-describedby={error ? "resource-title-error" : undefined}
+        placeholder={inline ? "Untitled resource" : "Give your resource a title"}
+        className={inline
+          ? "h-auto rounded-none border-0 bg-transparent px-0 py-1 text-2xl font-semibold leading-tight shadow-none placeholder:text-muted-foreground/50 focus-visible:ring-0 aria-invalid:ring-0 md:text-2xl dark:bg-transparent"
+          : "font-medium"}
+        onChange={(event) => onChange(event.target.value)}
+      />
       {error ? <FieldError id="resource-title-error">{error}</FieldError> : null}
     </Field>
   );

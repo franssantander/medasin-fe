@@ -3,6 +3,7 @@
 import { RefreshCw } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
+import { RestoreConfirmDialog } from "@/components/shared/restore-confirm-dialog";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -40,6 +41,7 @@ export function ProjectDetail({
   const uuid = projectUuid ?? params.uuid ?? "";
   const router = useRouter();
   const [goalsOpen, setGoalsOpen] = useState(false);
+  const [restoreConfirmOpen, setRestoreConfirmOpen] = useState(false);
   const [selectedResource, setSelectedResource] = useState<Resource>();
   const [resourceToRemove, setResourceToRemove] = useState<Resource>();
   const [resourceAction, setResourceAction] = useState<"create" | "link">();
@@ -81,6 +83,7 @@ export function ProjectDetail({
   const restoreProject = () =>
     restore.mutate(undefined, {
       onSuccess: () => {
+        setRestoreConfirmOpen(false);
         if (routeContext === "archives") router.replace(`/projects/${uuid}`);
       },
     });
@@ -94,7 +97,7 @@ export function ProjectDetail({
         backLabel={backLabel}
         areaHref={areaHref}
         isRestoring={restore.isPending}
-        onRestore={restoreProject}
+        onRestore={() => setRestoreConfirmOpen(true)}
         onEdit={() => projectForm.openEdit(project)}
         onOpenGoals={() => setGoalsOpen(true)}
         onDeleted={() => router.replace(backHref)}
@@ -114,6 +117,15 @@ export function ProjectDetail({
         projectUuid={uuid}
         boards={project.boards}
         archived={archived}
+      />
+      <RestoreConfirmDialog
+        open={restoreConfirmOpen}
+        kind="project"
+        name={project.name}
+        project={{ areaName: project.area?.name }}
+        isPending={restore.isPending}
+        onOpenChange={setRestoreConfirmOpen}
+        onConfirm={restoreProject}
       />
       <ProjectFormDialog
         open={projectForm.isOpen}

@@ -5,10 +5,12 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import { toast } from "@/components/ui/toast";
+import type { ApiResponse } from "@/features/areas/type";
 import { subscriptionKeys } from "@/features/subscription/queries/subscription-query";
 import { isPlanLimitError } from "@/features/subscription/plan-limit-error";
 import { resourceService } from "../services/resource-service";
-import type { ResourceFilters } from "../type";
+import { mergeResourceOptions } from "../resource-form-utils";
+import type { Resource, ResourceFilters, ResourceTag } from "../type";
 
 export function useResourcesQuery(
   filters: ResourceFilters = {},
@@ -60,40 +62,56 @@ export function useCreateResource() {
   });
 }
 
-function useResourceMutationInvalidation() {
+export function useRefreshResourceQueries() {
   const client = useQueryClient();
-  return async () => {
+  return () => Promise.all([
+    client.invalidateQueries({ queryKey: ["resources"] }),
+    client.invalidateQueries({ queryKey: ["areas"] }),
+    client.invalidateQueries({ queryKey: ["projects"] }),
+  ]);
+}
+
+function useResourceMutationCache() {
+  const client = useQueryClient();
+  return async (response: ApiResponse<Resource>) => {
+    const detailKey = ["resources", "detail", response.data.uuid];
+    await client.cancelQueries({ queryKey: detailKey, exact: true });
+    client.setQueryData(detailKey, response);
+    client.setQueryData<ApiResponse<ResourceTag[]>>(["resources", "tags"], (current) => current ? {
+      ...current,
+      data: mergeResourceOptions(current.data, response.data.tags),
+    } : undefined);
     await Promise.all([
-      client.invalidateQueries({ queryKey: ["resources"] }),
-      client.invalidateQueries({ queryKey: ["areas"] }),
-      client.invalidateQueries({ queryKey: ["projects"] }),
+      client.invalidateQueries({ queryKey: ["resources"], refetchType: "none" }),
+      client.invalidateQueries({ queryKey: ["areas"], refetchType: "none" }),
+      client.invalidateQueries({ queryKey: ["projects"], refetchType: "none" }),
     ]);
   };
 }
 
 export function useUpdateResource() {
-  const invalidate = useResourceMutationInvalidation();
+  const updateCache = useResourceMutationCache();
   return useMutation({
     mutationFn: resourceService.update,
-    onSuccess: invalidate,
+    onSuccess: updateCache,
   });
 }
 
 export function useAddResourceAttachments() {
-  const invalidate = useResourceMutationInvalidation();
+  const updateCache = useResourceMutationCache();
   return useMutation({
     mutationFn: ({ resourceUuid, ...input }: { resourceUuid: string; links?: string[]; files?: File[] }) =>
       resourceService.addAttachments(resourceUuid, input),
-    onSuccess: invalidate,
+    onSuccess: updateCache,
   });
 }
 
 export function useDeleteResourceAttachment() {
-  const invalidate = useResourceMutationInvalidation();
+  const updateCache = useResourceMutationCache();
   return useMutation({
     mutationFn: ({ resourceUuid, attachmentUuid }: { resourceUuid: string; attachmentUuid: string }) =>
       resourceService.deleteAttachment(resourceUuid, attachmentUuid),
-    onSuccess: invalidate,
+    onSuccess: updateCache,
   });
 }
 

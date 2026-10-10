@@ -17,6 +17,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
 import { LoadingRegion } from "@/components/shared/loading-region";
+import { RestoreConfirmDialog } from "@/components/shared/restore-confirm-dialog";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -113,6 +114,7 @@ export function AreaDetail({
   const updateArea = useAreaMutation("update", uuid);
   const archiveArea = useAreaMutation("archive", uuid);
   const restoreArea = useAreaMutation("restore", uuid);
+  const [restoreConfirmOpen, setRestoreConfirmOpen] = useState(false);
   const removeArea = useAreaMutation("remove", uuid);
   const globalHabitsQuery = useHabitsQuery(linkHabitOpen && Boolean(area));
   const linkHabitMutation = useAreaHabitLinkMutation(uuid);
@@ -211,6 +213,7 @@ export function AreaDetail({
   const restoreArchivedArea = () => {
     restoreArea.mutate(undefined, {
       onSuccess: () => {
+        setRestoreConfirmOpen(false);
         if (routeContext === "archives") {
           router.replace(`/areas/${uuid}?tab=${activeTab}`, { scroll: false });
         }
@@ -272,7 +275,7 @@ export function AreaDetail({
         area={area}
         archived={archived}
         restorePending={restoreArea.isPending}
-        onRestore={restoreArchivedArea}
+        onRestore={() => setRestoreConfirmOpen(true)}
         onEdit={() => setAreaFormOpen(true)}
         onAction={setConfirmationAction}
       />
@@ -377,6 +380,14 @@ export function AreaDetail({
           </div>
         )}
       </div>
+      <RestoreConfirmDialog
+        open={restoreConfirmOpen}
+        kind="area"
+        name={area.name}
+        isPending={restoreArea.isPending}
+        onOpenChange={setRestoreConfirmOpen}
+        onConfirm={restoreArchivedArea}
+      />
       <AreaFormDialog
         open={areaFormOpen}
         onOpenChange={setAreaFormOpen}

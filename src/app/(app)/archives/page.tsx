@@ -1,17 +1,19 @@
-import { AreaArchives } from "@/features/areas/components/area-archives";
-import { ProjectArchives } from "@/features/projects/components/project-archives";
-import { ResourceArchives } from "@/features/resources/components/resource-archives";
+import {
+  ArchivesPage,
+  type ArchivesTab,
+} from "@/features/archives/components/archives-page";
 
-export default function ArchivesPage() {
-  return (
-    <div className="grid gap-10">
-      <AreaArchives />
-      <div className="border-t pt-8">
-        <ProjectArchives />
-      </div>
-      <div className="border-t pt-8">
-        <ResourceArchives />
-      </div>
-    </div>
-  );
+const tabs: ArchivesTab[] = ["all", "areas", "projects", "resources"];
+
+export default async function ArchivesRoutePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ tab?: string | string[] }>;
+}) {
+  const { tab } = await searchParams;
+  const initialTab = tabs.includes(tab as ArchivesTab)
+    ? (tab as ArchivesTab)
+    : "all";
+
+  return <ArchivesPage initialTab={initialTab} />;
 }

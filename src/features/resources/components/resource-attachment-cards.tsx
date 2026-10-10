@@ -9,6 +9,7 @@ import { formatResourceFileSize, resourceRequestErrors } from "../resource-form-
 import { safeResourceUrl } from "../resource-document";
 import { resourceService } from "../services/resource-service";
 import type { ResourceAttachment } from "../type";
+import { ResourceImageSkeleton } from "./resource-skeletons";
 
 export type ResourceImagePreviewValue = { url: string; name: string; size: number | null; onDownload?: () => Promise<void> };
 
@@ -39,11 +40,12 @@ function ResourceImageCard({ url, name, size, disabled, deleting, saved, error, 
 }) {
   return (
     <div className="relative aspect-[4/3] overflow-hidden rounded-xl border bg-muted/30">
-      {url ? <Image src={url} alt={name} fill unoptimized className="object-cover" /> : (
-        <div className="flex size-full flex-col items-center justify-center gap-2 p-3 text-center text-xs text-muted-foreground" role="status">
-          {error ? <><span>{error}</span><Button type="button" variant="outline" size="sm" onClick={onRetry}>Retry preview</Button></> : <><LoaderCircle className="size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />Loading preview…</>}
+      {url ? <Image src={url} alt={name} fill unoptimized className="object-cover" /> : error ? (
+        <div className="flex size-full flex-col items-center justify-center gap-2 p-3 text-center text-xs text-muted-foreground" role="alert">
+          <span>{error}</span>
+          <Button type="button" variant="outline" size="sm" onClick={onRetry}>Retry preview</Button>
         </div>
-      )}
+      ) : <ResourceImageSkeleton name={name} />}
       {url ? (
         <button type="button" disabled={disabled} aria-label={`View ${name}`} className="absolute inset-0 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring disabled:pointer-events-none" onClick={onPreview}>
           <span className="absolute left-2 top-2 flex size-8 items-center justify-center rounded-lg bg-background/90 text-foreground"><Eye className="size-4" aria-hidden="true" /></span>

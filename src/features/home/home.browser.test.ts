@@ -377,8 +377,8 @@ test("home shows backend totals, progress, links, and local streak timezone", as
   await expect(page).toHaveURL(new RegExp(`/resources\\?resource=${resourceUuid}$`));
   const details = page.getByRole("dialog", { name: "Resource details", exact: true });
   await expect(details).toBeVisible();
-  await expect(details.getByRole("heading", { name: resource.title, exact: true })).toBeVisible();
-  await expect(details.getByRole("button", { name: "Edit resource", exact: true })).toBeVisible();
+  await expect(details.getByLabel(/^Title/)).toHaveValue(resource.title);
+  await expect(details.getByRole("button", { name: "Done", exact: true })).toBeVisible();
 });
 
 test("home renders saved icons and fallback icons with accessible card navigation", async ({ page }) => {
@@ -586,7 +586,7 @@ test("resource deep link retries a failed detail request and closes cleanly", as
   await page.getByRole("button", { name: "Try again" }).click();
   const details = page.getByRole("dialog", { name: "Resource details", exact: true });
   await expect(details).toBeVisible();
-  await expect(details.getByRole("heading", { name: resource.title, exact: true })).toBeVisible();
+  await expect(details.getByLabel(/^Title/)).toHaveValue(resource.title);
   await details.getByRole("button", { name: "Close resource dialog" }).click();
   await expect(page).toHaveURL(/\/resources$/);
 });

@@ -104,6 +104,12 @@ async function mockResources(page: Page, options: ApiOptions = {}) {
   return { requests, writes: () => requests.filter((request) => ["POST", "PATCH", "DELETE"].includes(request.method)), patches: () => requests.filter((request) => request.method === "PATCH") };
 }
 
+function relatedReadCounts(requests: ApiRequest[]) {
+  return Object.fromEntries(["/resource", "/resource/tags", `/resource/${resourceUuid}`, "/area", "/project"].map((path) => [
+    path, requests.filter((request) => request.method === "GET" && request.path === path).length,
+  ]));
+}
+
 async function openAdd(page: Page) {
   await page.goto("/resources");
   await page.getByRole("button", { name: "New resource", exact: true }).click();
@@ -112,32 +118,23 @@ async function openAdd(page: Page) {
   await expect(page.locator(".bn-editor")).toBeVisible();
 }
 
-async function openView(page: Page) {
-  await page.goto("/resources");
-  await page.getByRole("button", { name: `Open ${initialResource.title}`, exact: true }).click();
+async function openDetail(page: Page, deepLinked = false) {
+  await page.goto(deepLinked ? `/resources?resource=${resourceUuid}` : "/resources");
+  if (!deepLinked) await page.getByRole("button", { name: `Open ${initialResource.title}`, exact: true }).click();
   await expect(page.getByRole("dialog", { name: "Resource details", exact: true })).toBeVisible();
   await expect(page.getByRole("dialog", { name: "Resource details", exact: true })).toHaveCSS("opacity", "1");
   await expect(page.locator(".bn-editor")).toBeVisible();
 }
 
-async function openEdit(page: Page) {
-  await openView(page);
-  await page.getByRole("button", { name: "Edit resource", exact: true }).click();
-  await expect(page.getByRole("dialog", { name: "Edit resource", exact: true })).toBeVisible();
-  await expect(page.getByRole("dialog", { name: "Edit resource", exact: true })).toHaveCSS("opacity", "1");
-  await expect(page.locator(".bn-editor")).toBeVisible();
-}
-
-test("resources open for viewing with previews and downloads and require Edit for changes", async ({ page }) => {
+test("resources open ready to edit with previews and downloads, and send nothing until changed", async ({ page }) => {
   const api = await mockResources(page);
-  await openView(page);
+  await openDetail(page);
   const dialog = page.getByRole("dialog", { name: "Resource details", exact: true });
-  await expect(dialog.getByRole("heading", { name: initialResource.title, exact: true })).toBeVisible();
-  await expect(dialog.getByText("Saved research notes", { exact: true })).toBeVisible();
-  await expect(dialog.getByRole("region", { name: "Tags", exact: true })).toContainText("Research");
-  await expect(dialog.getByRole("region", { name: "Projects", exact: true })).toContainText("Product launch");
-  await expect(dialog.locator("input, textarea, [contenteditable=true]")).toHaveCount(0);
-  await expect(dialog.getByRole("button", { name: /^Remove / })).toHaveCount(0);
+  await expect(dialog.getByLabel(/^Title/)).toHaveValue(initialResource.title);
+  await expect(dialog.getByLabel(/^Title/)).not.toBeFocused();
+  await expect(dialog.locator(".bn-editor[contenteditable=true]")).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Edit resource", exact: true })).toHaveCount(0);
+  await expect(dialog.getByRole("button", { name: "Remove Research", exact: true })).toBeVisible();
   await expect(dialog.getByRole("link", { name: "Open Accessibility reference", exact: true })).toHaveAttribute("href", reference.url);
   await dialog.getByRole("button", { name: "View reference.png", exact: true }).click();
   const preview = page.getByRole("dialog", { name: "reference.png", exact: true });
@@ -147,13 +144,119 @@ test("resources open for viewing with previews and downloads and require Edit fo
   const download = page.waitForEvent("download");
   await dialog.getByRole("button", { name: "Download Research notes.pdf", exact: true }).click();
   expect((await download).suggestedFilename()).toBe("Research notes.pdf");
-  expect(api.writes()).toHaveLength(0);
-  await dialog.getByRole("button", { name: "Close", exact: true }).click();
+  await dialog.getByRole("button", { name: "Done", exact: true }).click();
   await expect(dialog).toBeHidden();
   await expect(page.getByRole("button", { name: `Open ${initialResource.title}`, exact: true })).toBeFocused();
+  expect(api.writes()).toHaveLength(0);
 });
 
-test("Done waits for current saves and returns to viewing updated content and organization", async ({ page }) => {
+test("edits autosave without an Edit step", async ({ page }) => {
+  const api = await mockResources(page);
+  await openDetail(page);
+  await page.getByLabel(/^Title/).fill("Typed straight away");
+  await expect.poll(() => api.patches().length).toBe(1);
+  await expect(page.getByRole("status").filter({ hasText: /^Saved$/ })).toBeVisible();
+  expect(api.patches()[0].body).toMatchObject({ title: "Typed straight away" });
+});
+
+test("autosave refreshes related queries only once after closing", async ({ page }) => {
+  const api = await mockResources(page);
+  await openDetail(page);
+  await expect(page.getByRole("combobox", { name: "Projects", exact: true })).toBeEnabled();
+  await expect(page.getByRole("combobox", { name: "Areas", exact: true })).toBeEnabled();
+  const before = relatedReadCounts(api.requests);
+
+  for (const title of ["First saved revision", "Latest saved revision"]) {
+    await page.getByLabel(/^Title/).fill(title);
+    await expect(page.getByRole("status").filter({ hasText: /^Saved$/ })).toBeVisible();
+    expect(relatedReadCounts(api.requests)).toEqual(before);
+  }
+  expect(api.patches()).toHaveLength(2);
+
+  await page.getByRole("button", { name: "Done", exact: true }).click();
+  await expect(page.getByRole("dialog", { name: "Resource details", exact: true })).toBeHidden();
+  await expect.poll(() => relatedReadCounts(api.requests)).toEqual(
+    Object.fromEntries(Object.entries(before).map(([path, count]) => [path, count + (path === `/resource/${resourceUuid}` ? 0 : 1)])),
+  );
+  await expect(page.getByRole("button", { name: "Open Latest saved revision", exact: true })).toBeVisible();
+});
+
+test("new tags from autosave become selectable without refetching options", async ({ page }) => {
+  const api = await mockResources(page);
+  await openDetail(page);
+  await expect(page.getByRole("combobox", { name: "Projects", exact: true })).toBeEnabled();
+  await expect(page.getByRole("combobox", { name: "Areas", exact: true })).toBeEnabled();
+  const before = relatedReadCounts(api.requests);
+  const picker = page.getByRole("combobox", { name: "Tags", exact: true });
+  await picker.fill("Session tag");
+  await picker.press("Enter");
+  await expect(page.getByRole("status").filter({ hasText: /^Saved$/ })).toBeVisible();
+  await page.getByRole("button", { name: "Remove Session tag", exact: true }).click();
+  await picker.fill("Session tag");
+  await picker.press("Enter");
+
+  await expect.poll(() => api.patches().at(-1)?.body).toMatchObject({
+    tag_uuids: [tags[0].uuid, "40000000-0000-4000-8000-000000000021"], tag_names: [],
+  });
+  await expect(page.getByRole("status").filter({ hasText: /^Saved$/ })).toBeVisible();
+  expect(relatedReadCounts(api.requests)).toEqual(before);
+});
+
+test("closing an unchanged resource does not refresh related queries", async ({ page }) => {
+  const api = await mockResources(page);
+  await openDetail(page);
+  await expect(page.getByRole("combobox", { name: "Projects", exact: true })).toBeEnabled();
+  await expect(page.getByRole("combobox", { name: "Areas", exact: true })).toBeEnabled();
+  const before = relatedReadCounts(api.requests);
+
+  await page.getByRole("button", { name: "Done", exact: true }).click();
+  await expect(page.getByRole("button", { name: `Open ${initialResource.title}`, exact: true })).toBeFocused();
+
+  expect(relatedReadCounts(api.requests)).toEqual(before);
+  expect(api.writes()).toHaveLength(0);
+});
+
+test("discarding unsaved changes refreshes earlier successful autosaves", async ({ page }) => {
+  const api = await mockResources(page);
+  await openDetail(page);
+  await expect(page.getByRole("combobox", { name: "Projects", exact: true })).toBeEnabled();
+  await expect(page.getByRole("combobox", { name: "Areas", exact: true })).toBeEnabled();
+  const before = relatedReadCounts(api.requests);
+  await page.getByLabel(/^Title/).fill("Already saved revision");
+  await expect(page.getByRole("status").filter({ hasText: /^Saved$/ })).toBeVisible();
+  expect(relatedReadCounts(api.requests)).toEqual(before);
+
+  await page.getByLabel(/^Title/).fill("");
+  await page.getByRole("button", { name: "Close resource dialog", exact: true }).click();
+  await expect(page.getByRole("alertdialog", { name: "Discard unsaved changes?", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Discard unsaved changes", exact: true }).click();
+
+  await expect.poll(() => relatedReadCounts(api.requests)).toEqual(
+    Object.fromEntries(Object.entries(before).map(([path, count]) => [path, count + (path === `/resource/${resourceUuid}` ? 0 : 1)])),
+  );
+  await expect(page.getByRole("button", { name: "Open Already saved revision", exact: true })).toBeVisible();
+  expect(api.patches()).toHaveLength(1);
+});
+
+test("a rate-limited autosave retains the draft until a retry succeeds", async ({ page }) => {
+  let attempts = 0;
+  const api = await mockResources(page, { onPatch: (_request, next) => ++attempts === 1
+    ? { status: 429, message: "Too Many Attempts." }
+    : { data: next } });
+  await openDetail(page);
+  await page.getByLabel(/^Title/).fill("Keep this rate-limited draft");
+  await expect(page.getByRole("button", { name: "Retry save", exact: true })).toBeVisible();
+  await expect(page.getByLabel(/^Title/)).toHaveValue("Keep this rate-limited draft");
+  await expect(page.getByText("Too Many Attempts.", { exact: true })).toBeVisible();
+  expect(api.patches()).toHaveLength(1);
+
+  await page.getByRole("button", { name: "Retry save", exact: true }).click();
+  await expect(page.getByRole("status").filter({ hasText: /^Saved$/ })).toBeVisible();
+  await expect(page.getByLabel(/^Title/)).toHaveValue("Keep this rate-limited draft");
+  expect(api.patches()).toHaveLength(2);
+});
+
+test("Done waits for current saves, then closes with updated content and organization", async ({ page }) => {
   const pending = deferred<ApiReply>();
   let firstNext: TestResource | undefined;
   let attempts = 0;
@@ -161,7 +264,8 @@ test("Done waits for current saves and returns to viewing updated content and or
     if (++attempts === 1) { firstNext = next; return pending.promise; }
     return { data: next };
   } });
-  await openEdit(page);
+  await openDetail(page);
+  const dialog = page.getByRole("dialog", { name: "Resource details", exact: true });
   await page.getByLabel(/^Title/).fill("Updated resource");
   await page.getByRole("button", { name: "Remove Research", exact: true }).click();
   const tags = page.getByRole("combobox", { name: "Tags", exact: true });
@@ -171,29 +275,18 @@ test("Done waits for current saves and returns to viewing updated content and or
   await page.getByRole("button", { name: "Done", exact: true }).click();
   await expect.poll(() => api.patches().length).toBe(1);
   await expect(page.getByRole("button", { name: "Done", exact: true })).toBeDisabled();
-  await expect(page.getByRole("dialog", { name: "Edit resource", exact: true })).toBeVisible();
+  await expect(dialog).toBeVisible();
   pending.resolve({ data: firstNext });
-  const view = page.getByRole("dialog", { name: "Resource details", exact: true });
-  await expect(view).toBeVisible();
-  await expect(view.getByRole("heading", { name: "Updated resource", exact: true })).toBeVisible();
-  await expect(view.getByRole("region", { name: "Tags", exact: true })).toContainText("Review");
-  await expect(view.getByRole("region", { name: "Tags", exact: true })).not.toContainText("Research");
-  await expect(view.getByRole("region", { name: "Projects", exact: true })).toContainText("No projects");
-  await expect(view.getByRole("button", { name: "Edit resource", exact: true })).toBeFocused();
-  await expect(view.locator("[contenteditable=true]")).toHaveCount(0);
+  await expect(dialog).toBeHidden();
+  await expect(page.getByRole("button", { name: "Open Updated resource", exact: true })).toBeFocused();
   expect(api.patches().at(-1)!.body).toMatchObject({ title: "Updated resource", tag_names: ["Review"], tag_uuids: [], project_uuids: [] });
-  const count = api.patches().length;
-  await view.getByRole("button", { name: "Edit resource", exact: true }).click();
-  await expect(page.getByLabel(/^Title/)).toHaveValue("Updated resource");
-  await page.getByRole("button", { name: "Done", exact: true }).click();
-  await expect(view).toBeVisible();
-  expect(api.patches()).toHaveLength(count);
 });
 
-test("Done keeps invalid or failed edits editable until they save successfully", async ({ page }) => {
+test("Done keeps invalid or failed edits open until they save successfully", async ({ page }) => {
   let attempts = 0;
   const api = await mockResources(page, { onPatch: (_request, next) => ++attempts === 1 ? { status: 500, message: "Save failed. Keep your draft." } : { data: next } });
-  await openEdit(page);
+  await openDetail(page);
+  const dialog = page.getByRole("dialog", { name: "Resource details", exact: true });
   await page.getByLabel(/^Title/).fill("");
   await page.getByRole("button", { name: "Done", exact: true }).click();
   await expect(page.getByLabel(/^Title/)).toHaveAttribute("aria-invalid", "true");
@@ -202,64 +295,57 @@ test("Done keeps invalid or failed edits editable until they save successfully",
   await page.getByLabel(/^Title/).fill("Keep my changes");
   await page.getByRole("button", { name: "Done", exact: true }).click();
   await expect(page.getByRole("button", { name: "Retry save", exact: true })).toBeVisible();
-  await expect(page.getByRole("dialog", { name: "Edit resource", exact: true })).toBeVisible();
+  await expect(dialog).toBeVisible();
   await expect(page.getByLabel(/^Title/)).toHaveValue("Keep my changes");
   await page.getByRole("button", { name: "Retry save", exact: true }).click();
   await expect(page.getByRole("status").filter({ hasText: /^Saved$/ })).toBeVisible();
   await page.getByRole("button", { name: "Done", exact: true }).click();
-  await expect(page.getByRole("dialog", { name: "Resource details", exact: true })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Keep my changes", exact: true })).toBeVisible();
+  await expect(dialog).toBeHidden();
   expect(api.patches()).toHaveLength(2);
 });
 
 test("Done asks for unfinished links and tags to be added or cleared", async ({ page }) => {
-  await mockResources(page);
-  await openEdit(page);
+  const api = await mockResources(page);
+  await openDetail(page);
   const link = page.getByLabel("Links", { exact: true });
   await link.fill("https://example.com/unfinished");
   await page.getByRole("button", { name: "Done", exact: true }).click();
   await expect(link).toBeFocused();
-  await expect(page.getByText("Add or clear this link before finishing.", { exact: true })).toBeVisible();
+  await expect(page.getByText("Add or clear this link before closing.", { exact: true })).toBeVisible();
   await link.fill("");
   const tags = page.getByRole("combobox", { name: "Tags", exact: true });
   await tags.fill("Review");
   await page.getByRole("button", { name: "Done", exact: true, includeHidden: true }).click();
   await expect(tags).toBeFocused();
-  await expect(page.getByText("Add or clear this tag before finishing.", { exact: true })).toBeVisible();
+  await expect(page.getByText("Add or clear this tag before closing.", { exact: true })).toBeVisible();
   await tags.press("ArrowDown");
   await expect(page.getByRole("option", { name: "Create “Review”", exact: true })).toBeVisible();
   await tags.press("Enter");
   await expect(page.getByRole("button", { name: "Remove Review", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Done", exact: true }).click();
-  await expect(page.getByRole("dialog", { name: "Resource details", exact: true })).toBeVisible();
-  await expect(page.getByRole("region", { name: "Tags", exact: true })).toContainText("Review");
+  await expect(page.getByRole("dialog", { name: "Resource details", exact: true })).toBeHidden();
+  expect(api.patches().at(-1)!.body).toMatchObject({ tag_names: ["Review"] });
 });
 
-test("linked resources open in viewing mode", async ({ page }) => {
+test("linked resources open ready to edit", async ({ page }) => {
   const api = await mockResources(page);
   await page.goto(`/resources?resource=${resourceUuid}`);
   const dialog = page.getByRole("dialog", { name: "Resource details", exact: true });
   await expect(dialog).toBeVisible();
-  await expect(dialog.getByRole("heading", { name: initialResource.title, exact: true })).toBeVisible();
-  await expect(dialog.getByRole("button", { name: "Edit resource", exact: true })).toBeVisible();
-  await expect(dialog.locator("input, textarea, [contenteditable=true]")).toHaveCount(0);
+  await expect(dialog.getByLabel(/^Title/)).toHaveValue(initialResource.title);
+  await expect(dialog.getByRole("button", { name: "Edit resource", exact: true })).toHaveCount(0);
   expect(api.writes()).toHaveLength(0);
 });
 
-test("an empty resource stays unchanged when switching between viewing and editing", async ({ page }) => {
+test("an empty resource can be opened and closed without sending changes", async ({ page }) => {
   const api = await mockResources(page, { resource: { content: null, attachments: [], tags: [], projects: [], areas: [] } });
   await page.goto("/resources");
   await page.getByRole("button", { name: `Open ${initialResource.title}`, exact: true }).click();
-  const view = page.getByRole("dialog", { name: "Resource details", exact: true });
-  await expect(view).toBeVisible();
-  await expect(view.getByText("No notes yet.", { exact: true })).toBeVisible();
-  await expect(view.getByText("No links added.", { exact: true })).toBeVisible();
-  await expect(view.getByText("No images or files added.", { exact: true })).toBeVisible();
-  await view.getByRole("button", { name: "Edit resource", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Resource details", exact: true });
+  await expect(dialog).toBeVisible();
   await expect(page.locator(".bn-editor[contenteditable=true]")).toBeVisible();
   await page.getByRole("button", { name: "Done", exact: true }).click();
-  await expect(view).toBeVisible();
-  await expect(view.getByText("No notes yet.", { exact: true })).toBeVisible();
+  await expect(dialog).toBeHidden();
   expect(api.writes()).toHaveLength(0);
 });
 
@@ -348,7 +434,7 @@ test("create protects a changed draft and restores focus on dismissal", async ({
 
 test("appearance opens without rendering the whole icon catalog", async ({ page }) => {
   await mockResources(page);
-  await openEdit(page);
+  await openDetail(page);
   const browser = await page.context().newCDPSession(page);
   await browser.send("Emulation.setCPUThrottlingRate", { rate: 4 });
   const profile = await page.evaluate(async () => {
@@ -371,7 +457,7 @@ for (const mode of ["add", "edit"] as const) {
     const api = await mockResources(page);
     if (mode === "add") await page.setViewportSize({ width: 390, height: 844 });
     if (mode === "add") await openAdd(page);
-    else await openEdit(page);
+    else await openDetail(page);
     await page.getByRole("button", { name: "Customize resource appearance", exact: true }).click();
     const grid = page.getByRole("group", { name: "Resource icons", exact: true });
     const previous = page.getByRole("button", { name: "Previous icon page", exact: true });
@@ -397,7 +483,7 @@ for (const mode of ["add", "edit"] as const) {
     await expect(previous).toBeDisabled();
     expect(await grid.getByRole("button").count()).toBeLessThan(100);
     await next.scrollIntoViewIfNeeded();
-    const dialog = page.getByRole("dialog", { name: mode === "add" ? "New resource" : "Edit resource", exact: true });
+    const dialog = page.getByRole("dialog", { name: mode === "add" ? "New resource" : "Resource details", exact: true });
     expect(await dialog.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
     await page.screenshot({ path: test.info().outputPath(`resource-appearance-${mode}.png`) });
     if (mode === "add") {
@@ -464,7 +550,7 @@ test("edit serializes saves and never restores fields from an older response", a
   let firstNext: TestResource | undefined;
   let attempts = 0;
   const api = await mockResources(page, { onPatch: (_request, next) => { if (++attempts === 1) { firstNext = next; return first.promise; } return { data: next }; } });
-  await openEdit(page);
+  await openDetail(page, true);
   await expect(page.getByRole("status").filter({ hasText: /^Saved$/ })).toBeVisible();
   await page.getByLabel(/^Title/).fill("First revision");
   await expect.poll(() => api.patches().length).toBe(1);
@@ -484,7 +570,7 @@ test("edit serializes saves and never restores fields from an older response", a
 test("edit retries a failed save without losing the current draft", async ({ page }) => {
   let attempts = 0;
   const api = await mockResources(page, { onPatch: (_request, next) => ++attempts === 1 ? { status: 500, message: "Could not save. Try again." } : { data: next } });
-  await openEdit(page);
+  await openDetail(page);
   await page.getByLabel(/^Title/).fill("Retry this title");
   await expect(page.getByRole("button", { name: "Retry save", exact: true })).toBeVisible();
   await expect(page.getByLabel(/^Title/)).toHaveValue("Retry this title");
@@ -497,7 +583,7 @@ test("edit saves a newer queued draft when an older request fails", async ({ pag
   const first = deferred<ApiReply>();
   let attempts = 0;
   const api = await mockResources(page, { onPatch: (_request, next) => ++attempts === 1 ? first.promise : { data: next } });
-  await openEdit(page);
+  await openDetail(page);
   await page.getByLabel(/^Title/).fill("First revision");
   await expect.poll(() => api.patches().length).toBe(1);
   await page.getByLabel(/^Title/).fill("Corrected revision");
@@ -511,36 +597,36 @@ test("closing edit flushes the debounce and waits for the save", async ({ page }
   const pending = deferred<ApiReply>();
   let next: TestResource | undefined;
   const api = await mockResources(page, { onPatch: (_request, input) => { next = input; return pending.promise; } });
-  await openEdit(page);
+  await openDetail(page);
   await page.getByLabel(/^Title/).fill("Save before closing");
-  await page.getByRole("button", { name: "Close", exact: true }).click();
+  await page.getByRole("button", { name: "Close resource dialog", exact: true }).click();
   await expect.poll(() => api.patches().length).toBe(1);
-  await expect(page.getByRole("dialog", { name: "Edit resource", exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Close", exact: true })).toBeDisabled();
+  await expect(page.getByRole("dialog", { name: "Resource details", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Close resource dialog", exact: true })).toBeDisabled();
   pending.resolve({ data: next });
-  await expect(page.getByRole("dialog", { name: "Edit resource", exact: true })).toBeHidden();
+  await expect(page.getByRole("dialog", { name: "Resource details", exact: true })).toBeHidden();
   await expect(page.getByRole("button", { name: "Open Save before closing", exact: true })).toBeFocused();
 });
 
 test("a failed close save does not retry while discard confirmation is open", async ({ page }) => {
   const api = await mockResources(page, { onPatch: () => ({ status: 500, message: "Close save failed." }) });
-  await openEdit(page);
+  await openDetail(page);
   await page.getByLabel(/^Title/).fill("Keep this failed draft");
-  await page.getByRole("button", { name: "Close", exact: true }).click();
+  await page.getByRole("button", { name: "Close resource dialog", exact: true }).click();
   await expect(page.getByRole("alertdialog", { name: "Discard unsaved changes?", exact: true })).toBeVisible();
   // Let the original 700 ms debounce expire while the confirmation is open.
   await page.waitForTimeout(900);
   expect(api.patches()).toHaveLength(1);
   await page.getByRole("button", { name: "Discard unsaved changes", exact: true }).click();
-  await expect(page.getByRole("dialog", { name: "Edit resource", exact: true })).toBeHidden();
+  await expect(page.getByRole("dialog", { name: "Resource details", exact: true })).toBeHidden();
   expect(api.patches()).toHaveLength(1);
 });
 
 test("invalid edits and unfinished link drafts require explicit dismissal", async ({ page }) => {
   const api = await mockResources(page);
-  await openEdit(page);
+  await openDetail(page);
   await page.getByLabel(/^Title/).fill("");
-  await page.getByRole("button", { name: "Close", exact: true }).click();
+  await page.getByRole("button", { name: "Close resource dialog", exact: true }).click();
   await expect(page.getByRole("alertdialog", { name: "Discard unsaved changes?", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Keep editing", exact: true }).click();
   await expect(page.getByLabel(/^Title/)).toHaveValue("");
@@ -548,17 +634,17 @@ test("invalid edits and unfinished link drafts require explicit dismissal", asyn
   await page.getByLabel(/^Title/).fill(initialResource.title);
   await page.getByLabel("Links", { exact: true }).fill("https://example.com/unfinished");
   await expect(page.getByRole("status").filter({ hasText: /^Unsaved changes$/ })).toBeVisible();
-  await page.getByRole("button", { name: "Close", exact: true }).click();
+  await page.getByRole("button", { name: "Close resource dialog", exact: true }).click();
   await expect(page.getByRole("alertdialog", { name: "Discard unsaved changes?", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Discard unsaved changes", exact: true }).click();
-  await expect(page.getByRole("dialog", { name: "Edit resource", exact: true })).toBeHidden();
+  await expect(page.getByRole("dialog", { name: "Resource details", exact: true })).toBeHidden();
   expect(api.writes()).toHaveLength(0);
 });
 
 test("edit retains associations omitted from active options", async ({ page }) => {
   const archivedProject = { uuid: "50000000-0000-4000-8000-000000000009", name: "Historical project" };
   const api = await mockResources(page, { resource: { projects: [archivedProject] }, projectItems: projects });
-  await openEdit(page);
+  await openDetail(page);
   await expect(page.getByRole("button", { name: "Remove Historical project", exact: true })).toBeVisible();
   await page.getByLabel(/^Title/).fill("Keep historical association");
   await expect.poll(() => api.patches().length).toBe(1);
@@ -582,7 +668,7 @@ test("tags support keyboard selection and Enter creates a tag without submitting
 
 test("resource notes keep formatting, save edits, and save undo", async ({ page }) => {
   const api = await mockResources(page);
-  await openEdit(page);
+  await openDetail(page);
   const editor = page.locator(".bn-editor[contenteditable=true]");
   await editor.focus();
   await page.keyboard.press("Control+End");
@@ -606,7 +692,7 @@ test("resource notes keep formatting, save edits, and save undo", async ({ page 
 test("failed file uploads retain their files and can be retried", async ({ page }) => {
   let attempts = 0;
   const api = await mockResources(page, { onUpload: (_request, next) => ++attempts === 1 ? { status: 500, message: "Upload failed. Try again." } : { data: next } });
-  await openEdit(page);
+  await openDetail(page);
   await page.locator("input[type=file]").setInputFiles({ name: "retry.pdf", mimeType: "application/pdf", buffer: Buffer.from("reference") });
   await expect(page.getByRole("button", { name: "Retry upload", exact: true })).toBeVisible();
   await expect(page.getByRole("status").filter({ hasText: /^Unsaved changes$/ })).toBeVisible();
@@ -619,7 +705,10 @@ test("failed file uploads retain their files and can be retried", async ({ page 
 
 test("edit uploads immediately, previews in-dialog, and confirms attachment deletion", async ({ page }) => {
   const api = await mockResources(page);
-  await openEdit(page);
+  await openDetail(page);
+  await expect(page.getByRole("combobox", { name: "Projects", exact: true })).toBeEnabled();
+  await expect(page.getByRole("combobox", { name: "Areas", exact: true })).toBeEnabled();
+  const before = relatedReadCounts(api.requests);
   await page.getByRole("button", { name: "View reference.png", exact: true }).click();
   await expect(page.getByRole("dialog", { name: "reference.png", exact: true })).toBeVisible();
   await page.getByRole("dialog", { name: "reference.png", exact: true }).getByRole("button", { name: "Close", exact: true }).click();
@@ -634,6 +723,12 @@ test("edit uploads immediately, previews in-dialog, and confirms attachment dele
   await expect(page.getByText("Research notes.pdf", { exact: true })).toHaveCount(0);
   expect(api.writes().filter((request) => request.method === "POST")).toHaveLength(1);
   expect(api.writes().filter((request) => request.method === "DELETE")).toHaveLength(1);
+  expect(relatedReadCounts(api.requests)).toEqual(before);
+
+  await page.getByRole("button", { name: "Done", exact: true }).click();
+  await expect.poll(() => relatedReadCounts(api.requests)).toEqual(
+    Object.fromEntries(Object.entries(before).map(([path, count]) => [path, count + (path === `/resource/${resourceUuid}` ? 0 : 1)])),
+  );
 });
 
 test("archived resources stay read-only and send no mutations", async ({ page }) => {
@@ -642,6 +737,7 @@ test("archived resources stay read-only and send no mutations", async ({ page })
   await expect(page.getByRole("dialog", { name: "Resource details", exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: initialResource.title, exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Edit resource", exact: true })).toHaveCount(0);
+  await expect(page.getByLabel(/^Title/)).toHaveCount(0);
   await expect(page.getByRole("combobox")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Customize resource appearance", exact: true })).toHaveCount(0);
   await expect(page.locator("input[type=file]")).toHaveCount(0);
@@ -653,14 +749,14 @@ test("archived resources stay read-only and send no mutations", async ({ page })
 
 for (const theme of ["light", "dark"]) {
   for (const width of [390, 768, 1440]) {
-    for (const mode of ["add", "view", "edit"]) {
+    for (const mode of ["add", "detail"]) {
       test(`${mode} layout keeps actions and focused controls visible at ${width}px in ${theme} mode`, async ({ page }, info) => {
         await page.setViewportSize({ width, height: width < 768 ? 844 : 1000 });
         await page.addInitScript((theme) => localStorage.setItem("theme", theme), theme);
         await mockResources(page);
-        if (mode === "add") await openAdd(page); else if (mode === "view") await openView(page); else await openEdit(page);
-        const dialog = page.getByRole("dialog", { name: mode === "add" ? "New resource" : mode === "view" ? "Resource details" : "Edit resource", exact: true });
-        const action = page.getByRole("button", { name: mode === "add" ? "Create resource" : mode === "view" ? "Edit resource" : "Close", exact: true });
+        if (mode === "add") await openAdd(page); else await openDetail(page);
+        const dialog = page.getByRole("dialog", { name: mode === "add" ? "New resource" : "Resource details", exact: true });
+        const action = page.getByRole("button", { name: mode === "add" ? "Create resource" : "Done", exact: true });
         await expect(action).toBeInViewport();
         const overflow = await dialog.evaluate((element) => {
           const body = element.querySelector('[data-slot="resource-dialog-body"]')!;
@@ -671,7 +767,7 @@ for (const theme of ["light", "dark"]) {
         expect(editorColors.background).not.toBe(editorColors.color);
         if (theme === "dark") expect(editorColors.background).not.toBe("rgb(255, 255, 255)");
         await page.screenshot({ path: info.outputPath(`resource-${mode}-${width}-${theme}.png`) });
-        const input = mode === "view" ? dialog.getByRole("button", { name: "Download Research notes.pdf", exact: true }) : page.getByRole("combobox", { name: "Tags", exact: true });
+        const input = page.getByRole("combobox", { name: "Tags", exact: true });
         await input.focus();
         await expect(input).toBeInViewport();
         await expect(action).toBeInViewport();

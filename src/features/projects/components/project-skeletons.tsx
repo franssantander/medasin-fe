@@ -292,47 +292,6 @@ export function ProjectDetailSkeleton() {
   );
 }
 
-export function ArchivedProjectCardSkeleton({ index }: { index: number }) {
-  return (
-    <Card className="h-full gap-0">
-      <CardContent className="grid h-full gap-4">
-        <div className="flex items-center gap-3">
-          <Skeleton className="size-11 shrink-0 rounded-xl" />
-          <div className="grid flex-1 gap-1.5">
-            <Skeleton className={cn("h-4", pick(titleWidths, index))} />
-            <Skeleton className="h-3.5 w-28" />
-          </div>
-        </div>
-        <div className="grid min-h-10 gap-1.5">
-          <Skeleton className="h-4 w-full" />
-          <Skeleton className="h-4 w-2/3" />
-        </div>
-        <div className="flex items-center gap-2">
-          <Skeleton className="h-5 w-20 rounded-full" />
-          <Skeleton className="h-3.5 w-24" />
-        </div>
-        <div className="mt-auto flex items-center justify-between gap-3 border-t pt-3">
-          <Skeleton className="h-3.5 w-32" />
-          <Skeleton className="h-8 w-24" />
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-export function ArchivedProjectsSkeleton() {
-  return (
-    <LoadingRegion
-      label="Loading archived projects"
-      className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3"
-    >
-      {[0, 1, 2].map((index) => (
-        <ArchivedProjectCardSkeleton key={index} index={index} />
-      ))}
-    </LoadingRegion>
-  );
-}
-
 export function GoalsMenuSkeleton() {
   return (
     <LoadingRegion label="Loading goals" className="grid gap-1 p-1">

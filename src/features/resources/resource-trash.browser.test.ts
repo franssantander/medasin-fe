@@ -87,12 +87,14 @@ async function mockResourceTrash(
 test("resource deletion confirms, preserves failures for retry, and removes the active record", async ({ page }) => {
   const api = await mockResourceTrash(page, { failDeleteOnce: true });
   await page.goto("/resources");
-  await page.getByRole("button", { name: `Delete ${title}`, exact: true }).click();
+  await page.getByRole("button", { name: `Actions for ${title}`, exact: true }).click();
+  await page.getByRole("menuitem", { name: "Move to Trash", exact: true }).click();
   const confirmation = page.getByRole("dialog", { name: "Delete resource?", exact: true });
   await expect(confirmation).toContainText("Trash for 30 days");
   await confirmation.getByRole("button", { name: "Cancel", exact: true }).click();
   expect(api.requests.filter((request) => request.method === "DELETE")).toHaveLength(0);
-  await page.getByRole("button", { name: `Delete ${title}`, exact: true }).click();
+  await page.getByRole("button", { name: `Actions for ${title}`, exact: true }).click();
+  await page.getByRole("menuitem", { name: "Move to Trash", exact: true }).click();
   await confirmation.getByRole("button", { name: "Delete resource", exact: true }).click();
   await expect(page.getByText("Resource deletion failed. Try again.", { exact: true })).toBeVisible();
   await expect(confirmation).toBeVisible();
@@ -108,18 +110,22 @@ test("deleting a deep-linked resource closes to the library without refetching t
   await page.goto(`/resources?resource=${resourceUuid}`);
   const detail = page.getByRole("dialog", { name: "Resource details", exact: true });
   await expect(detail).toBeVisible();
+  await detail.getByLabel(/^Title/).fill("Saved before deletion");
+  await expect(detail.getByRole("status").filter({ hasText: /^Saved$/ })).toBeVisible();
   await detail.getByRole("button", { name: "Delete resource", exact: true }).click();
   await page.getByRole("dialog", { name: "Delete resource?", exact: true }).getByRole("button", { name: "Delete resource", exact: true }).click();
   await expect(page).toHaveURL(/\/resources$/);
   await expect(detail).toBeHidden();
   const deleteIndex = api.requests.findIndex((request) => request.path === `/resource/${resourceUuid}` && request.method === "DELETE");
   expect(api.requests.slice(deleteIndex + 1).filter((request) => request.path === `/resource/${resourceUuid}` && request.method === "GET")).toHaveLength(0);
+  await expect.poll(() => api.requests.slice(deleteIndex + 1).filter((request) => request.path === "/resource" && request.method === "GET").length).toBe(1);
 });
 
 test("archiving remains separate from deleting and explains that archived records count", async ({ page }) => {
   const api = await mockResourceTrash(page);
   await page.goto("/resources");
-  await page.getByRole("button", { name: `Archive ${title}`, exact: true }).click();
+  await page.getByRole("button", { name: `Actions for ${title}`, exact: true }).click();
+  await page.getByRole("menuitem", { name: "Archive", exact: true }).click();
   const confirmation = page.getByRole("dialog", { name: "Archive resource?", exact: true });
   await expect(confirmation).toContainText("Archived resources still count toward your plan usage.");
   await confirmation.getByRole("button", { name: "Archive resource", exact: true }).click();
@@ -142,7 +148,7 @@ test("an archived resource can be deleted from its read-only detail", async ({ p
   expect(api.requests.some((request) => request.path === `/resource/${resourceUuid}` && request.method === "DELETE")).toBe(true);
 });
 
-test("active resource detail keeps every action reachable at 320px and deletes only outside editing", async ({ page }, testInfo) => {
+test("active resource detail keeps every action reachable at 320px while editing in place", async ({ page }, testInfo) => {
   const api = await mockResourceTrash(page);
   await page.goto("/resources");
   await page.getByRole("button", { name: `Open ${title}`, exact: true }).click();
@@ -163,7 +169,7 @@ test("active resource detail keeps every action reachable at 320px and deletes o
   expect(widths.footerScrollWidth).toBeLessThanOrEqual(widths.footerWidth);
   const dialogBounds = await detail.boundingBox();
   expect(dialogBounds).not.toBeNull();
-  for (const name of ["Delete resource", "Close", "Edit resource"]) {
+  for (const name of ["Delete resource", "Done"]) {
     const button = detail.getByRole("button", { name, exact: true });
     await expect(button).toBeInViewport();
     const bounds = await button.boundingBox();
@@ -171,13 +177,9 @@ test("active resource detail keeps every action reachable at 320px and deletes o
     expect(bounds!.x).toBeGreaterThanOrEqual(dialogBounds!.x);
     expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(dialogBounds!.x + dialogBounds!.width);
   }
-  await detail.getByRole("button", { name: "Edit resource", exact: true }).click();
-  const editor = page.getByRole("dialog", { name: "Edit resource", exact: true });
-  await expect(editor.getByRole("button", { name: "Delete resource", exact: true })).toHaveCount(0);
+  await expect(detail.getByRole("button", { name: "Edit resource", exact: true })).toHaveCount(0);
   await page.getByLabel(/^Title/).fill("Research after review");
-  await editor.getByRole("button", { name: "Done", exact: true }).click();
-  await expect(detail).toBeVisible();
-  await expect(detail.getByRole("heading", { name: "Research after review", exact: true })).toBeVisible();
+  await expect(detail.getByRole("status").filter({ hasText: /^Saved$/ })).toBeVisible();
   await expect(detail.getByRole("button", { name: "Delete resource", exact: true })).toBeEnabled();
   expect(api.requests.some((request) => request.path === `/resource/${resourceUuid}` && request.method === "PATCH")).toBe(true);
 });
