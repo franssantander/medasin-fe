@@ -32,6 +32,7 @@ async function openLetter(page: Page) {
     read_time_minutes: 1,
     status: "draft",
     exported_at: null,
+    done_at: null,
     created_at: null,
     updated_at: null,
     author: { name: "Test Author", handle: "@author" },

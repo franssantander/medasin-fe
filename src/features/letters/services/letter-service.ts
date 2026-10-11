@@ -7,6 +7,7 @@ import type {
   LetterExportUpdateInput,
   LetterExportUpdateResult,
   LetterInput,
+  LetterListParams,
   LetterMedia,
   LetterPageResponse,
   LetterUpdateInput,
@@ -17,10 +18,15 @@ const unwrap = <T>(
 ): Promise<LetterApiResponse<T>> => request.then((response) => response.data);
 
 export const letterService = {
-  list(page = 1, signal?: AbortSignal) {
+  list(page: number, { filter, search }: LetterListParams, signal?: AbortSignal) {
     return unwrap(
       axiosClient.get<LetterApiResponse<LetterPageResponse>>("/letters", {
-        params: { page, per_page: 15 },
+        params: {
+          page,
+          per_page: 15,
+          status: filter === "all" ? undefined : filter,
+          search: search || undefined,
+        },
         signal,
       }),
     );

@@ -1,4 +1,5 @@
 import {
+  keepPreviousData,
   useInfiniteQuery,
   useMutation,
   useQuery,
@@ -15,13 +16,15 @@ import type {
   LetterExportFormat,
   LetterExportPageInput,
   LetterExportUpdateInput,
+  LetterListParams,
   LetterPageResponse,
   LetterSummary,
 } from "../type";
 
 export const letterKeys = {
   all: ["letters"] as const,
-  list: () => ["letters", "list"] as const,
+  lists: () => ["letters", "list"] as const,
+  list: (params: LetterListParams) => ["letters", "list", params] as const,
   detail: (uuid: string) => ["letters", "detail", uuid] as const,
   export: (letterUuid: string, exportUuid: string) =>
     ["letters", "export", letterUuid, exportUuid] as const,
@@ -57,68 +60,99 @@ export function upsertLetterCache(
           },
   );
 
-  queryClient.setQueryData<LetterListData>(letterKeys.list(), (current) => {
-    if (!current) return current;
+  queryClient
+    .getQueriesData<LetterListData>({ queryKey: letterKeys.lists() })
+    .forEach(([queryKey, current]) => {
+      if (!current) return;
 
-    const exists = current.pages.some((page) =>
-      page.data.data.some((item) => item.uuid === letter.uuid),
-    );
-    const pages = current.pages.map((page, pageIndex) => {
-      const items = page.data.data.map((item) =>
-        item.uuid === letter.uuid ? summary : item,
+      const params = queryKey[2] as LetterListParams | undefined;
+      const exists = current.pages.some((page) =>
+        page.data.data.some((item) => item.uuid === letter.uuid),
       );
+      // A new letter is an untitled draft, so it only belongs at the top of
+      // the unfiltered list; filtered lists catch up on their next fetch.
+      const prepend =
+        prependIfMissing &&
+        !exists &&
+        params?.filter === "all" &&
+        !params.search;
+      if (!exists && !prepend) return;
 
-      if (prependIfMissing && !exists && pageIndex === 0) {
-        return {
-          ...page,
-          data: {
-            ...page.data,
-            data: [summary, ...items].slice(0, page.data.per_page),
-            total: page.data.total + 1,
-            last_page: Math.ceil((page.data.total + 1) / page.data.per_page),
-          },
-        };
-      }
+      const pages = current.pages.map((page, pageIndex) => {
+        const items = page.data.data.map((item) =>
+          item.uuid === letter.uuid ? summary : item,
+        );
 
-      return { ...page, data: { ...page.data, data: items } };
+        if (prepend && pageIndex === 0) {
+          const total = page.data.total + 1;
+          return {
+            ...page,
+            data: {
+              ...page.data,
+              data: [summary, ...items].slice(0, page.data.per_page),
+              total,
+              last_page: Math.ceil(total / page.data.per_page),
+              counts: page.data.counts && {
+                ...page.data.counts,
+                all: page.data.counts.all + 1,
+                [summary.done_at ? "done" : "draft"]:
+                  page.data.counts[summary.done_at ? "done" : "draft"] + 1,
+              },
+            },
+          };
+        }
+
+        return { ...page, data: { ...page.data, data: items } };
+      });
+
+      queryClient.setQueryData<LetterListData>(queryKey, { ...current, pages });
     });
-
-    return { ...current, pages };
-  });
 }
 
 export function removeLetterFromCache(queryClient: QueryClient, uuid: string) {
   queryClient.removeQueries({ queryKey: letterKeys.detail(uuid) });
-  queryClient.setQueryData<LetterListData>(letterKeys.list(), (current) => {
-    if (!current) return current;
+  queryClient.setQueriesData<LetterListData>(
+    { queryKey: letterKeys.lists() },
+    (current) => {
+      if (!current) return current;
 
-    const existed = current.pages.some((page) =>
-      page.data.data.some((item) => item.uuid === uuid),
-    );
-    if (!existed) return current;
+      const removed = current.pages
+        .flatMap((page) => page.data.data)
+        .find((item) => item.uuid === uuid);
+      if (!removed) return current;
+      const bucket = removed.done_at ? "done" : "draft";
 
-    const pages = current.pages.map((page) => {
-      const total = Math.max(0, page.data.total - 1);
-      return {
-        ...page,
-        data: {
-          ...page.data,
-          data: page.data.data.filter((item) => item.uuid !== uuid),
-          total,
-          last_page: Math.max(1, Math.ceil(total / page.data.per_page)),
-        },
-      };
-    });
+      const pages = current.pages.map((page) => {
+        const total = Math.max(0, page.data.total - 1);
+        return {
+          ...page,
+          data: {
+            ...page.data,
+            data: page.data.data.filter((item) => item.uuid !== uuid),
+            total,
+            last_page: Math.max(1, Math.ceil(total / page.data.per_page)),
+            counts: page.data.counts && {
+              ...page.data.counts,
+              all: Math.max(0, page.data.counts.all - 1),
+              [bucket]: Math.max(0, page.data.counts[bucket] - 1),
+            },
+          },
+        };
+      });
 
-    return { ...current, pages };
-  });
+      return { ...current, pages };
+    },
+  );
 }
 
-export function useLettersQuery() {
+export function useLettersQuery(params: LetterListParams) {
   return useInfiniteQuery({
-    queryKey: letterKeys.list(),
+    queryKey: letterKeys.list(params),
     initialPageParam: 1,
-    queryFn: ({ pageParam, signal }) => letterService.list(pageParam, signal),
+    queryFn: ({ pageParam, signal }) =>
+      letterService.list(pageParam, params, signal),
+    // Keep the current rows on screen while another tab or search loads.
+    placeholderData: keepPreviousData,
     getNextPageParam: (lastPage) =>
       lastPage.data.current_page < lastPage.data.last_page
         ? lastPage.data.current_page + 1
@@ -159,7 +193,7 @@ export function useCreateLetterExportMutation() {
         queryClient.invalidateQueries({
           queryKey: letterKeys.detail(letterUuid),
         }),
-        queryClient.invalidateQueries({ queryKey: letterKeys.list() }),
+        queryClient.invalidateQueries({ queryKey: letterKeys.lists() }),
       ]);
       if (!variables.silent) {
         toast.add({ type: "info", description: response.message });
@@ -218,6 +252,27 @@ export function useUpdateLetterExportMutation() {
         type: "error",
         description: fieldMessage ? `Page save failed: ${fieldMessage}` : apiError.message,
       });
+    },
+  });
+}
+
+export function useSetLetterDoneMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ uuid, done }: { uuid: string; done: boolean }) =>
+      letterService.update(uuid, { done }),
+    onSuccess: async (response, { done }) => {
+      upsertLetterCache(queryClient, response.data);
+      toast.add({
+        type: "success",
+        description: done ? "Letter marked as done." : "Letter moved to drafts.",
+      });
+      // The letter changes tabs, so filtered lists and counts need a refetch.
+      await queryClient.invalidateQueries({ queryKey: letterKeys.lists() });
+    },
+    onError: (error) => {
+      toast.add({ type: "error", description: error.message });
     },
   });
 }

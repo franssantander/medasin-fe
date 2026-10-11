@@ -35,7 +35,7 @@ async function fixture(
     subtitle: metadata?.subtitle ?? null,
     content,
     content_preview: "A measured letter", word_count: 100, read_time_minutes: 1,
-    status: "draft", exported_at: null, created_at: null, updated_at: null,
+    status: "draft", exported_at: null, done_at: null, created_at: null, updated_at: null,
     author: { name: "Test Author", handle: "@author" }, latest_export: null,
   };
   let exported: LetterExport | null = null;
@@ -578,6 +578,7 @@ test("a new letter keeps its editor and caret through the first autosave", async
         read_time_minutes: 1,
         status: "draft",
         exported_at: null,
+        done_at: null,
         created_at: null,
         updated_at: null,
         author: { name: "Test Author", handle: "@author" },

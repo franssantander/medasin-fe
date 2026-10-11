@@ -6,6 +6,14 @@ export type LetterApiResponse<T> = {
 
 export type LetterStatus = "draft" | "exported";
 
+/** Library tabs: Done is set by the writer, independent of exports. */
+export type LetterListFilter = "all" | "draft" | "done";
+
+export type LetterListParams = {
+  filter: LetterListFilter;
+  search: string;
+};
+
 export type LetterExportFormat =
   | "portrait"
   | "square"
@@ -136,6 +144,7 @@ export type LetterSummary = {
   read_time_minutes: number;
   status: LetterStatus;
   exported_at: string | null;
+  done_at: string | null;
   created_at: string | null;
   updated_at: string | null;
   author: LetterAuthor | null;
@@ -155,12 +164,16 @@ export type LetterMedia = {
   size: number;
 };
 
+export type LetterListCounts = Record<LetterListFilter, number>;
+
 export type LetterPageResponse = {
   current_page: number;
   data: LetterSummary[];
   last_page: number;
   per_page: number;
   total: number;
+  /** Totals per tab for the current search. */
+  counts: LetterListCounts;
 };
 
 export type LetterInput = {
@@ -170,7 +183,9 @@ export type LetterInput = {
   content: string;
 };
 
-export type LetterUpdateInput = Partial<LetterInput>;
+export type LetterUpdateInput = Partial<LetterInput> & {
+  done?: boolean;
+};
 
 export type LetterExportInput = {
   format?: LetterExportFormat;

@@ -75,7 +75,7 @@ export function useLetterStudioExport({
     invalidatedExportRef.current = exportUuid;
     void Promise.all([
       queryClient.invalidateQueries({ queryKey: letterKeys.detail(letterUuid) }),
-      queryClient.invalidateQueries({ queryKey: letterKeys.list() }),
+      queryClient.invalidateQueries({ queryKey: letterKeys.lists() }),
     ]);
   }, [currentExport, exportUuid, letterUuid, queryClient]);
 

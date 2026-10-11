@@ -4,6 +4,8 @@ import { useCallback, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
+  CircleCheck,
+  CircleCheckBig,
   LoaderCircle,
   MoreHorizontal,
   Redo2,
@@ -32,6 +34,7 @@ import { parseApiError } from "@/lib/axios";
 import {
   upsertLetterCache,
   useDeleteLetterMutation,
+  useSetLetterDoneMutation,
 } from "../queries/letter-query";
 import { useLetterAutosave } from "../hooks/use-letter-autosave";
 import {
@@ -53,6 +56,8 @@ export function LetterEditor({ letter }: { letter?: Letter }) {
   const router = useRouter();
   const queryClient = useQueryClient();
   const deleteMutation = useDeleteLetterMutation();
+  const doneMutation = useSetLetterDoneMutation();
+  const [doneAt, setDoneAt] = useState(letter?.done_at ?? null);
   const [historyState, setHistoryState] = useState<NoteEditorHistoryState>({
     canUndo: false,
     canRedo: false,
@@ -121,6 +126,36 @@ export function LetterEditor({ letter }: { letter?: Letter }) {
             ? error.message
             : "Your letter could not be saved. Try again before leaving.",
       });
+    }
+  };
+
+  const toggleDone = async () => {
+    if (doneMutation.isPending || leaving) return;
+
+    let uuid: string | undefined;
+    try {
+      // Save first so a new letter exists and a late autosave cannot carry
+      // the old done state back into the cache.
+      syncEditorContent();
+      const savedLetter = await autosave.flush(true);
+      uuid = savedLetter?.uuid ?? autosave.activeUuid ?? letter?.uuid;
+      if (!uuid) throw new Error("Save the letter before marking it done.");
+    } catch (error) {
+      toast.add({
+        type: "error",
+        description:
+          error instanceof Error
+            ? error.message
+            : "Your letter could not be saved. Try again.",
+      });
+      return;
+    }
+
+    try {
+      const response = await doneMutation.mutateAsync({ uuid, done: !doneAt });
+      setDoneAt(response.data.done_at);
+    } catch {
+      // The mutation already reported the failure.
     }
   };
 
@@ -253,6 +288,30 @@ export function LetterEditor({ letter }: { letter?: Letter }) {
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+          <Button
+            type="button"
+            variant={doneAt ? "secondary" : "outline"}
+            size="sm"
+            className="ml-1"
+            disabled={Boolean(leaving) || doneMutation.isPending}
+            aria-label={doneAt ? "Done, move back to drafts" : "Mark as done"}
+            title={doneAt ? "Move back to drafts" : "Mark this letter as done"}
+            onClick={() => void toggleDone()}
+          >
+            {doneMutation.isPending ? (
+              <LoaderCircle className="animate-spin" data-icon="inline-start" />
+            ) : doneAt ? (
+              <CircleCheckBig
+                className="text-emerald-600 dark:text-emerald-400"
+                data-icon="inline-start"
+              />
+            ) : (
+              <CircleCheck data-icon="inline-start" />
+            )}
+            <span className="hidden sm:inline">
+              {doneAt ? "Done" : "Mark as done"}
+            </span>
+          </Button>
           <Button
             type="button"
             size="sm"

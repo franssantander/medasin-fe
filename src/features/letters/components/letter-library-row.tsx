@@ -3,6 +3,8 @@
 import Image from "next/image";
 import Link from "next/link";
 import {
+  CircleCheck,
+  CircleDashed,
   Feather,
   LayoutTemplate,
   MoreHorizontal,
@@ -31,15 +33,18 @@ import type { LetterSummary } from "../type";
 export function LetterLibraryRow({
   letter,
   onDelete,
+  onToggleDone,
 }: {
   letter: LetterSummary;
   onDelete: (letter: LetterSummary) => void;
+  onToggleDone: (letter: LetterSummary) => void;
 }) {
   const title = letterDisplayTitle(letter.title);
   const excerpt =
     letter.subtitle?.trim() ||
     letter.content_preview.trim() ||
     "Nothing written yet.";
+  const done = Boolean(letter.done_at);
   const exported = letter.status === "exported";
   const exportFormat = letter.latest_export
     ? LETTER_EXPORT_FORMATS[letter.latest_export.format]
@@ -70,13 +75,19 @@ export function LetterLibraryRow({
                 aria-hidden="true"
                 className={cn(
                   "size-1.5 rounded-full",
-                  exported ? "bg-emerald-500" : "bg-amber-500",
+                  done ? "bg-emerald-500" : "bg-amber-500",
                 )}
               />
-              {exported
-                ? `Exported${exportFormat ? ` · ${exportFormat.shortLabel}` : ""}`
-                : "Draft"}
+              {done ? "Done" : "Draft"}
             </span>
+            {exported && (
+              <>
+                <Dot />
+                <span>
+                  Exported{exportFormat ? ` · ${exportFormat.shortLabel}` : ""}
+                </span>
+              </>
+            )}
             <Dot />
             <span>{formatWordCount(letter.word_count)}</span>
             <Dot className="hidden sm:inline" />
@@ -123,6 +134,10 @@ export function LetterLibraryRow({
             >
               <LayoutTemplate />
               Design pages
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => onToggleDone(letter)}>
+              {done ? <CircleDashed /> : <CircleCheck />}
+              {done ? "Move to drafts" : "Mark as done"}
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem destructive onClick={() => onDelete(letter)}>

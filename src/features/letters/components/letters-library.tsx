@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ChevronDown,
   Feather,
@@ -32,24 +32,37 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   useDeleteLetterMutation,
   useLettersQuery,
+  useSetLetterDoneMutation,
 } from "../queries/letter-query";
-import type { LetterSummary } from "../type";
+import type { LetterListFilter, LetterSummary } from "../type";
 import { LetterDeleteDialog } from "./letter-delete-dialog";
 import { LetterLibraryRow } from "./letter-library-row";
 
-type LetterFilter = "all" | "draft" | "exported";
-
-const filters: { value: LetterFilter; label: string }[] = [
+const filters: { value: LetterListFilter; label: string }[] = [
   { value: "all", label: "All" },
   { value: "draft", label: "Drafts" },
-  { value: "exported", label: "Exported" },
+  { value: "done", label: "Done" },
 ];
 
+const SEARCH_DEBOUNCE_MS = 300;
+
 export function LettersLibrary() {
-  const lettersQuery = useLettersQuery();
-  const deleteMutation = useDeleteLetterMutation();
-  const [filter, setFilter] = useState<LetterFilter>("all");
+  const [filter, setFilter] = useState<LetterListFilter>("all");
   const [search, setSearch] = useState("");
+  const query = search.trim();
+  const [debouncedQuery, setDebouncedQuery] = useState(query);
+  useEffect(() => {
+    const timer = window.setTimeout(
+      () => setDebouncedQuery(query),
+      SEARCH_DEBOUNCE_MS,
+    );
+    return () => window.clearTimeout(timer);
+  }, [query]);
+  // Clearing the search applies at once; only typing waits for the debounce.
+  const activeQuery = query ? debouncedQuery : "";
+  const lettersQuery = useLettersQuery({ filter, search: activeQuery });
+  const deleteMutation = useDeleteLetterMutation();
+  const doneMutation = useSetLetterDoneMutation();
   const [deleteTarget, setDeleteTarget] = useState<LetterSummary>();
 
   const letters = useMemo(() => {
@@ -59,29 +72,18 @@ export function LettersLibrary() {
     });
     return [...byUuid.values()];
   }, [lettersQuery.data]);
-  const total = lettersQuery.data?.pages[0]?.data.total ?? letters.length;
-  const counts = useMemo(
-    () => ({
-      all: total,
-      draft: letters.filter((letter) => letter.status === "draft").length,
-      exported: letters.filter((letter) => letter.status === "exported").length,
-    }),
-    [letters, total],
-  );
-
-  const query = search.trim().toLocaleLowerCase();
-  const visibleLetters = useMemo(
-    () =>
-      letters.filter((letter) => {
-        if (filter !== "all" && letter.status !== filter) return false;
-        if (!query) return true;
-        return [letter.title, letter.subtitle, letter.content_preview]
-          .filter(Boolean)
-          .some((value) => value!.toLocaleLowerCase().includes(query));
-      }),
-    [filter, letters, query],
-  );
-  const narrowed = Boolean(query) || filter !== "all";
+  const firstPage = lettersQuery.data?.pages[0]?.data;
+  const counts = firstPage?.counts ?? {
+    all: firstPage?.total ?? 0,
+    draft: 0,
+    done: 0,
+  };
+  const narrowed = Boolean(activeQuery) || filter !== "all";
+  // Only an unfiltered, unsearched empty list means there are no letters yet.
+  const libraryEmpty = !narrowed && !lettersQuery.isPlaceholderData && letters.length === 0;
+  const searching =
+    query !== activeQuery ||
+    (lettersQuery.isFetching && lettersQuery.isPlaceholderData);
 
   return (
     <div className="grid min-w-0 gap-6 pb-10">
@@ -111,7 +113,7 @@ export function LettersLibrary() {
             </Button>
           </EmptyContent>
         </Empty>
-      ) : letters.length === 0 ? (
+      ) : libraryEmpty ? (
         <Empty className="rounded-xl border bg-card py-16">
           <EmptyHeader>
             <EmptyMedia variant="icon">
@@ -137,7 +139,7 @@ export function LettersLibrary() {
           <div className="flex flex-col gap-3 border-b sm:flex-row sm:items-end sm:justify-between">
             <Tabs
               value={filter}
-              onValueChange={(value) => setFilter(value as LetterFilter)}
+              onValueChange={(value) => setFilter(value as LetterListFilter)}
             >
               <TabsList variant="line" className="h-auto justify-start gap-4 pb-1">
                 {filters.map(({ value, label }) => (
@@ -163,7 +165,11 @@ export function LettersLibrary() {
                 onChange={(event) => setSearch(event.target.value)}
               />
               <InputGroupAddon>
-                <Search aria-hidden="true" />
+                {searching ? (
+                  <LoaderCircle aria-hidden="true" className="animate-spin" />
+                ) : (
+                  <Search aria-hidden="true" />
+                )}
               </InputGroupAddon>
               {search && (
                 <InputGroupAddon align="inline-end">
@@ -179,25 +185,25 @@ export function LettersLibrary() {
             </InputGroup>
           </div>
 
-          {visibleLetters.length === 0 ? (
+          {letters.length === 0 ? (
             <Empty className="rounded-xl border bg-card">
               <EmptyHeader>
                 <EmptyMedia variant="icon">
                   <SearchX />
                 </EmptyMedia>
                 <EmptyTitle>
-                  {query
-                    ? `No letters match “${search.trim()}”`
+                  {activeQuery
+                    ? `No letters match “${activeQuery}”`
                     : filter === "draft"
                       ? "No drafts right now"
-                      : "Nothing exported yet"}
+                      : "Nothing marked done yet"}
                 </EmptyTitle>
                 <EmptyDescription>
-                  {query
+                  {activeQuery
                     ? "Try a different word from the title or text."
                     : filter === "draft"
-                      ? "Every letter you have written has been exported."
-                      : "Open a letter and choose Publish to create its pages."}
+                      ? "Every letter is marked done."
+                      : "Open a letter and choose Mark as done when it is finished."}
                 </EmptyDescription>
               </EmptyHeader>
               {narrowed && (
@@ -216,12 +222,21 @@ export function LettersLibrary() {
               )}
             </Empty>
           ) : (
-            <ul className="divide-y overflow-hidden rounded-xl border bg-card">
-              {visibleLetters.map((letter) => (
+            <ul
+              aria-busy={searching}
+              className="divide-y overflow-hidden rounded-xl border bg-card"
+            >
+              {letters.map((letter) => (
                 <LetterLibraryRow
                   key={letter.uuid}
                   letter={letter}
                   onDelete={setDeleteTarget}
+                  onToggleDone={(target) =>
+                    doneMutation.mutate({
+                      uuid: target.uuid,
+                      done: !target.done_at,
+                    })
+                  }
                 />
               ))}
             </ul>
@@ -229,15 +244,11 @@ export function LettersLibrary() {
 
           {(lettersQuery.hasNextPage || lettersQuery.isFetchNextPageError) && (
             <div className="flex flex-col items-center gap-2 pt-1">
-              {lettersQuery.isFetchNextPageError ? (
+              {lettersQuery.isFetchNextPageError && (
                 <p role="alert" className="text-xs text-destructive">
                   More letters could not be loaded.
                 </p>
-              ) : narrowed ? (
-                <p className="text-xs text-muted-foreground">
-                  Showing matches from loaded letters.
-                </p>
-              ) : null}
+              )}
               {lettersQuery.hasNextPage && (
                 <Button
                   type="button"
