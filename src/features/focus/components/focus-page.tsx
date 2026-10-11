@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, Minimize2, RefreshCw, Settings, X } from "lucide-react";
+import { Check, RefreshCw, Settings, X } from "lucide-react";
 import { useState } from "react";
 import PageHeader from "@/components/shared/page-header";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -8,13 +8,13 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { cn } from "@/lib/utils";
 import { useFocusSession, useFocusView } from "../providers/focus-session-provider";
 import { useUpdateFocusSettingsMutation } from "../queries/focus-query";
 import type { AmbientSound } from "../type";
 import { AddFocusTaskDialog } from "./add-focus-task-dialog";
 import { FocusCompletionDialog } from "./focus-completion-dialog";
 import { FocusJournalLink } from "./focus-journal-link";
+import { FocusQuietView } from "./focus-quiet-view";
 import { FocusSettingsDialog } from "./focus-settings-dialog";
 import { FocusTaskPanel } from "./focus-task-panel";
 import { FocusTimerCard } from "./focus-timer-card";
@@ -72,15 +72,25 @@ export function FocusPage() {
     updateSettings.mutate({ ...data.settings, ambient_sound: sound });
   };
 
-  return (
-    <div className={cn("grid w-full min-w-0 gap-5", quiet && "mx-auto min-h-full max-w-xl content-center py-2 sm:py-6 [&>header]:sticky [&>header]:top-0 [&>header]:z-10 [&>header]:bg-app-content [&>header]:py-2 [&>header]:backdrop-blur-md")}>
-      <PageHeader
-        title="Focus Timer"
-        description={quiet ? "Quiet view. One thing at a time." : "One task. One focused session."}
-        action={quiet
-          ? <Button id="focus-exit-quiet" variant="outline" onClick={exitQuiet}><Minimize2 data-icon="inline-start" />Show app</Button>
-          : <Button variant="outline" onClick={() => setSettingsDialog("open")} disabled={updateSettings.isPending}><Settings data-icon="inline-start" />Settings</Button>}
-      />
+  const timerProps = {
+    session: timerSession,
+    phase: flow.idlePhase,
+    selectedTask: flow.selectedTask,
+    settings: data.settings,
+    stats: data.today,
+    suggestedNext: data.suggested_next_type,
+    pending: flow.pending || Boolean(flow.completionFailure),
+    soundPending: updateSettings.isPending,
+    onStart: flow.startCurrent,
+    onPause: () => flow.runAction("pause"),
+    onResume: () => flow.runAction("resume"),
+    onReset: () => setResetSessionUuid(activeSession?.uuid ?? null),
+    onAmbientChange: changeAmbient,
+    onAddTask: () => setAddDialog("open"),
+  };
+
+  const alerts = (
+    <>
       {dashboard.isError && (
         <Alert>
           <AlertTitle>Focus could not be refreshed</AlertTitle>
@@ -126,35 +136,43 @@ export function FocusPage() {
           </AlertDescription>
         </Alert>
       )}
-      <div className={cn("grid min-w-0 items-start gap-5", !quiet && "lg:grid-cols-[minmax(0,1fr)_20rem] xl:grid-cols-[minmax(0,1fr)_22rem]")}>
-        <FocusTimerCard
-          session={timerSession}
-          phase={flow.idlePhase}
-          selectedTask={flow.selectedTask}
-          settings={data.settings}
-          stats={data.today}
-          suggestedNext={data.suggested_next_type}
-          pending={flow.pending || Boolean(flow.completionFailure)}
-          soundPending={updateSettings.isPending}
-          quiet={quiet}
-          onPhaseChange={flow.setPhase}
-          onStart={flow.startCurrent}
-          onPause={() => flow.runAction("pause")}
-          onResume={() => flow.runAction("resume")}
-          onReset={() => setResetSessionUuid(activeSession?.uuid ?? null)}
-          onAmbientChange={changeAmbient}
-          onAddTask={() => setAddDialog("open")}
-          onEnterQuiet={enterQuiet}
-        />
-        {!quiet && <FocusTaskPanel
-          tasks={data.tasks}
-          selectedUuid={flow.effectiveSelectedUuid}
-          activeTaskUuid={timerSession?.task?.uuid}
-          sessionActive={timerSession?.type === "focus"}
-          onSelect={(task) => flow.setSelectedUuid(task.uuid)}
-          onAdd={() => setAddDialog("open")}
-        />}
-      </div>
+    </>
+  );
+
+  return (
+    <div className={quiet ? "flex min-h-full w-full min-w-0 flex-col" : "grid w-full min-w-0 gap-5"}>
+      {quiet ? (
+        <FocusQuietView
+          {...timerProps}
+          onExitQuiet={exitQuiet}
+        >
+          {alerts}
+        </FocusQuietView>
+      ) : (
+        <>
+          <PageHeader
+            title="Focus Timer"
+            description="One task. One focused session."
+            action={<Button variant="outline" onClick={() => setSettingsDialog("open")} disabled={updateSettings.isPending}><Settings data-icon="inline-start" />Settings</Button>}
+          />
+          {alerts}
+          <div className="grid min-w-0 items-start gap-5 lg:grid-cols-[minmax(0,1fr)_20rem] xl:grid-cols-[minmax(0,1fr)_22rem]">
+            <FocusTimerCard
+              {...timerProps}
+              onPhaseChange={flow.setPhase}
+              onEnterQuiet={enterQuiet}
+            />
+            <FocusTaskPanel
+              tasks={data.tasks}
+              selectedUuid={flow.effectiveSelectedUuid}
+              activeTaskUuid={timerSession?.task?.uuid}
+              sessionActive={timerSession?.type === "focus"}
+              onSelect={(task) => flow.setSelectedUuid(task.uuid)}
+              onAdd={() => setAddDialog("open")}
+            />
+          </div>
+        </>
+      )}
       {addDialog && (
         <AddFocusTaskDialog
           open={addDialog === "open"}

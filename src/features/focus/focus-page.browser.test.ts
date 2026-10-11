@@ -1232,3 +1232,20 @@ test("the browser tab shows the countdown and restores the page title after rese
   await page.getByRole("alertdialog", { name: "Reset this session?" }).getByRole("button", { name: "Reset session", exact: true }).click();
   await expect(page).toHaveTitle(base);
 });
+
+test("quiet view fits a laptop screen without scrolling or overlapping the timer", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await mockFocus(page, { active: { type: "focus" } });
+  await openFocus(page);
+  await page.getByRole("button", { name: "Quiet view", exact: true }).click();
+  const showApp = page.getByRole("button", { name: "Show app", exact: true });
+  await expect(showApp).toBeFocused();
+  const scroll = await page.locator("main").evaluate((main) => ({ height: main.scrollHeight, client: main.clientHeight }));
+  expect(scroll.height).toBeLessThanOrEqual(scroll.client);
+  const header = (await showApp.boundingBox())!;
+  const timer = (await page.getByRole("timer").boundingBox())!;
+  expect(timer.y).toBeGreaterThan(header.y + header.height);
+  for (const control of [page.getByRole("button", { name: "Pause", exact: true }), page.getByLabel("Sound", { exact: true })]) {
+    await expect(control).toBeInViewport();
+  }
+});

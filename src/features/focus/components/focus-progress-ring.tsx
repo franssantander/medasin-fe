@@ -7,7 +7,7 @@ type FocusProgressRingProps = {
   caption: string;
   toneClassName: string;
   paused?: boolean;
-  large?: boolean;
+  size?: "default" | "quiet";
 };
 
 export function FocusProgressRing({
@@ -17,15 +17,15 @@ export function FocusProgressRing({
   caption,
   toneClassName,
   paused = false,
-  large = false,
+  size = "default",
 }: FocusProgressRingProps) {
   const radius = 120;
   const circumference = 2 * Math.PI * radius;
   return (
     <div
       className={cn(
-        "relative grid aspect-square w-full max-w-[min(15rem,42dvh)] place-items-center sm:max-w-[min(18rem,42dvh)]",
-        large && "sm:max-w-[min(20rem,50dvh)]",
+        "@container relative grid aspect-square w-full place-items-center",
+        size === "quiet" ? "max-w-[min(22rem,42dvh)]" : "max-w-[min(15rem,42dvh)] sm:max-w-[min(18rem,42dvh)]",
       )}
       role="timer"
       aria-live="off"
@@ -66,8 +66,8 @@ export function FocusProgressRing({
       <div className="flex flex-col items-center gap-1 text-center">
         <span aria-hidden="true" className="text-xs font-medium tracking-widest text-muted-foreground uppercase">{label}</span>
         <span className={cn(
-          "text-6xl leading-none font-semibold tracking-tight tabular-nums sm:text-7xl",
-          large && "sm:text-8xl",
+          "leading-none font-semibold tracking-tight tabular-nums",
+          size === "quiet" ? "text-[clamp(2.75rem,24cqi,5.5rem)]" : "text-6xl sm:text-7xl",
           paused && "text-muted-foreground",
         )}>
           {time}

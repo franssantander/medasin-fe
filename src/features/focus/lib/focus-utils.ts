@@ -15,6 +15,7 @@ export const phaseMeta: Record<FocusSessionType, {
   chip: string;
   wash: string;
   accent: string;
+  glow: string;
 }> = {
   focus: {
     icon: Brain,
@@ -23,6 +24,7 @@ export const phaseMeta: Record<FocusSessionType, {
     chip: "bg-orange-500/10 text-orange-600 dark:bg-orange-400/15 dark:text-orange-400",
     wash: "bg-linear-to-b from-orange-500/[0.06] to-transparent to-60% dark:from-orange-400/[0.08]",
     accent: "before:bg-orange-500",
+    glow: "bg-orange-500/15 dark:bg-orange-400/10",
   },
   short_break: {
     icon: Coffee,
@@ -31,6 +33,7 @@ export const phaseMeta: Record<FocusSessionType, {
     chip: "bg-emerald-500/10 text-emerald-600 dark:bg-emerald-400/15 dark:text-emerald-400",
     wash: "bg-linear-to-b from-emerald-500/[0.06] to-transparent to-60% dark:from-emerald-400/[0.08]",
     accent: "before:bg-emerald-500",
+    glow: "bg-emerald-500/15 dark:bg-emerald-400/10",
   },
   long_break: {
     icon: Sofa,
@@ -39,6 +42,7 @@ export const phaseMeta: Record<FocusSessionType, {
     chip: "bg-sky-500/10 text-sky-600 dark:bg-sky-400/15 dark:text-sky-400",
     wash: "bg-linear-to-b from-sky-500/[0.06] to-transparent to-60% dark:from-sky-400/[0.08]",
     accent: "before:bg-sky-500",
+    glow: "bg-sky-500/15 dark:bg-sky-400/10",
   },
 };
 
