@@ -24,6 +24,10 @@ import {
 import { imageFetchSource } from "@/lib/image/crop-image";
 import { cn } from "@/lib/utils";
 import {
+  useLetterCoverFit,
+  type LetterCoverFit,
+} from "../hooks/use-letter-cover-fit";
+import {
   LETTER_COVER_HERO_ASPECT_RATIO,
   letterCoverTextSize,
   normalizeLetterCover,
@@ -35,6 +39,7 @@ import {
 import type {
   LetterCanvas,
   LetterCover,
+  LetterCoverSection,
   LetterCoverTextAlignment,
   LetterPage,
 } from "../type";
@@ -57,6 +62,8 @@ const COVER_TEXT_JUSTIFICATION_CLASS: Record<LetterCoverTextAlignment, string> =
   right: "justify-end",
 };
 const COVER_COLUMN_CLASS = "mx-auto w-full max-w-[92%]";
+/** Tallest the cover image may be, as a share of the page height. */
+const COVER_HERO_MAX_HEIGHT = { overlay: 0.48, below: 0.4 } as const;
 // The visible logo stops seven units before the SVG's 135-unit right edge.
 const COVER_LOGO_RIGHT_INSET = "0.363cqw";
 
@@ -65,6 +72,8 @@ type LetterPageCanvasProps = {
   canvas: LetterCanvas;
   exportUuid: string;
   pageTheme?: LetterCover["theme"];
+  /** Page numbers are an export-wide cover setting. */
+  showPageNumbers?: boolean;
   textScale?: number;
   editable?: boolean;
   className?: string;
@@ -77,6 +86,8 @@ type LetterPageCanvasProps = {
   onHistoryStateChange?: (state: NoteEditorHistoryState) => void;
   onBlur?: () => void;
   onContentApplied?: () => void;
+  /** How the cover fitted its text: shrunk, or still too full. */
+  onCoverFitChange?: (fit: LetterCoverFit) => void;
 };
 
 export const LetterPageCanvas = forwardRef<
@@ -88,6 +99,7 @@ export const LetterPageCanvas = forwardRef<
     canvas,
     exportUuid,
     pageTheme,
+    showPageNumbers: pageNumbersEnabled = true,
     textScale: textScaleOverride,
     editable = false,
     className,
@@ -100,6 +112,7 @@ export const LetterPageCanvas = forwardRef<
     onHistoryStateChange = noop,
     onBlur,
     onContentApplied,
+    onCoverFitChange,
   },
   ref,
 ) {
@@ -107,19 +120,16 @@ export const LetterPageCanvas = forwardRef<
   const layout = page.layout || (page.kind === "cover" ? "cover" : "body");
   const displayPageNumber = page.number - 1;
   const showPageNumber =
-    layout !== "cover" && !(page.kind === "final" && page.number === 2);
+    pageNumbersEnabled &&
+    layout !== "cover" &&
+    !(page.kind === "final" && page.number === 2);
   const serializedBlocks = serializeNoteDocument(page.blocks);
   const textScale = normalizeLetterPageTextScale(
     textScaleOverride ?? page.text_scale,
   );
   const cover = normalizeLetterCover(page.cover);
-  const coverDescription = serializeNoteDocument(
-    editable
-      ? cover.description_blocks
-      : page.content_source === "cover_entry"
-      ? page.blocks
-      : cover.description_blocks,
-  );
+  // The cover always shows its whole entry; older exports split it over pages.
+  const coverDescription = serializeNoteDocument(cover.description_blocks);
   const coverDescriptionText = getNoteDocumentPreview(coverDescription);
   const resolvedTheme =
     pageTheme ?? (layout === "cover" ? cover.theme : "light");
@@ -128,27 +138,37 @@ export const LetterPageCanvas = forwardRef<
     COVER_TEXT_ALIGNMENT_CLASS[cover.text_alignment];
   const coverTextJustificationClass =
     COVER_TEXT_JUSTIFICATION_CLASS[cover.text_alignment];
+  const byline = {
+    name: cover.show_author ? cover.author_name.trim() : "",
+    avatarUrl: cover.show_author ? cover.avatar_url : null,
+    meta: [
+      cover.show_author ? cover.author_handle.trim() : "",
+      cover.show_date ? cover.date_label.trim() : "",
+    ].filter(Boolean).join(" · "),
+  };
+  const hasByline = Boolean(byline.name || byline.avatarUrl || byline.meta);
+  const bylineAtBottom = cover.byline_placement === "bottom";
   const coverSections = cover.section_order.filter(
     (section) =>
-      section !== "author" &&
-      (section !== "hero" || Boolean(cover.hero_image_url)),
+      (section !== "header" || Boolean(cover.subheader)) &&
+      (section !== "entry" || Boolean(coverDescriptionText || editable)) &&
+      (section !== "hero" || Boolean(cover.hero_image_url)) &&
+      (section !== "author" || (hasByline && !bylineAtBottom)),
   );
-  const coverHasFooter = Boolean(
-    cover.show_logo ||
-      cover.author_name ||
-      cover.date_label ||
-      cover.avatar_url,
-  );
+  const footerByline = hasByline && bylineAtBottom;
   const coverHeroAspectRatio =
     cover.hero_image_aspect_ratio ?? LETTER_COVER_HERO_ASPECT_RATIO;
   const heroCaption = cover.hero_image_caption.trim();
   const captionBelowImage = cover.hero_image_caption_placement === "below";
   const editorStyle = {
     "--letter-page-editor-font-size": letterPageTextSize(
-      layout === "quote" ? 4.3 : 1.72,
+      layout === "quote" ? 4.3 : 2.7,
       textScale,
     ),
   } as CSSProperties;
+
+  const coverMainRef = useRef<HTMLDivElement>(null);
+  useLetterCoverFit(coverMainRef, layout === "cover", onCoverFitChange);
 
   useEffect(() => {
     if (layout === "cover" && !editable) {
@@ -185,18 +205,20 @@ export const LetterPageCanvas = forwardRef<
           data-page-content
         >
           <div
-            className="flex min-h-0 flex-1 flex-col gap-[1cqh] overflow-hidden"
+            ref={coverMainRef}
+            className="flex min-h-0 flex-1 flex-col overflow-hidden"
             data-cover-main
           >
-            {coverSections.map((section) => {
+            {coverSections.map((section, index) => {
+              const spacing = coverSectionSpacing(coverSections[index - 1], section);
               if (section === "header") {
-                if (!cover.subheader) return null;
                 return (
                   <div
                     key={section}
                     data-cover-section="header"
                     className={cn(
                       COVER_COLUMN_CLASS,
+                      spacing,
                       "flex shrink-0 items-center",
                       coverTextJustificationClass,
                       coverTextAlignmentClass,
@@ -204,12 +226,12 @@ export const LetterPageCanvas = forwardRef<
                   >
                     <p
                       className={cn(
-                        "text-[5cqw] font-medium uppercase tracking-[0.18em]",
+                        "font-semibold uppercase tracking-[0.16em]",
                         pageIsDark ? "text-zinc-300" : "text-zinc-500",
                       )}
                       style={{
                         fontSize: letterCoverTextSize(
-                          1.5,
+                          2,
                           textScale,
                           cover.subheader_font_scale,
                         ),
@@ -228,6 +250,7 @@ export const LetterPageCanvas = forwardRef<
                     data-cover-section="title"
                     className={cn(
                       COVER_COLUMN_CLASS,
+                      spacing,
                       "shrink-0 overflow-hidden",
                       coverTextAlignmentClass,
                     )}
@@ -236,12 +259,12 @@ export const LetterPageCanvas = forwardRef<
                       as="h2"
                       ariaLabel="Cover title"
                       className={cn(
-                        "font-spectral leading-[0.98] tracking-[-0.03em]",
+                        "font-spectral leading-[1.04] tracking-[-0.025em]",
                         coverTextAlignmentClass,
                       )}
                       style={{
                         fontSize: letterCoverTextSize(
-                          5.8,
+                          7,
                           textScale,
                           cover.title_font_scale,
                         ),
@@ -257,7 +280,7 @@ export const LetterPageCanvas = forwardRef<
                 );
               }
 
-              if (section === "entry" && (coverDescriptionText || editable)) {
+              if (section === "entry") {
                 return (
                   <div
                     key={section}
@@ -265,17 +288,19 @@ export const LetterPageCanvas = forwardRef<
                     data-cover-text-alignment={cover.text_alignment}
                     className={cn(
                       COVER_COLUMN_CLASS,
+                      spacing,
+                      // Only a cover that is still full clips the entry (globals.css).
                       "letter-cover-description shrink-0 overflow-hidden",
                       coverTextAlignmentClass,
                       pageIsDark ? "text-zinc-300" : "text-zinc-600",
                     )}
                     style={{
-                      "--letter-cover-description-font-size":
-                        letterCoverTextSize(
-                          1.8,
-                          textScale,
-                          cover.body_font_scale,
-                        ),
+                      // `--letter-cover-fit` is set by useLetterCoverFit.
+                      "--letter-cover-description-font-size": `calc(${letterCoverTextSize(
+                        2.5,
+                        textScale,
+                        cover.body_font_scale,
+                      )} * var(--letter-cover-fit, 1))`,
                     } as CSSProperties}
                   >
                     <NoteRichTextEditor
@@ -309,36 +334,60 @@ export const LetterPageCanvas = forwardRef<
                 );
               }
 
+              if (section === "author") {
+                return (
+                  <CoverByline
+                    key={section}
+                    byline={byline}
+                    alignment={cover.text_alignment}
+                    textScale={textScale}
+                    pageIsDark={pageIsDark}
+                    className={cn(COVER_COLUMN_CLASS, spacing)}
+                  />
+                );
+              }
+
               if (section === "hero" && cover.hero_image_url) {
                 return (
                   <figure
                     key={section}
                     data-cover-section="hero"
                     data-caption-placement={cover.hero_image_caption_placement}
+                    data-cover-hero-frame={captionBelowImage ? undefined : ""}
+                    data-max-height={captionBelowImage ? undefined : COVER_HERO_MAX_HEIGHT.overlay}
                     className={cn(
                       COVER_COLUMN_CLASS,
+                      spacing,
+                      // useLetterCoverFit sets the image height.
                       captionBelowImage
-                        ? "flex min-h-0 shrink flex-col items-center gap-[1cqh]"
-                        : "relative min-h-[12cqh] max-h-[42cqh] shrink overflow-hidden rounded-[2cqw]",
+                        ? "flex shrink-0 flex-col items-center gap-[1cqh]"
+                        : "relative shrink-0 overflow-hidden rounded-[2cqw]",
                     )}
                     style={captionBelowImage ? undefined : {
                       aspectRatio: `${coverHeroAspectRatio}`,
+                      maxHeight: `${COVER_HERO_MAX_HEIGHT.overlay * 100}cqh`,
                     }}
                   >
                     <div
                       data-cover-hero-image
+                      data-cover-hero-frame={captionBelowImage ? "" : undefined}
+                      data-max-height={captionBelowImage ? COVER_HERO_MAX_HEIGHT.below : undefined}
+                      data-aspect-ratio={coverHeroAspectRatio}
                       className={cn(
                         "relative overflow-hidden rounded-[2cqw]",
                         captionBelowImage
-                          ? "min-h-0 w-full max-h-[32cqh] shrink"
+                          ? "w-full shrink-0"
                           : "size-full",
                       )}
                       style={captionBelowImage ? {
                         aspectRatio: `${coverHeroAspectRatio}`,
+                        maxHeight: `${COVER_HERO_MAX_HEIGHT.below * 100}cqh`,
                       } : undefined}
                     >
                       <Image
                         unoptimized
+                        // Off-screen measuring and download renders never load lazy images.
+                        loading="eager"
                         src={imageFetchSource(cover.hero_image_url)}
                         alt="Letter cover"
                         width={1600}
@@ -355,16 +404,21 @@ export const LetterPageCanvas = forwardRef<
                         data-caption-alignment={cover.hero_image_caption_alignment}
                         data-caption-placement={cover.hero_image_caption_placement}
                         className={cn(
-                          "break-words px-[2.5cqw] font-medium leading-[1.3]",
+                          "break-words px-[2.5cqw]",
                           captionBelowImage
                             ? cn(
-                                "w-full shrink-0 py-[0.5cqh]",
-                                pageIsDark ? "text-zinc-300" : "text-zinc-600",
+                                "w-full shrink-0 pt-[0.8cqh] pb-[0.5cqh] leading-snug",
+                                pageIsDark ? "text-zinc-400" : "text-zinc-500",
                               )
-                            : "absolute inset-x-0 bottom-0 max-h-full overflow-hidden bg-black/75 py-[1.5cqw] text-white",
+                            : "absolute inset-x-0 bottom-0 max-h-full overflow-hidden bg-black/75 py-[1.5cqw] font-medium leading-[1.3] text-white",
                           COVER_TEXT_ALIGNMENT_CLASS[cover.hero_image_caption_alignment],
                         )}
-                        style={{ fontSize: letterPageTextSize(1.8, textScale) }}
+                        style={{
+                          fontSize: letterPageTextSize(
+                            captionBelowImage ? 1.8 : 1.9,
+                            textScale,
+                          ),
+                        }}
                       >
                         {heroCaption}
                       </figcaption>
@@ -376,64 +430,39 @@ export const LetterPageCanvas = forwardRef<
               return null;
             })}
           </div>
-          {coverHasFooter ? (
+          {cover.show_logo || footerByline ? (
             <footer
-              data-cover-section="author"
-              className={cn(COVER_COLUMN_CLASS, "flex shrink-0 items-center justify-between gap-[2.5cqw]")}
+              data-cover-footer
+              className={cn(
+                COVER_COLUMN_CLASS,
+                "flex shrink-0 items-center gap-[2.5cqw]",
+                footerByline ? "justify-between" : "justify-end",
+              )}
             >
-              <div className="flex min-w-0 items-center gap-[2.5cqw]">
-                {cover.avatar_url ? (
+              {footerByline ? (
+                <CoverByline
+                  byline={byline}
+                  alignment="left"
+                  textScale={textScale}
+                  pageIsDark={pageIsDark}
+                  className="min-w-0"
+                />
+              ) : null}
+              {cover.show_logo ? (
+                <span data-cover-section="logo" className="flex shrink-0">
                   <Image
-                    unoptimized
-                    src={imageFetchSource(cover.avatar_url)}
-                    alt={
-                      cover.author_name
-                        ? `${cover.author_name}'s avatar`
-                        : "Cover author avatar"
-                    }
+                    src="/images/medasin-leaf.svg"
+                    alt="Medasin"
                     width={96}
                     height={96}
-                    className="size-[7cqw] rounded-full object-cover"
+                    className={cn(
+                      "size-[6cqw] shrink-0 object-contain object-right",
+                      pageIsDark && "invert",
+                    )}
+                    style={{ transform: `translateX(${COVER_LOGO_RIGHT_INSET})` }}
+                    priority={!editable}
                   />
-                ) : null}
-                <div className="min-w-0">
-                  {cover.author_name ? (
-                    <p
-                      className="truncate font-medium"
-                      style={{
-                        fontSize: letterPageTextSize(1.80, textScale),
-                      }}
-                    >
-                      {cover.author_name}
-                    </p>
-                  ) : null}
-                  {cover.date_label ? (
-                    <p
-                      className={
-                        pageIsDark ? "text-zinc-400" : "text-zinc-500"
-                      }
-                      style={{
-                        fontSize: letterPageTextSize(1.40, textScale),
-                      }}
-                    >
-                      {cover.date_label}
-                    </p>
-                  ) : null}
-                </div>
-              </div>
-              {cover.show_logo ? (
-                <Image
-                  src="/images/medasin-leaf.svg"
-                  alt="Medasin"
-                  width={96}
-                  height={96}
-                  className={cn(
-                    "size-[7cqw] shrink-0 object-contain object-right",
-                    pageIsDark && "invert",
-                  )}
-                  style={{ transform: `translateX(${COVER_LOGO_RIGHT_INSET})` }}
-                  priority={!editable}
-                />
+                </span>
               ) : null}
             </footer>
           ) : null}
@@ -504,7 +533,7 @@ export const LetterPageCanvas = forwardRef<
           {page.signature?.name.trim() || page.signature?.handle.trim() ? (
             <div
               className={cn(
-                "letter-page-signature text-center text-[1.4cqw]",
+                "letter-page-signature text-center",
                 pageIsDark ? "text-zinc-400" : "text-zinc-500",
               )}
             >
@@ -514,12 +543,18 @@ export const LetterPageCanvas = forwardRef<
                     "font-medium [overflow-wrap:anywhere]",
                     pageIsDark ? "text-zinc-200" : "text-zinc-700",
                   )}
+                  style={{ fontSize: letterPageTextSize(2.2, textScale) }}
                 >
                   {page.signature.name}
                 </p>
               ) : null}
               {page.signature?.handle.trim() ? (
-                <p className="[overflow-wrap:anywhere]">{page.signature.handle}</p>
+                <p
+                  className="[overflow-wrap:anywhere]"
+                  style={{ fontSize: letterPageTextSize(1.8, textScale) }}
+                >
+                  {page.signature.handle}
+                </p>
               ) : null}
             </div>
           ) : !page.signature ? (
@@ -570,20 +605,26 @@ export const LetterPageCanvas = forwardRef<
           {page.signature?.name.trim() || page.signature?.handle.trim() ? (
             <div
               className={cn(
-                "letter-page-signature mt-[5cqw] shrink-0 border-t pt-[3cqw]",
+                "letter-page-signature mt-[4cqw] shrink-0 border-t pt-[3cqw]",
                 pageIsDark ? "border-zinc-800" : "border-zinc-200",
               )}
             >
               {page.signature?.name.trim() ? (
-                <p className="font-spectral text-[2.2cqw] [overflow-wrap:anywhere]">{page.signature.name}</p>
+                <p
+                  className="font-spectral leading-tight [overflow-wrap:anywhere]"
+                  style={{ fontSize: letterPageTextSize(2.6, textScale) }}
+                >
+                  {page.signature.name}
+                </p>
               ) : null}
               {page.signature?.handle.trim() ? (
                 <p
                   className={cn(
                     page.signature.name.trim() && "mt-[0.6cqw]",
-                    "text-[1.34qw] [overflow-wrap:anywhere]",
+                    "leading-tight [overflow-wrap:anywhere]",
                     pageIsDark ? "text-zinc-400" : "text-zinc-500",
                   )}
+                  style={{ fontSize: letterPageTextSize(1.9, textScale) }}
                 >
                   {page.signature.handle}
                 </p>
@@ -606,7 +647,7 @@ export const LetterPageCanvas = forwardRef<
         <span
           aria-hidden="true"
           className={cn(
-            "pointer-events-none absolute bottom-[3cqw] left-1/2 -translate-x-1/2 text-[2.4cqw] leading-none tabular-nums",
+            "pointer-events-none absolute bottom-[3cqw] left-1/2 -translate-x-1/2 text-[1.9cqw] leading-none tabular-nums",
             pageIsDark ? "text-zinc-500" : "text-zinc-400",
           )}
           data-page-number
@@ -785,6 +826,135 @@ export function LetterPageThumbnail({
   );
 }
 
+/**
+ * Space above a cover section depends on its neighbour: the kicker and a byline
+ * directly under the title hug it equally, an excerpt sits a little apart, and
+ * the image is its own band.
+ */
+function coverSectionSpacing(
+  previous: LetterCoverSection | undefined,
+  section: LetterCoverSection,
+) {
+  if (!previous) return undefined;
+  if (previous === "hero" || section === "hero") return "mt-[3.2cqh]";
+  if (previous === "header" && section === "title") return "mt-[0.8cqh]";
+  if (previous === "title" && section === "author") return "mt-[0.8cqh]";
+  if (previous === "title" || section === "author") return "mt-[1.6cqh]";
+  return "mt-[2cqh]";
+}
+
+type CoverBylineContent = {
+  name: string;
+  avatarUrl: string | null;
+  meta: string;
+};
+
+/**
+ * Left and right covers stack the name over the meta line beside a larger
+ * avatar; centered covers keep the avatar inline with the name instead.
+ */
+function CoverByline({
+  byline,
+  alignment,
+  textScale,
+  pageIsDark,
+  className,
+}: {
+  byline: CoverBylineContent;
+  alignment: LetterCoverTextAlignment;
+  textScale: number;
+  pageIsDark: boolean;
+  className?: string;
+}) {
+  const inline = alignment === "center";
+  const avatar = byline.avatarUrl ? (
+    <Image
+      unoptimized
+      loading="eager"
+      src={imageFetchSource(byline.avatarUrl)}
+      alt={byline.name ? `${byline.name}'s avatar` : "Cover author avatar"}
+      width={96}
+      height={96}
+      data-cover-byline-avatar
+      className={cn(
+        "shrink-0 rounded-full object-cover",
+        !inline && "size-[5.6cqw]",
+      )}
+      style={
+        inline
+          ? {
+              width: letterPageTextSize(4, textScale),
+              height: letterPageTextSize(4, textScale),
+            }
+          : undefined
+      }
+    />
+  ) : null;
+  const name = byline.name ? (
+    <p
+      data-cover-byline-name
+      className="min-w-0 truncate leading-tight font-semibold"
+      style={{ fontSize: letterPageTextSize(2.3, textScale) }}
+    >
+      {byline.name}
+    </p>
+  ) : null;
+  const meta = byline.meta ? (
+    <p
+      data-cover-byline-meta
+      className={cn(
+        "truncate leading-tight",
+        byline.name && (inline ? "mt-[0.8cqw]" : "mt-[0.6cqw]"),
+        pageIsDark ? "text-zinc-400" : "text-zinc-600",
+      )}
+      style={{ fontSize: letterPageTextSize(1.9, textScale) }}
+    >
+      {byline.meta}
+    </p>
+  ) : null;
+
+  return (
+    <div
+      data-cover-section="author"
+      data-byline-layout={inline ? "inline" : "stacked"}
+      className={cn(
+        "flex shrink-0",
+        inline
+          ? "flex-col items-center text-center"
+          : cn(
+              "items-center gap-[2cqw]",
+              alignment === "right"
+                ? "flex-row-reverse text-right"
+                : "text-left",
+            ),
+        className,
+      )}
+    >
+      {inline ? (
+        <>
+          {avatar || name ? (
+            <div className="flex max-w-full items-center justify-center gap-[1.4cqw]">
+              {avatar}
+              {name}
+            </div>
+          ) : null}
+          {meta}
+        </>
+      ) : (
+        <>
+          {avatar}
+          {name || meta ? (
+            <div className="min-w-0">
+              {name}
+              {meta}
+            </div>
+          ) : null}
+        </>
+      )}
+    </div>
+  );
+}
+
 function CanvasText({
   as: Tag,
   ariaLabel,
@@ -825,7 +995,8 @@ function CanvasText({
       element.textContent = nextValue;
       placeCaretAtEnd(element);
     }
-    onChange?.(nextValue);
+    // Blurring without typing is not an edit; it must not re-fit the cover.
+    if (nextValue !== value) onChange?.(nextValue);
   };
 
   const handleKeyDown = (event: KeyboardEvent<HTMLElement>) => {
@@ -841,8 +1012,9 @@ function CanvasText({
         elementRef.current = element;
       }}
       className={cn(
-        "letter-page-editable-text whitespace-pre-wrap outline-none",
-        editable && "rounded-[0.25cqw] focus-visible:ring-[0.2cqw] focus-visible:ring-zinc-500/70 focus-visible:ring-offset-[0.4cqw]",
+        // Edited in place like the cover body text: a focus ring around the
+        // full-width title painted over the kicker and byline beside it.
+        "letter-page-editable-text whitespace-pre-wrap caret-current outline-none",
         className,
       )}
       style={style}

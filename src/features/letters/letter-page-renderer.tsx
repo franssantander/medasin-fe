@@ -69,11 +69,17 @@ export function letterPageFits(canvas: HTMLElement): boolean {
   return measureLetterPage(canvas)?.fits ?? false;
 }
 
+/** The cover is full even with the image and cover text at their smallest. */
+export function letterCoverOverflows(canvas: HTMLElement): boolean {
+  return canvas.dataset.coverFit === "overflow";
+}
+
 export function createLetterPageRenderer(
   canvas: LetterCanvas,
   exportUuid: string,
   signal?: AbortSignal,
   pageTheme: LetterCover["theme"] = "light",
+  showPageNumbers = true,
 ) {
   const host = document.createElement("div");
   host.className = "letter-page-measuring";
@@ -94,6 +100,7 @@ export function createLetterPageRenderer(
         <LetterPageCanvas
           page={{ ...page, uuid: "measurement" }} canvas={canvas} exportUuid={exportUuid}
           pageTheme={pageTheme}
+          showPageNumbers={showPageNumbers}
           editable={page.layout !== "cover"}
           onContentApplied={() => { applied = true; }}
         />,

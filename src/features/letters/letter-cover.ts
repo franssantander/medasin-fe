@@ -3,20 +3,19 @@ import { normalizeLetterPageTextScale } from "./letter-page-text-scale";
 import type {
   Letter,
   LetterCover,
+  LetterCoverImageCrop,
   LetterCoverSection,
   LetterPage,
+  LetterSignature,
 } from "./type";
 
-export const LETTER_COVER_CONTENT_SECTIONS: LetterCoverSection[] = [
+/** Blog-post order: kicker, title, excerpt, byline, then the image. */
+export const LETTER_COVER_SECTIONS: LetterCoverSection[] = [
   "header",
   "title",
   "entry",
-  "hero",
-];
-
-export const LETTER_COVER_SECTIONS: LetterCoverSection[] = [
-  ...LETTER_COVER_CONTENT_SECTIONS,
   "author",
+  "hero",
 ];
 
 /** The fallback crop used by new and legacy cover images. */
@@ -33,24 +32,40 @@ export const LETTER_COVER_SECTION_LABELS: Record<LetterCoverSection, string> = {
   header: "Header",
   title: "Title",
   entry: "Cover body text",
-  author: "Author and date",
+  author: "Byline",
   hero: "Cover image",
 };
 
-export function createLetterCover(letter?: Letter): LetterCover {
+export type LetterCoverDefaults = {
+  /** The account photo, used as the byline avatar until one is uploaded. */
+  avatarUrl?: string | null;
+};
+
+export function createLetterCover(
+  letter?: Letter,
+  defaults?: LetterCoverDefaults,
+): LetterCover {
   return {
     theme: "light",
     show_logo: true,
-    text_alignment: "center",
+    text_alignment: "left",
     subheader: "A LETTER",
     subheader_font_scale: LETTER_COVER_FONT_SCALE_DEFAULT,
     title_font_scale: LETTER_COVER_FONT_SCALE_DEFAULT,
     body_font_scale: LETTER_COVER_FONT_SCALE_DEFAULT,
     description_blocks: descriptionBlocks(letter?.subtitle),
     author_name: letter?.author?.name ?? "",
+    author_handle: letter?.author?.handle ?? "",
     date_label: formatLetterCoverDate(letter?.created_at),
-    avatar_url: null,
+    avatar_url: defaults?.avatarUrl || null,
+    show_author: true,
+    byline_placement: "top",
+    show_date: true,
+    show_page_numbers: true,
+    show_signature: true,
     hero_image_url: null,
+    hero_image_original_url: null,
+    hero_image_crop: null,
     hero_image_aspect_ratio: null,
     hero_image_caption: "",
     hero_image_caption_alignment: "center",
@@ -62,11 +77,16 @@ export function createLetterCover(letter?: Letter): LetterCover {
 export function carryLetterCover(
   letter: Letter,
   previousPage?: LetterPage | null,
+  coverDefaults?: LetterCoverDefaults,
 ): LetterCover {
-  const defaults = createLetterCover(letter);
+  const defaults = createLetterCover(letter, coverDefaults);
   if (!previousPage?.cover) return defaults;
 
-  const cover = normalizeLetterCover(previousPage.cover, defaults);
+  // Older captions without a saved placement stay on the image.
+  const cover = normalizeLetterCover(previousPage.cover, {
+    ...defaults,
+    hero_image_caption_placement: "overlay",
+  });
   // Page edits also update the letter subtitle; only editor changes replace the cover body.
   return previousPage.subtitle === letter.subtitle
     ? cover
@@ -78,6 +98,8 @@ export function normalizeLetterCover(
   fallback?: Partial<LetterCover>,
 ): LetterCover {
   const source = { ...fallback, ...cover };
+  // Covers saved before the byline existed pinned the author to the bottom.
+  const legacy = cover ? !("show_author" in cover) : false;
   const suppliedOrder = Array.isArray(source.section_order)
     ? source.section_order.flatMap((section) => {
         if ((section as unknown) === "content") {
@@ -87,12 +109,9 @@ export function normalizeLetterCover(
       })
     : [];
   const sectionOrder = [
-    ...new Set([
-      ...suppliedOrder.filter((section) => section !== "author"),
-      ...LETTER_COVER_CONTENT_SECTIONS,
-    ]),
-    "author" as const,
+    ...new Set([...suppliedOrder, ...LETTER_COVER_SECTIONS]),
   ];
+  if (legacy) moveBylineUnderTitle(sectionOrder);
   const heroImageUrl =
     typeof source.hero_image_url === "string" && source.hero_image_url
       ? source.hero_image_url
@@ -117,13 +136,31 @@ export function normalizeLetterCover(
       : descriptionBlocks(),
     author_name:
       typeof source.author_name === "string" ? source.author_name : "",
+    author_handle:
+      typeof source.author_handle === "string" ? source.author_handle : "",
     date_label:
       typeof source.date_label === "string" ? source.date_label : "",
     avatar_url:
       typeof source.avatar_url === "string" && source.avatar_url
         ? source.avatar_url
-        : null,
+        : legacy && fallback?.avatar_url
+          ? fallback.avatar_url
+          : null,
+    show_author: source.show_author !== false,
+    byline_placement: source.byline_placement === "bottom" ? "bottom" : "top",
+    show_date: source.show_date !== false,
+    show_page_numbers: source.show_page_numbers !== false,
+    show_signature: source.show_signature !== false,
     hero_image_url: heroImageUrl,
+    hero_image_original_url:
+      heroImageUrl &&
+      typeof source.hero_image_original_url === "string" &&
+      source.hero_image_original_url
+        ? source.hero_image_original_url
+        : null,
+    hero_image_crop: heroImageUrl
+      ? normalizeLetterCoverImageCrop(source.hero_image_crop)
+      : null,
     hero_image_aspect_ratio: heroImageUrl
       ? normalizeLetterCoverHeroAspectRatio(source.hero_image_aspect_ratio)
       : null,
@@ -144,14 +181,37 @@ export function normalizeLetterCover(
   };
 }
 
-export function getLetterPageTheme(
-  pages: readonly LetterPage[],
-): LetterCover["theme"] {
+function findLetterCover(pages: readonly LetterPage[]): LetterCover {
   const coverPage = pages.find(
     (page) => page.layout === "cover" || page.kind === "cover",
   );
 
-  return normalizeLetterCover(coverPage?.cover).theme;
+  return normalizeLetterCover(coverPage?.cover);
+}
+
+export function getLetterPageTheme(
+  pages: readonly LetterPage[],
+): LetterCover["theme"] {
+  return findLetterCover(pages).theme;
+}
+
+export function getLetterPageNumbersShown(pages: readonly LetterPage[]) {
+  return findLetterCover(pages).show_page_numbers;
+}
+
+/** The closing signature always mirrors the cover author. */
+export function letterSignatureFromCover(cover: LetterCover): LetterSignature {
+  return cover.show_signature
+    ? { name: cover.author_name, handle: cover.author_handle }
+    : { name: "", handle: "" };
+}
+
+/** Places the byline after the title, and after an excerpt directly under it. */
+function moveBylineUnderTitle(order: LetterCoverSection[]) {
+  order.splice(order.indexOf("author"), 1);
+  let index = order.indexOf("title") + 1;
+  if (order[index] === "entry") index += 1;
+  order.splice(index, 0, "author");
 }
 
 export function normalizeLetterCoverHeroAspectRatio(value: unknown): number {
@@ -163,6 +223,29 @@ export function normalizeLetterCoverHeroAspectRatio(value: unknown): number {
     LETTER_COVER_HERO_ASPECT_RATIO_MAX,
     Math.max(LETTER_COVER_HERO_ASPECT_RATIO_MIN, value),
   );
+}
+
+export function normalizeLetterCoverImageCrop(
+  value: unknown,
+): LetterCoverImageCrop | null {
+  if (!value || typeof value !== "object") return null;
+  const crop = value as Record<string, unknown>;
+  const fraction = (key: string) => {
+    const numeric = Number(crop[key]);
+    return Number.isFinite(numeric) ? Math.min(1, Math.max(0, numeric)) : null;
+  };
+  const x = fraction("x");
+  const y = fraction("y");
+  const width = fraction("width");
+  const height = fraction("height");
+  if (x === null || y === null || !width || !height) return null;
+
+  return {
+    x,
+    y,
+    width: Math.min(width, 1 - x),
+    height: Math.min(height, 1 - y),
+  };
 }
 
 export function normalizeLetterCoverFontScale(value: unknown): number {
@@ -206,6 +289,7 @@ export function normalizeLetterPageCover(
       ...fallback,
       description_blocks: descriptionBlocks(page.subtitle),
       author_name: page.signature?.name ?? fallback?.author_name ?? "",
+      author_handle: page.signature?.handle ?? fallback?.author_handle ?? "",
     }),
   };
 }
@@ -224,9 +308,8 @@ function formatLetterCoverDate(value?: string | null) {
   if (Number.isNaN(date.getTime())) return "";
 
   return new Intl.DateTimeFormat(undefined, {
-    month: "long",
+    month: "short",
     day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
+    year: "numeric",
   }).format(date);
 }

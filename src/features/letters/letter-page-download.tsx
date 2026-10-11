@@ -1,8 +1,15 @@
 import JSZip from "jszip";
 import { toBlob } from "html-to-image";
 import { imageFetchSource } from "@/lib/image/crop-image";
-import { getLetterPageTheme } from "./letter-cover";
-import { createLetterPageRenderer } from "./letter-page-renderer";
+import {
+  getLetterPageNumbersShown,
+  getLetterPageTheme,
+} from "./letter-cover";
+import { LetterCoverOverflowError } from "./letter-page-flow";
+import {
+  createLetterPageRenderer,
+  letterCoverOverflows,
+} from "./letter-page-renderer";
 import { LETTER_EXPORT_FORMATS } from "./letter-export-formats";
 import type { LetterExport, LetterPage } from "./type";
 
@@ -11,11 +18,11 @@ export async function downloadLetterPage(
   page: LetterPage,
   letterTitle: string,
 ) {
-  const blob = await renderPage(
-    letterExport,
-    page,
-    getLetterPageTheme(letterExport.pages ?? [page]),
-  );
+  const pages = letterExport.pages ?? [page];
+  const blob = await renderPage(letterExport, page, {
+    theme: getLetterPageTheme(pages),
+    showPageNumbers: getLetterPageNumbersShown(pages),
+  });
   downloadBlob(blob, pageFilename(letterTitle, letterExport, page));
 }
 
@@ -26,10 +33,13 @@ export async function downloadLetterPages(
   onProgress?: (completed: number, total: number) => void,
 ) {
   const zip = new JSZip();
-  const pageTheme = getLetterPageTheme(pages);
+  const display = {
+    theme: getLetterPageTheme(pages),
+    showPageNumbers: getLetterPageNumbersShown(pages),
+  };
 
   for (const [index, page] of pages.entries()) {
-    const blob = await renderPage(letterExport, page, pageTheme);
+    const blob = await renderPage(letterExport, page, display);
     zip.file(pageFilename(letterTitle, letterExport, page), blob);
     onProgress?.(index + 1, pages.length);
   }
@@ -42,16 +52,21 @@ export async function downloadLetterPages(
 async function renderPage(
   letterExport: LetterExport,
   page: LetterPage,
-  pageTheme: ReturnType<typeof getLetterPageTheme>,
+  display: {
+    theme: ReturnType<typeof getLetterPageTheme>;
+    showPageNumbers: boolean;
+  },
 ) {
   const renderer = createLetterPageRenderer(
     letterExport.canvas,
     letterExport.uuid,
     undefined,
-    pageTheme,
+    display.theme,
+    display.showPageNumbers,
   );
   try {
     const canvas = await renderer.render(page);
+    if (letterCoverOverflows(canvas)) throw new LetterCoverOverflowError();
     await prepareImagesForExport(canvas);
     const blob = await toBlob(canvas, {
       pixelRatio: 1,

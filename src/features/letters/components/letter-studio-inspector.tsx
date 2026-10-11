@@ -1,9 +1,10 @@
 "use client";
 
-import { AlignLeft, Quote, Type } from "lucide-react";
-import { Input } from "@/components/ui/input";
+import { AlignLeft, PenLine, Quote, Type } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import type { LetterPage, LetterPageLayout, LetterSignature } from "../type";
+import type { LetterCover, LetterPage, LetterPageLayout } from "../type";
 import type { StudioTextSize } from "./letter-cover-inspector";
 import {
   FieldHint,
@@ -15,15 +16,23 @@ export function LetterBodyPageInspector({
   page,
   isLastPage,
   textSize,
+  cover,
   onLayoutChange,
-  onSignatureChange,
+  onCoverChange,
+  onEditAuthor,
 }: {
   page: LetterPage;
   isLastPage: boolean;
   textSize: StudioTextSize;
+  cover: LetterCover;
   onLayoutChange: (layout: LetterPageLayout) => void;
-  onSignatureChange: (signature: LetterSignature) => void;
+  onCoverChange: (update: Partial<LetterCover>) => void;
+  onEditAuthor: () => void;
 }) {
+  const signedAs = [cover.author_name.trim(), cover.author_handle.trim()]
+    .filter(Boolean)
+    .join(" · ");
+
   return (
     <div className="flex flex-col gap-6 p-5">
       <div className="flex flex-col gap-2">
@@ -61,40 +70,45 @@ export function LetterBodyPageInspector({
 
       <TextSizePanel textSize={textSize} id={`letter-page-text-scale-${page.uuid}`} />
 
+      <div className="flex items-center justify-between gap-3">
+        <label htmlFor={`page-numbers-${page.uuid}`} className="text-sm font-medium">
+          Show page numbers
+        </label>
+        <Switch
+          id={`page-numbers-${page.uuid}`}
+          checked={cover.show_page_numbers}
+          onCheckedChange={(show_page_numbers) => onCoverChange({ show_page_numbers })}
+        />
+      </div>
+
       {isLastPage ? (
-        <fieldset className="flex flex-col gap-3 rounded-lg border p-4">
-          <legend className="px-1 text-sm font-medium">Signature</legend>
-          <label className="flex flex-col gap-1.5 text-sm font-medium">
-            Author name
-            <Input
-              value={page.signature?.name ?? ""}
-              maxLength={120}
-              onChange={(event) =>
-                onSignatureChange({
-                  name: event.target.value,
-                  handle: page.signature?.handle ?? "",
-                })
-              }
+        <div className="flex flex-col gap-3 rounded-lg border p-4">
+          <div className="flex items-center justify-between gap-3">
+            <label htmlFor={`page-signature-${page.uuid}`} className="text-sm font-medium">
+              Show closing signature
+            </label>
+            <Switch
+              id={`page-signature-${page.uuid}`}
+              checked={cover.show_signature}
+              onCheckedChange={(show_signature) => onCoverChange({ show_signature })}
             />
-          </label>
-          <label className="flex flex-col gap-1.5 text-sm font-medium">
-            Username
-            <Input
-              value={page.signature?.handle ?? ""}
-              maxLength={80}
-              onChange={(event) =>
-                onSignatureChange({
-                  name: page.signature?.name ?? "",
-                  handle: event.target.value,
-                })
-              }
-            />
-          </label>
+          </div>
           <FieldHint>
-            Shown at the end of the last page. Leave either field blank to hide
-            it; the username appears exactly as entered.
+            {signedAs
+              ? `Signed as ${signedAs}.`
+              : "Add your name on the cover to sign off this page."}
           </FieldHint>
-        </fieldset>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="self-start"
+            onClick={onEditAuthor}
+          >
+            <PenLine data-icon="inline-start" />
+            Edit author
+          </Button>
+        </div>
       ) : null}
 
       <FieldHint>

@@ -3,21 +3,21 @@ import type { NoteEditorSelection } from "@/components/ui/note-rich-text-editor-
 import { LETTER_EXPORT_FORMATS } from "./letter-export-formats";
 import {
   carryLetterCover,
+  getLetterPageNumbersShown,
   getLetterPageTheme,
+  letterSignatureFromCover,
+  normalizeLetterCover,
   normalizeLetterPageCover,
+  type LetterCoverDefaults,
 } from "./letter-cover";
 import {
   LETTER_PAGE_TEXT_SCALE_MIN,
-  LETTER_PAGE_TEXT_SCALE_STEP,
   getLetterPageCanvasBaseline,
   normalizeLetterPageTextScale,
   normalizeLetterPageTextScaleMode,
   unifyNonCoverTextScale,
 } from "./letter-page-text-scale";
-import {
-  createLetterPageRenderer,
-  letterPageFits,
-} from "./letter-page-renderer";
+import { createLetterPageRenderer, letterPageFits } from "./letter-page-renderer";
 import type { Letter, LetterCanvas, LetterExportFormat, LetterExportPageInput, LetterPage } from "./type";
 
 type Block = Record<string, unknown>;
@@ -31,7 +31,7 @@ const fragmentSeparator = "::letter-part::";
 
 export class LetterCoverOverflowError extends Error {
   constructor() {
-    super("The cover text or image is too large to fit. Reduce a cover font size, shorten the subheader or title, or remove the image before downloading.");
+    super("The cover is full. Shorten the cover text, make the title or subheader smaller, or remove the cover image before downloading.");
     this.name = "LetterCoverOverflowError";
   }
 }
@@ -47,11 +47,11 @@ export async function prepareLetterPages(
   letter: Letter,
   format: LetterExportFormat,
   previousCoverPage?: LetterPage | null,
+  coverDefaults?: LetterCoverDefaults,
 ): Promise<LetterExportPageInput[]> {
   const canvas = LETTER_EXPORT_FORMATS[format];
   const body = bodyPage(canvas);
   body.blocks = parseNoteDocument(letter.content).blocks;
-  body.signature = letter.author;
   const cover: LetterPage = {
     ...bodyPage(canvas),
     number: 1,
@@ -59,7 +59,7 @@ export async function prepareLetterPages(
     layout: "cover",
     title: letter.title,
     subtitle: letter.subtitle,
-    cover: carryLetterCover(letter, previousCoverPage),
+    cover: carryLetterCover(letter, previousCoverPage, coverDefaults),
     ...(previousCoverPage && {
       text_scale: previousCoverPage.text_scale,
       text_scale_mode: previousCoverPage.text_scale_mode,
@@ -73,25 +73,28 @@ export async function prepareLetterPages(
 export async function flowLetterPages(source: LetterPage[], canvas: LetterCanvas, exportUuid: string, signal?: AbortSignal): Promise<LetterPageFlowResult> {
   // Never mutate editor snapshots while an asynchronous measurement is running.
   const snapshot = structuredClone(source);
-  const sourceAuthor = [...snapshot]
+  const sourceSignature = [...snapshot]
     .reverse()
-    .find((page) => page.signature)?.signature?.name;
+    .find((page) => page.signature)?.signature;
   const pages = unifyNonCoverTextScale(
     snapshot.map((page) =>
-      normalizeLetterPageCover(page, { author_name: sourceAuthor }),
+      normalizeLetterPageCover(page, {
+        author_name: sourceSignature?.name,
+        author_handle: sourceSignature?.handle,
+      }),
     ),
     canvas,
   );
-  const coverEntryTemplates = pages.filter(
-    (page) =>
-      page.layout !== "cover" && page.content_source === "cover_entry",
-  );
+  // Older exports continued long cover text on extra pages; the cover now
+  // holds all of it, so those pages are rebuilt from the cover alone.
   const sourcePages = pages.filter(
     (page) =>
       page.layout === "cover" || page.content_source !== "cover_entry",
   );
   const before: Span[] = [];
-  const signature = [...sourcePages].reverse().find((page) => page.signature)?.signature ?? null;
+  const signature = letterSignatureFromCover(
+    normalizeLetterCover(pages.find((page) => page.layout === "cover")?.cover),
+  );
   if (sourcePages.some((page) => page.truncated)) {
     throw new Error("This older page set contains only part of your Letter. Prepare pages again from the full Letter before editing it.");
   }
@@ -105,19 +108,13 @@ export async function flowLetterPages(source: LetterPage[], canvas: LetterCanvas
     exportUuid,
     signal,
     getLetterPageTheme(pages),
+    getLetterPageNumbersShown(pages),
   );
   const fits = async (page: LetterPage) => letterPageFits(await renderer.render(page));
   const output: LetterPage[] = [];
 
   try {
-    const entry = await paginateCoverEntry(
-      { ...sourcePages[0], signature: null },
-      coverEntryTemplates,
-      canvas,
-      fits,
-      signal,
-    );
-    output.push(entry.cover, ...entry.continuations);
+    output.push(buildCover({ ...sourcePages[0], signature: null }, canvas));
     let index = 1;
     while (index < sourcePages.length) {
       signal?.throwIfAborted();
@@ -151,101 +148,35 @@ export async function flowLetterPages(source: LetterPage[], canvas: LetterCanvas
   } finally { renderer.dispose(); }
 }
 
-async function paginateCoverEntry(
-  sourceCover: LetterPage,
-  continuationTemplates: LetterPage[],
-  canvas: LetterCanvas,
-  fits: (page: LetterPage) => Promise<boolean>,
-  signal?: AbortSignal,
-): Promise<{ cover: LetterPage; continuations: LetterPage[] }> {
-  const completeEntry = structuredClone(
+/**
+ * The cover keeps all of its text on one page. The cover itself fits it by
+ * shrinking the image and then the cover text (`fitCoverEntry`), so the
+ * title and subheader stay at the sizes the user chose.
+ */
+function buildCover(sourceCover: LetterPage, canvas: LetterCanvas): LetterPage {
+  const entry = structuredClone(
     sourceCover.cover?.description_blocks ?? [],
   ) as Block[];
-  assignBlockIds(completeEntry);
-  const remaining = completeEntry.slice();
-  const requestedMode = normalizeLetterPageTextScaleMode(
+  assignBlockIds(entry);
+  const mode = normalizeLetterPageTextScaleMode(
     sourceCover.text_scale_mode,
     sourceCover.text_scale,
   );
-  let cover = {
+
+  return {
     ...sourceCover,
     cover: sourceCover.cover
-      ? { ...sourceCover.cover, description_blocks: completeEntry }
+      ? { ...sourceCover.cover, description_blocks: entry }
       : sourceCover.cover,
-    content_source: "cover_entry" as const,
-    blocks: [] as Block[],
+    content_source: "cover_entry",
+    blocks: entry,
     text_scale: Math.max(
       LETTER_PAGE_TEXT_SCALE_MIN,
-      requestedMode === "manual"
+      mode === "manual"
         ? normalizeLetterPageTextScale(sourceCover.text_scale)
         : getLetterPageCanvasBaseline(canvas),
     ),
-    text_scale_mode: requestedMode,
-  };
-
-  // Fit the title, image and fixed footer before placing body copy. Additional
-  // cover text should flow to continuation pages instead of making all cover
-  // typography smaller.
-  while (
-    cover.text_scale > LETTER_PAGE_TEXT_SCALE_MIN &&
-    !(await fits(cover))
-  ) {
-    signal?.throwIfAborted();
-    cover = {
-      ...cover,
-      text_scale: Math.max(
-        LETTER_PAGE_TEXT_SCALE_MIN,
-        normalizeLetterPageTextScale(
-          cover.text_scale - LETTER_PAGE_TEXT_SCALE_STEP,
-        ),
-      ),
-      text_scale_mode: "auto" as const,
-    };
-  }
-
-  if (!(await fits(cover))) {
-    throw new LetterCoverOverflowError();
-  }
-
-  while (remaining.length) {
-    signal?.throwIfAborted();
-    const block = remaining[0];
-    const candidate = { ...cover, blocks: [...cover.blocks, block] };
-
-    if (await fits(candidate)) {
-      cover.blocks.push(remaining.shift()!);
-      continue;
-    }
-
-    const split = await splitToFit(block, cover, fits);
-    if (split) {
-      cover.blocks.push(split[0]);
-      remaining[0] = split[1];
-    }
-    break;
-  }
-
-  if (!remaining.length) return { cover, continuations: [] };
-
-  const template = continuationTemplates[0] ?? bodyPage(canvas);
-  const continuations = await paginateContentBlocks(
-    continuationTemplates.length ? continuationTemplates : [template],
-    remaining,
-    false,
-    null,
-    canvas,
-    fits,
-    "body",
-    signal,
-  );
-
-  return {
-    cover,
-    continuations: continuations.map((page) => ({
-      ...page,
-      content_source: "cover_entry" as const,
-      continuation_label: "Cover entry · Continued",
-    })),
+    text_scale_mode: mode,
   };
 }
 

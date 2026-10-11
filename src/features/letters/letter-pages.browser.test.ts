@@ -1,5 +1,11 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
-import type { Letter, LetterExport, LetterPage, LetterExportFormat } from "./type";
+import type {
+  Letter,
+  LetterCoverSection,
+  LetterExport,
+  LetterExportFormat,
+  LetterPage,
+} from "./type";
 import { LETTER_EXPORT_FORMATS } from "./letter-export-formats";
 
 async function fixture(
@@ -16,6 +22,11 @@ async function fixture(
     invalidateExportOnLetterUpdate?: boolean;
     rejectMediaUploadNumber?: number;
     legacyCaptionPlacement?: boolean;
+    uncachedCoverImages?: boolean;
+    legacyCover?: { order: LetterCoverSection[]; authorName: string };
+    profileImageUrl?: string;
+    /** Saves the first export the old way, with the cover text split over a continuation page. */
+    legacyCoverContinuation?: boolean;
   },
 ) {
   let letter: Letter = {
@@ -33,14 +44,18 @@ async function fixture(
   const updates: LetterPage[][] = [];
   let mediaUploads = 0;
   await page.route(/\/storage\/(?:existing-cover|uploaded-cover-\d+)\.png$/, async (route) => {
-    await route.fulfill({ body: testCoverPng, contentType: "image/png" });
+    await route.fulfill({
+      body: testCoverPng,
+      contentType: "image/png",
+      headers: metadata?.uncachedCoverImages ? { "cache-control": "no-store" } : undefined,
+    });
   });
   await page.route("**/api-test/v1/**", async (route) => {
     const url = new URL(route.request().url());
     const path = url.pathname.replace("/api-test/v1", "");
     const method = route.request().method();
     let data: unknown;
-    if (path === "/auth/me") data = { first_name: "Test", last_name: "Author", username: "author", roles: [] };
+    if (path === "/auth/me") data = { first_name: "Test", last_name: "Author", username: "author", roles: [], profile_image_url: metadata?.profileImageUrl ?? null };
     else if (path === "/letters" && method === "GET") data = { current_page: 1, data: [letter], last_page: 1, per_page: 15, total: 1 };
     else if (path === "/letters/letter-test") {
       if (method === "PATCH") {
@@ -88,6 +103,25 @@ async function fixture(
       if (exportCount === 0 && metadata?.legacyCaptionPlacement && pages[0]?.cover) {
         pages[0].cover.hero_image_caption = "An older image caption";
         Reflect.deleteProperty(pages[0].cover, "hero_image_caption_placement");
+      }
+      if (exportCount === 0 && metadata?.legacyCover && pages[0]?.cover) {
+        // Covers saved before the byline had no handle or display toggles.
+        for (const key of ["author_handle", "show_author", "show_date", "show_page_numbers", "show_signature"]) {
+          Reflect.deleteProperty(pages[0].cover, key);
+        }
+        pages[0].cover.section_order = metadata.legacyCover.order;
+        pages[0].cover.author_name = metadata.legacyCover.authorName;
+      }
+      if (exportCount === 0 && metadata?.legacyCoverContinuation && pages[0]) {
+        pages[0].blocks = [{ id: "entry", type: "paragraph", content: "The whole excerpt," }];
+        pages.splice(1, 0, {
+          ...pages[1],
+          uuid: "legacy-cover-continuation",
+          content_source: "cover_entry",
+          blocks: [{ id: "entry::letter-part::18", type: "paragraph", content: "Library in" }],
+        });
+        pages.splice(0, pages.length, ...normalize(pages));
+        pages[1].continuation_label = "Cover entry · Continued";
       }
       exported = { uuid: `export-test-${++exportCount}`, letter_uuid: letter.uuid, format: input.format, canvas, status: "ready", is_current: true, pages, page_count: pages.length, error: null, created_at: null, updated_at: null, started_at: null, completed_at: null };
       exports.set(exported.uuid, exported);
@@ -182,7 +216,7 @@ async function waitForCurrentPages(studio: Locator) {
   await expect(studio.getByRole("navigation", { name: "Pages" })).toBeVisible({ timeout: 60_000 });
 }
 
-async function openCoverSection(studio: Locator, name: "Text" | "Style" | "Images" | "Arrange") {
+async function openCoverSection(studio: Locator, name: "Text" | "Author" | "Style" | "Images" | "Arrange") {
   const trigger = studio.getByRole("button", { name, exact: true });
   if ((await trigger.getAttribute("aria-expanded")) !== "true") await trigger.click();
 }
@@ -207,7 +241,7 @@ async function expectCoverColumnAlignment(
       const { left, right, top, bottom, width, height } = match.getBoundingClientRect();
       return { left, right, top, bottom, width, height };
     };
-    const logo = bounds('[data-cover-section="author"] img[alt="Medasin"]');
+    const logo = bounds('[data-cover-section="logo"] img[alt="Medasin"]');
     const image = element.querySelector<HTMLElement>(
       "[data-cover-hero-image] img",
     );
@@ -224,7 +258,7 @@ async function expectCoverColumnAlignment(
       imageElement: bounds("[data-cover-hero-image] img"),
       caption: bounds("[data-cover-hero-caption]"),
       author: bounds('[data-cover-section="author"]'),
-      authorName: bounds('[data-cover-section="author"] p'),
+      authorName: bounds("[data-cover-byline-name]"),
       logoVisibleRight: logo.right - (logo.width * 7) / 135,
       imageObjectFit: getComputedStyle(image).objectFit,
       imageObjectPosition: getComputedStyle(image).objectPosition,
@@ -250,7 +284,7 @@ async function expectCoverColumnAlignment(
   expect(Math.abs(geometry.imageElement.width - geometry.image.width)).toBeLessThanOrEqual(1);
   expect(Math.abs(geometry.imageElement.height - geometry.image.height)).toBeLessThanOrEqual(1);
   expect(geometry.image.height / geometry.canvasHeight).toBeLessThanOrEqual(
-    captionPlacement === "below" ? 0.33 : 0.43,
+    captionPlacement === "below" ? 0.41 : 0.49,
   );
   if (captionPlacement === "below") {
     expect(geometry.caption.top).toBeGreaterThanOrEqual(geometry.image.bottom);
@@ -270,21 +304,21 @@ async function expectCoverColumnAlignment(
   return geometry;
 }
 
-test("long cover text auto-fits before the export is created", async ({ page }) => {
+test("long cover text stays on the cover when the export is created", async ({ page }) => {
   const state = await fixture(page, document(2), "portrait", {
     title: "A deliberately long cover title ".repeat(4).trim(),
-    subtitle: "Supporting cover copy that should continue onto generated pages without changing the original letter body. ".repeat(35).trim(),
+    subtitle: "Supporting cover copy that stays on the cover without changing the original letter body. ".repeat(35).trim(),
   });
 
   await openStudio(page);
   await expect(studioRegion(page).getByRole("alert")).toHaveCount(0);
-  expect(state.exported().pages?.[0].text_scale).toBeLessThanOrEqual(1);
-  expect(state.exported().pages?.[1].content_source).toBe("cover_entry");
+  // The title keeps its size; only the image and cover text give way.
+  expect(state.exported().pages?.[0].text_scale).toBe(1);
   expect(
-    state.exported().pages?.filter(
-      (item) => item.content_source === "cover_entry" && item.layout !== "cover",
-    ).length,
-  ).toBeGreaterThan(0);
+    state.exported().pages?.some(
+      (item) => item.layout !== "cover" && item.content_source === "cover_entry",
+    ),
+  ).toBe(false);
   expect(
     text(
       state.exported().pages
@@ -302,90 +336,75 @@ test("long cover text auto-fits before the export is created", async ({ page }) 
   expect(state.exported().pages?.[0].text_scale).toBe(coverScale);
 });
 
-test("long cover text crops the image height without resizing the typography", async ({
-  page,
-}) => {
+test("long cover text shrinks the image, then the text, and stays on the cover", async ({ page }) => {
   const state = await fixture(page, document(2), "portrait", {
-    initialHeroImageUrl: "http://localhost/storage/existing-cover.png",
+    initialHeroImageUrl: "/storage/existing-cover.png",
     initialHeroAspectRatio: 16 / 9,
   });
-
-  await openStudio(page);
-
-  const studio = studioRegion(page);
-  const coverCanvas = studio.locator('[data-studio-canvas] [data-page-layout="cover"]');
-  const coverHero = coverCanvas.locator('[data-cover-section="hero"]');
-  const coverBody = studio.locator(
-    '[data-studio-canvas] .letter-cover-description [contenteditable="true"]',
-  );
-  await expect(coverHero).toBeVisible();
-  await expect(coverBody).toBeVisible();
-
-  const initialMetrics = await coverHero.evaluate((element) => {
-    const canvas = element.closest<HTMLElement>("[data-page-canvas]");
-    if (!canvas) throw new Error("Cover canvas is missing");
-    const bounds = element.getBoundingClientRect();
-    const canvasBounds = canvas.getBoundingClientRect();
+  const studio = await openStudio(page);
+  const cover = studio.locator('[data-studio-canvas] [data-page-layout="cover"]');
+  const coverBody = cover.locator('.letter-cover-description [contenteditable="true"]');
+  await expect(cover.locator('[data-cover-section="hero"]')).toBeVisible();
+  // Layout sizes, unaffected by the viewport zoom.
+  const measure = () => cover.evaluate((canvas: HTMLElement) => {
+    const frame = canvas.querySelector<HTMLElement>("[data-cover-hero-frame]")!;
+    const size = (selector: string) =>
+      parseFloat(getComputedStyle(canvas.querySelector(selector)!).fontSize);
     return {
-      width: bounds.width / canvasBounds.width,
-      height: bounds.height / canvasBounds.height,
+      fit: canvas.dataset.coverFit,
+      hero: frame.offsetHeight,
+      natural: Math.min(frame.offsetWidth / (16 / 9), canvas.offsetHeight * 0.48),
+      title: size('[data-cover-section="title"] h2'),
+      entry: size(".letter-cover-description .bn-editor"),
     };
   });
-  const initialScale = state.exported().pages?.[0].text_scale;
-  const updateCount = state.updates.length;
+  const initial = await measure();
+  expect(initial.fit).toBe("natural");
+  expect(Math.abs(initial.hero - initial.natural)).toBeLessThanOrEqual(1);
+  const pageCount = state.exported().pages?.length;
 
-  await coverBody.fill(sentence.repeat(120));
+  // A little more text: only the image gives way.
+  await coverBody.fill(sentence.repeat(COVER_TEXT_IMAGE_SHRINKS));
+  await expect.poll(async () => (await measure()).fit).toBe("fitted");
+  const imageOnly = await measure();
+  expect(imageOnly.hero).toBeLessThan(initial.natural - 1);
+  expect(imageOnly.hero).toBeGreaterThanOrEqual(initial.natural * 0.5 - 1);
+  expect(imageOnly.entry).toBe(initial.entry);
 
-  await expect
-    .poll(() => state.updates.length, { timeout: 60_000 })
-    .toBeGreaterThan(updateCount);
-  await expect
-    .poll(
-      () =>
-        state
-          .exported()
-          .pages?.some(
-            (item) =>
-              item.layout !== "cover" &&
-              item.content_source === "cover_entry",
-          ) ?? false,
-      { timeout: 60_000 },
-    )
-    .toBe(true);
-  await expect(studio.getByText("Saved", { exact: true })).toBeVisible();
+  // Much more text: the image stops at half its height and the cover text shrinks.
+  await coverBody.fill(sentence.repeat(COVER_TEXT_TEXT_SHRINKS));
+  await expect.poll(async () => (await measure()).entry).toBeLessThan(initial.entry);
+  const both = await measure();
+  expect(both.fit).toBe("fitted");
+  expect(Math.abs(both.hero - initial.natural * 0.5)).toBeLessThanOrEqual(1);
+  expect(both.title).toBe(initial.title);
+  await expect(studio.getByText(/Cover body text shrunk to \d+% to fit the cover/)).toBeVisible();
+  await expect(studio.locator("[data-cover-full-banner]")).toHaveCount(0);
 
-  expect(state.exported().pages?.[0].text_scale).toBe(initialScale);
-  const finalMetrics = await coverHero.evaluate((element) => {
-    const canvas = element.closest<HTMLElement>("[data-page-canvas]");
-    if (!canvas) throw new Error("Cover canvas is missing");
-    const bounds = element.getBoundingClientRect();
-    const canvasBounds = canvas.getBoundingClientRect();
-    return {
-      width: bounds.width / canvasBounds.width,
-      height: bounds.height / canvasBounds.height,
-    };
-  });
-  expect(finalMetrics.width).toBeCloseTo(initialMetrics.width, 3);
-  expect(finalMetrics.height).toBeLessThan(initialMetrics.height);
-  expect(finalMetrics.height).toBeGreaterThanOrEqual(0.119);
+  await expect(studio.getByText("Saved", { exact: true })).toBeVisible({ timeout: 60_000 });
+  expect(state.exported().pages?.length).toBe(pageCount);
+  expect(
+    state.exported().pages?.some(
+      (item) => item.layout !== "cover" && item.content_source === "cover_entry",
+    ),
+  ).toBe(false);
+  expect(state.exported().pages?.[0].text_scale).toBe(1);
 
-  const settledHeights = await coverHero.evaluate(async (element) => {
-    const canvas = element.closest<HTMLElement>("[data-page-canvas]");
-    if (!canvas) throw new Error("Cover canvas is missing");
+  // The fit settles; nothing keeps resizing after the save.
+  const settled = await cover.evaluate(async (canvas: HTMLElement) => {
+    const frame = canvas.querySelector<HTMLElement>("[data-cover-hero-frame]")!;
     const heights: number[] = [];
-    for (let frame = 0; frame < 12; frame += 1) {
+    for (let index = 0; index < 12; index += 1) {
       await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-      heights.push(
-        element.getBoundingClientRect().height /
-          canvas.getBoundingClientRect().height,
-      );
+      heights.push(frame.offsetHeight);
     }
     return heights;
   });
-  expect(Math.max(...settledHeights) - Math.min(...settledHeights)).toBeLessThan(
-    0.002,
-  );
+  expect(Math.max(...settled) - Math.min(...settled)).toBeLessThanOrEqual(0.5);
 });
+
+const COVER_TEXT_IMAGE_SHRINKS = 10;
+const COVER_TEXT_TEXT_SHRINKS = 16;
 
 function normalize(pages: LetterPage[]): LetterPage[] {
   return pages.map((page, index) => ({ ...page, number: index + 1, kind: index === 0 ? "cover" : index === pages.length - 1 ? "final" : "body", signature: index === pages.length - 1 ? page.signature ?? { name: "Test Author", handle: "@author" } : null, truncated: false, continuation_label: null }));
@@ -998,9 +1017,6 @@ test("letters use a persistent CMS toolbar and editorial typography", async ({
     name: "Letter formatting",
   });
   const title = page.getByRole("textbox", { name: "Letter title" });
-  const description = page.getByRole("textbox", {
-    name: "Letter subtitle",
-  });
   const editor = page.locator(
     '.letter-composer-document [contenteditable="true"]',
   );
@@ -1012,7 +1028,8 @@ test("letters use a persistent CMS toolbar and editorial typography", async ({
   ).toBeVisible();
   await expect(title).toHaveCSS("font-family", /Spectral/);
   await expect(title).toHaveCSS("font-size", "48px");
-  await expect(description).toHaveCSS("font-size", "20px");
+  // The cover text is written in the Studio, not under the title.
+  await expect(page.getByRole("textbox", { name: "Letter subtitle" })).toHaveCount(0);
   await expect(editor).toHaveCSS("font-size", "16px");
 
   await editor.click();
@@ -1404,35 +1421,39 @@ test("page numbers exclude the cover and remain visible across page layouts", as
   await expect(canvas).toHaveAttribute("aria-label", "Editable social page 2");
 });
 
-test("last-page author details save independently and blank lines stay hidden", async ({ page }) => {
+test("the closing signature follows the cover author and blank details stay hidden", async ({ page }) => {
   const state = await fixture(page, document(2));
   await openStudio(page);
 
   const studio = studioRegion(page);
-  await studio.getByRole("button", { name: "Edit page 2", exact: true }).click();
   const canvas = studio.locator("[data-studio-canvas] [data-page-canvas]");
-  const authorName = studio.getByRole("textbox", { name: "Author name" });
+  await openCoverSection(studio, "Author");
+  const authorName = studio.getByRole("textbox", { name: "Name", exact: true });
   const username = studio.getByRole("textbox", { name: "Username" });
   await expect(authorName).toHaveValue("Test Author");
   await expect(username).toHaveValue("@author");
 
   await authorName.fill("Guest Writer");
   await username.fill("");
+  await expect.poll(() => state.exported().pages?.at(-1)?.signature, { timeout: 60_000 }).toEqual({ name: "Guest Writer", handle: "" });
+  expect(state.exported().pages?.[0].cover?.author_name).toBe("Guest Writer");
+  await studio.getByRole("button", { name: "Edit page 2", exact: true }).click();
   await expect(canvas).toContainText("Guest Writer");
   await expect(canvas).not.toContainText("@author");
-  await expect.poll(() => state.exported().pages?.at(-1)?.signature).toEqual({ name: "Guest Writer", handle: "" });
-  expect(state.exported().pages?.[0].cover?.author_name).toBe("Test Author");
 
+  await studio.getByRole("button", { name: "Edit author" }).click();
   await authorName.fill("");
   await username.fill("guest.writer");
+  await expect.poll(() => state.exported().pages?.at(-1)?.signature, { timeout: 60_000 }).toEqual({ name: "", handle: "guest.writer" });
+  await studio.getByRole("button", { name: "Edit page 2", exact: true }).click();
   await expect(canvas).toContainText("guest.writer");
   await expect(canvas).not.toContainText("Guest Writer");
-  await expect.poll(() => state.exported().pages?.at(-1)?.signature).toEqual({ name: "", handle: "guest.writer" });
 
-  await authorName.fill("");
+  await studio.getByRole("button", { name: "Edit author" }).click();
   await username.fill("");
+  await expect.poll(() => state.exported().pages?.at(-1)?.signature, { timeout: 60_000 }).toEqual({ name: "", handle: "" });
+  await studio.getByRole("button", { name: "Edit page 2", exact: true }).click();
   await expect(canvas.locator(".letter-page-signature")).toHaveCount(0);
-  await expect.poll(() => state.exported().pages?.at(-1)?.signature).toEqual({ name: "", handle: "" });
 
   await studio.getByRole("button", { name: "Featured quote" }).click();
   await expect(canvas).toHaveAttribute("data-page-layout", "quote");
@@ -1442,8 +1463,8 @@ test("last-page author details save independently and blank lines stay hidden", 
   await backToEditor(page);
   await expect(studio).toBeHidden();
   await openStudio(page);
-  await studioRegion(page).getByRole("button", { name: "Edit page 2", exact: true }).click();
-  await expect(studioRegion(page).getByRole("textbox", { name: "Author name" })).toHaveValue("");
+  await openCoverSection(studioRegion(page), "Author");
+  await expect(studioRegion(page).getByRole("textbox", { name: "Name", exact: true })).toHaveValue("");
   await expect(studioRegion(page).getByRole("textbox", { name: "Username" })).toHaveValue("");
 });
 
@@ -1664,24 +1685,66 @@ test("cover font sizes adjust independently and persist in previews and download
   expect((await fonts(cover)).title).toBeCloseTo(initial.title * 1.1, 1);
 });
 
-test("an oversized cover shows a fit error and recovers after resizing", async ({ page }) => {
-  const state = await fixture(page, document(2));
-  await openStudio(page);
-  const studio = studioRegion(page);
+test("a full cover shows a guide banner, pauses downloads, and recovers", async ({ page }) => {
+  const state = await fixture(page, document(2), "portrait", {
+    subtitle: "Cover copy long enough that it cannot fit even at its smallest size. ".repeat(40).trim(),
+    initialHeroImageUrl: "/storage/existing-cover.png",
+  });
+  const studio = await openStudio(page);
+  const cover = studio.locator('[data-studio-canvas] [data-page-layout="cover"]');
+  const banner = studio.locator("[data-cover-full-banner]");
 
-  await studio.getByRole("textbox", { name: "Subheader" }).fill("W".repeat(80));
-  await setRangeValue(studio.getByRole("slider", { name: "Subheader size" }), 140);
-  await expect(studio.getByRole("alert")).toContainText(
-    "too large to fit",
-    { timeout: 60_000 },
-  );
+  await expect(banner).toBeVisible();
+  await expect(banner).toContainText("The cover is full");
+  await expect(cover).toHaveAttribute("data-cover-fit", "overflow");
   await expect(studio.getByRole("button", { name: "Current page" })).toBeDisabled();
+  await expect(studio.getByRole("button", { name: "Download all" })).toBeDisabled();
+  // The entry is clipped on the cover instead of pushing the image off it.
+  const layout = await cover.evaluate((canvas: HTMLElement) => {
+    const main = canvas.querySelector<HTMLElement>("[data-cover-main]")!;
+    const hero = canvas.querySelector<HTMLElement>('[data-cover-section="hero"]')!;
+    return {
+      heroBottom: hero.offsetTop - main.offsetTop + hero.offsetHeight,
+      mainHeight: main.clientHeight,
+      overflow: main.scrollHeight - main.clientHeight,
+    };
+  });
+  expect(layout.heroBottom).toBeLessThanOrEqual(layout.mainHeight + 1);
+  expect(layout.overflow).toBeLessThanOrEqual(1);
+  expect(
+    state.exported().pages?.some(
+      (item) => item.layout !== "cover" && item.content_source === "cover_entry",
+    ),
+  ).toBe(false);
 
-  await studio.getByRole("textbox", { name: "Subheader" }).fill("A LETTER");
+  await cover
+    .locator('.letter-cover-description [contenteditable="true"]')
+    .fill("A short excerpt.");
+  await expect(banner).toHaveCount(0);
+  await expect(cover).toHaveAttribute("data-cover-fit", "natural");
   await expect(studio.getByText("Saved", { exact: true })).toBeVisible({ timeout: 60_000 });
-  await expect(studio.getByRole("alert")).toHaveCount(0);
   await expect(studio.getByRole("button", { name: "Current page" })).toBeEnabled();
-  expect(state.exported().pages?.[0].cover?.subheader_font_scale).toBe(1.4);
+});
+
+test("older exports fold cover continuation pages back into the cover", async ({ page }) => {
+  const state = await fixture(page, document(2), "portrait", {
+    subtitle: "The whole excerpt, Library in",
+    legacyCoverContinuation: true,
+  });
+  const studio = await openStudio(page);
+  await expect
+    .poll(
+      () =>
+        state.exported().pages?.some(
+          (item) => item.layout !== "cover" && item.content_source === "cover_entry",
+        ),
+      { timeout: 60_000 },
+    )
+    .toBe(false);
+  await expect(studio.getByRole("button", { name: "Edit page 3", exact: true })).toHaveCount(0);
+  await expect(
+    studio.locator('[data-studio-canvas] [data-page-layout="cover"] .letter-cover-description'),
+  ).toContainText("The whole excerpt, Library in");
 });
 
 test("cover controls persist styling, metadata, and image removal", async ({ page }) => {
@@ -1695,7 +1758,8 @@ test("cover controls persist styling, metadata, and image removal", async ({ pag
   await studio.getByRole("button", { name: "Dark", exact: true }).click();
   await studio.getByRole("switch", { name: "Show Medasin logo" }).click();
   await studio.getByRole("textbox", { name: "Subheader" }).fill("CIPER DATASETS");
-  await studio.getByRole("textbox", { name: "Author name" }).fill("Ciper");
+  await openCoverSection(studio, "Author");
+  await studio.getByRole("textbox", { name: "Name", exact: true }).fill("Ciper");
   await studio
     .getByRole("slider", { name: "Overall text size", exact: true })
     .evaluate((node) => {
@@ -1710,9 +1774,7 @@ test("cover controls persist styling, metadata, and image removal", async ({ pag
   await expect(
     studio.getByRole("button", { name: "Reorder Cover body text" }),
   ).toBeVisible();
-  await expect(
-    studio.getByRole("button", { name: "Reorder Author and date" }),
-  ).toHaveCount(0);
+  await expect(studio.getByRole("button", { name: "Reorder Byline" })).toBeVisible();
   const coverBody = studio.locator(
     '[data-studio-canvas] .letter-cover-description [contenteditable="true"]',
   );
@@ -1725,13 +1787,13 @@ test("cover controls persist styling, metadata, and image removal", async ({ pag
     '[data-cover-section="header"] p',
   );
   const coverHero = coverCanvas.locator('[data-cover-section="hero"]');
-  const coverFooter = coverCanvas.locator('[data-cover-section="author"]');
-  await expect(coverTitle).toHaveCSS("font-size", "62.64px");
-  await expect(coverSubheader).toHaveCSS("font-size", "16.2px");
-  await expect(coverTitle).toHaveCSS("text-align", "center");
+  const coverByline = coverCanvas.locator('[data-cover-section="author"]');
+  await expect(coverTitle).toHaveCSS("font-size", "75.6px");
+  await expect(coverSubheader).toHaveCSS("font-size", "21.6px");
+  await expect(coverTitle).toHaveCSS("text-align", "left");
   await expect(coverBody.locator(".bn-block-content").first()).toHaveCSS(
     "text-align",
-    "center",
+    "left",
   );
   const sectionWidths = await coverCanvas
     .locator('[data-cover-section]:not([data-cover-section="hero"])')
@@ -1751,26 +1813,21 @@ test("cover controls persist styling, metadata, and image removal", async ({ pag
     };
   });
   expect(heroFrame.aspectRatio).toBeGreaterThan(1.25);
-  expect(heroFrame.heightFraction).toBeLessThanOrEqual(0.43);
-  expect(
-    await coverFooter.evaluate((element) => {
-      const canvasBounds = element
-        .closest<HTMLElement>("[data-page-canvas]")!
-        .getBoundingClientRect();
-      const footerBounds = element.getBoundingClientRect();
-      return (canvasBounds.bottom - footerBounds.bottom) / canvasBounds.height;
-    }),
-  ).toBeCloseTo(0.056, 1);
+  expect(heroFrame.heightFraction).toBeLessThanOrEqual(0.49);
+  const bylineTop = await coverByline.evaluate((element) => element.getBoundingClientRect().top);
+  const titleBottom = await coverTitle.evaluate((element) => element.getBoundingClientRect().bottom);
+  expect(bylineTop).toBeGreaterThan(titleBottom);
+  await expect(coverCanvas.locator('[data-cover-section="logo"]')).toHaveCount(0);
   const coverTextAlignment = studio.getByRole("group", { name: "Text alignment" });
-  await coverTextAlignment.getByRole("button", { name: "Left", exact: true }).click();
+  await coverTextAlignment.getByRole("button", { name: "Center", exact: true }).click();
   await expect(
-    coverTextAlignment.getByRole("button", { name: "Left", exact: true }),
+    coverTextAlignment.getByRole("button", { name: "Center", exact: true }),
   ).toHaveAttribute("aria-pressed", "true");
-  await expect(coverSubheader).toHaveCSS("text-align", "left");
-  await expect(coverTitle).toHaveCSS("text-align", "left");
+  await expect(coverSubheader).toHaveCSS("text-align", "center");
+  await expect(coverTitle).toHaveCSS("text-align", "center");
   await expect(coverBody.locator(".bn-block-content").first()).toHaveCSS(
     "text-align",
-    "left",
+    "center",
   );
   await coverBody.click();
   await coverBody.press("End");
@@ -1794,14 +1851,14 @@ test("cover controls persist styling, metadata, and image removal", async ({ pag
     .poll(() => state.updates.length, { timeout: 60_000 })
     .toBeGreaterThan(updateCount);
 
-  await expect(coverFooter).toBeVisible();
+  await expect(coverByline).toBeVisible();
 
   await expect.poll(() => state.updates.length, { timeout: 60_000 }).toBeGreaterThan(0);
   await expect(studio.getByText("Saved", { exact: true })).toBeVisible();
   const cover = state.exported().pages?.[0].cover;
   expect(cover?.theme).toBe("dark");
   expect(cover?.show_logo).toBe(false);
-  expect(cover?.text_alignment).toBe("left");
+  expect(cover?.text_alignment).toBe("center");
   expect(cover?.subheader).toBe("CIPER DATASETS");
   expect(state.letter().subtitle).toBe("A formatted cover description");
   expect(cover?.description_blocks).toBeTruthy();
@@ -1846,7 +1903,7 @@ test("cover image replacement retains the caption, placement, and alignment", as
   let cropDialog = await chooseCoverImage(page, heroControl, "first-cover.png");
   await cropDialog.getByRole("button", { name: "Apply crop" }).click();
   await expect(cropDialog).toBeHidden();
-  await expect.poll(() => state.exported().pages?.[0].cover?.hero_image_url, { timeout: 60_000 }).toBe("/storage/uploaded-cover-1.png");
+  await expect.poll(() => state.exported().pages?.[0].cover?.hero_image_url, { timeout: 60_000 }).toBe("/storage/uploaded-cover-2.png");
 
   await expect(captionInput).toBeVisible();
   await expect(captionInput).toHaveAttribute("maxlength", "120");
@@ -1863,11 +1920,11 @@ test("cover image replacement retains the caption, placement, and alignment", as
   await expect.poll(() => state.exported().pages?.[0].cover?.hero_image_caption_placement, { timeout: 60_000 }).toBe("below");
 
   cropDialog = await chooseCoverImage(page, heroControl, "second-cover.png");
-  expect(state.exported().pages?.[0].cover?.hero_image_url).toBe("/storage/uploaded-cover-1.png");
+  expect(state.exported().pages?.[0].cover?.hero_image_url).toBe("/storage/uploaded-cover-2.png");
   await cropDialog.getByRole("button", { name: "Apply crop" }).click();
   await expect(cropDialog).toBeHidden();
-  await expect.poll(() => state.exported().pages?.[0].cover?.hero_image_url, { timeout: 60_000 }).toBe("/storage/uploaded-cover-2.png");
-  expect(state.mediaUploads()).toBe(2);
+  await expect.poll(() => state.exported().pages?.[0].cover?.hero_image_url, { timeout: 60_000 }).toBe("/storage/uploaded-cover-4.png");
+  expect(state.mediaUploads()).toBe(4);
   expect(state.exported().pages?.[0].cover?.hero_image_caption).toBe("A quiet view of the city");
   expect(state.exported().pages?.[0].cover?.hero_image_caption_alignment).toBe("right");
   expect(state.exported().pages?.[0].cover?.hero_image_caption_placement).toBe("below");
@@ -1943,7 +2000,7 @@ test("saved cover edits carry across formats and a letter reload", async ({ page
   await backToEditor(page);
   await expect(studio).toBeHidden({ timeout: 60_000 });
   const savedCover = structuredClone(state.exported().pages?.[0].cover);
-  expect(savedCover?.hero_image_url).toBe("/storage/uploaded-cover-1.png");
+  expect(savedCover?.hero_image_url).toBe("/storage/uploaded-cover-2.png");
   expect(JSON.stringify(savedCover?.description_blocks)).toContain('"bold":true');
 
   await openStudio(page);
@@ -1951,7 +2008,7 @@ test("saved cover edits carry across formats and a letter reload", async ({ page
   await expect.poll(() => state.exported().format, { timeout: 60_000 }).toBe("square");
   expect(state.exportsCreated()).toBe(2);
   expect(state.exported().pages?.[0].cover).toEqual(savedCover);
-  expect(state.mediaUploads()).toBe(1);
+  expect(state.mediaUploads()).toBe(2);
 
   await backToEditor(page);
   await page.reload();
@@ -1960,10 +2017,10 @@ test("saved cover edits carry across formats and a letter reload", async ({ page
   await expect.poll(() => state.exported().format, { timeout: 60_000 }).toBe("story");
   expect(state.exportsCreated()).toBe(3);
   expect(state.exported().pages?.[0].cover).toEqual(savedCover);
-  expect(state.mediaUploads()).toBe(1);
+  expect(state.mediaUploads()).toBe(2);
 });
 
-test("new letter text replaces cover text while image and styling persist", async ({ page }) => {
+test("a new letter title updates the cover while its text, image and styling persist", async ({ page }) => {
   const state = await fixture(page, document(2), "portrait", {
     subtitle: "Original description",
     invalidateExportOnLetterUpdate: true,
@@ -1979,13 +2036,12 @@ test("new letter text replaces cover text while image and styling persist", asyn
   await expect(studio).toBeHidden({ timeout: 60_000 });
 
   await page.getByRole("textbox", { name: "Letter title" }).fill("Updated letter title");
-  await page.getByRole("textbox", { name: "Letter subtitle" }).fill("Updated description");
   await openStudio(page);
   await expect.poll(() => state.exportsCreated(), { timeout: 60_000 }).toBe(2);
   const updatedCoverPage = state.exported().pages?.[0];
   expect(updatedCoverPage?.title).toBe("Updated letter title");
-  expect(text(updatedCoverPage?.cover?.description_blocks)).toBe("Updated description");
-  expect(updatedCoverPage?.cover?.hero_image_url).toBe("/storage/uploaded-cover-1.png");
+  expect(text(updatedCoverPage?.cover?.description_blocks)).toBe("Original description");
+  expect(updatedCoverPage?.cover?.hero_image_url).toBe("/storage/uploaded-cover-2.png");
   expect(updatedCoverPage?.cover?.subheader).toBe("LETTER DESIGN");
 
   await waitForCurrentPages(studio);
@@ -2000,7 +2056,7 @@ test("new letter text replaces cover text while image and styling persist", asyn
   expect(state.exported().pages?.[0].title).toBe("Newest letter title");
   expect(state.exported().pages?.[0].cover?.hero_image_url).toBeNull();
   expect(state.exported().pages?.[0].cover?.subheader).toBe("LETTER DESIGN");
-  expect(state.mediaUploads()).toBe(1);
+  expect(state.mediaUploads()).toBe(2);
 });
 
 test("legacy image captions stay on the image", async ({ page }) => {
@@ -2063,7 +2119,7 @@ for (const format of ["portrait", "square", "story", "landscape"] as const) {
     const hero = editorCanvas.locator('[data-cover-section="hero"]');
     await expect(hero.locator("[data-cover-hero-caption]")).toHaveText(longCaption);
     const geometry = await expectCoverColumnAlignment(editorCanvas, "below");
-    expect(geometry.image.width / geometry.image.height).toBeGreaterThan(aspectRatio);
+    expect(geometry.image.width / geometry.image.height).toBeGreaterThanOrEqual(aspectRatio - 0.01);
     await backToEditor(page);
     await expect(studio).toBeHidden();
     await openStudio(page);
@@ -2071,8 +2127,265 @@ for (const format of ["portrait", "square", "story", "landscape"] as const) {
   });
 }
 
+test("pages with a cover image save while another page is open", async ({ page }) => {
+  const state = await fixture(page, document(4), "portrait", {
+    initialHeroImageUrl: "/storage/existing-cover.png",
+    uncachedCoverImages: true,
+  });
+  const studio = await openStudio(page);
+  await studio.getByRole("button", { name: "Edit page 2", exact: true }).click();
+  const editor = studio.locator('[data-studio-canvas] [data-page-canvas] .bn-editor[contenteditable="true"]');
+  await expect(editor).toBeVisible();
+  const updates = state.updates.length;
+  await editor.click();
+  await page.keyboard.press("End");
+  await page.keyboard.type(" Still saving.");
+
+  await expect.poll(() => state.updates.length, { timeout: 60_000 }).toBeGreaterThan(updates);
+  await expect(studio.getByText("The page could not finish rendering. Please try again.")).toHaveCount(0);
+  expect(text(state.exported().pages?.at(-1)?.blocks)).toContain("Still saving.");
+  // Off-screen measuring renders never load lazy images, so cover images load eagerly.
+  await studio.getByRole("button", { name: "Edit page 1", exact: true }).click();
+  await expect(
+    studio.locator("[data-studio-canvas] [data-cover-hero-image] img"),
+  ).toHaveAttribute("loading", "eager");
+});
+
+test("the cover byline sits under the title and its toggles hide it", async ({ page }) => {
+  const state = await fixture(page, document(2));
+  const studio = await openStudio(page);
+  const canvas = studio.locator("[data-studio-canvas] [data-page-canvas]");
+  const byline = canvas.locator('[data-cover-section="author"]');
+
+  await expect(byline.locator("[data-cover-byline-name]")).toHaveText("Test Author");
+  await expect(byline.locator("[data-cover-byline-meta]")).toHaveText("@author");
+  const order = await canvas
+    .locator("[data-cover-main] > [data-cover-section]")
+    .evaluateAll((sections) => sections.map((section) => section.getAttribute("data-cover-section")));
+  expect(order).toEqual(["header", "title", "entry", "author"]);
+
+  await openCoverSection(studio, "Author");
+  await studio.getByRole("switch", { name: "Show date" }).click();
+  await studio.getByRole("textbox", { name: "Username" }).fill("@reader");
+  await expect(byline.locator("[data-cover-byline-meta]")).toHaveText("@reader");
+  await studio.getByRole("switch", { name: "Show byline" }).click();
+  await expect(byline).toHaveCount(0);
+  await expect.poll(() => state.exported().pages?.[0].cover?.show_author, { timeout: 60_000 }).toBe(false);
+  expect(state.exported().pages?.[0].cover).toMatchObject({
+    author_handle: "@reader",
+    show_date: false,
+  });
+});
+
+test("centered bylines keep the avatar inline with the name", async ({ page }) => {
+  await fixture(page, document(2), "portrait", {
+    profileImageUrl: "/storage/existing-cover.png",
+  });
+  const studio = await openStudio(page);
+  const byline = studio.locator('[data-studio-canvas] [data-cover-section="author"]');
+  const box = (selector: string) =>
+    byline.locator(selector).evaluate((element) => {
+      const { top, bottom, left, right } = element.getBoundingClientRect();
+      return { top, bottom, left, right };
+    });
+
+  await expect(byline).toHaveAttribute("data-byline-layout", "stacked");
+  let avatar = await box("[data-cover-byline-avatar]");
+  let name = await box("[data-cover-byline-name]");
+  let meta = await box("[data-cover-byline-meta]");
+  expect(avatar.right).toBeLessThan(name.left);
+  expect(avatar.right).toBeLessThan(meta.left);
+
+  await studio
+    .getByRole("group", { name: "Text alignment" })
+    .getByRole("button", { name: "Center", exact: true })
+    .click();
+  await expect(byline).toHaveAttribute("data-byline-layout", "inline");
+  avatar = await box("[data-cover-byline-avatar]");
+  name = await box("[data-cover-byline-name]");
+  meta = await box("[data-cover-byline-meta]");
+  const avatarMiddle = (avatar.top + avatar.bottom) / 2;
+  expect(avatarMiddle).toBeGreaterThan(name.top);
+  expect(avatarMiddle).toBeLessThan(name.bottom);
+  expect(avatar.right).toBeLessThan(name.left);
+  expect(meta.top).toBeGreaterThanOrEqual(avatar.bottom - 1);
+});
+
+test("the byline can sit beside the logo at the bottom of the cover", async ({ page }) => {
+  const state = await fixture(page, document(2));
+  const studio = await openStudio(page);
+  const canvas = studio.locator("[data-studio-canvas] [data-page-layout='cover']");
+  await openCoverSection(studio, "Author");
+  await studio
+    .getByRole("group", { name: "Byline placement" })
+    .getByRole("button", { name: "Beside logo" })
+    .click();
+
+  const footer = canvas.locator("[data-cover-footer]");
+  await expect(footer.locator('[data-cover-section="author"]')).toContainText("Test Author");
+  await expect(canvas.locator('[data-cover-main] [data-cover-section="author"]')).toHaveCount(0);
+  const [byline, logo] = await Promise.all(
+    ['[data-cover-section="author"]', '[data-cover-section="logo"]'].map((selector) =>
+      footer.locator(selector).evaluate((element) => {
+        const { top, bottom, left, right } = element.getBoundingClientRect();
+        return { middle: (top + bottom) / 2, left, right };
+      }),
+    ),
+  );
+  expect(Math.abs(byline.middle - logo.middle)).toBeLessThan(4);
+  expect(byline.right).toBeLessThan(logo.left);
+  await expect.poll(() => state.exported().pages?.[0].cover?.byline_placement, { timeout: 60_000 }).toBe("bottom");
+
+  await openCoverSection(studio, "Arrange");
+  await expect(studio.getByRole("button", { name: "Reorder Byline" })).toHaveCount(0);
+
+  await studio
+    .getByRole("group", { name: "Byline placement" })
+    .getByRole("button", { name: "Under title" })
+    .click();
+  await expect(canvas.locator('[data-cover-main] [data-cover-section="author"]')).toContainText("Test Author");
+  await expect(studio.getByRole("button", { name: "Reorder Byline" })).toBeVisible();
+});
+
+test("editing the cover title draws no box over its neighbours", async ({ page }) => {
+  const state = await fixture(page, document(2));
+  const studio = await openStudio(page);
+  const title = studio.locator("[data-studio-canvas]").getByRole("textbox", { name: "Cover title" });
+
+  await title.dblclick();
+  await expect(title).toBeFocused();
+  await expect(title).toHaveCSS("box-shadow", "none");
+  await expect(title).toHaveCSS("outline-style", "none");
+
+  await page.keyboard.press("End");
+  await page.keyboard.type(" today");
+  await expect.poll(() => state.exported().pages?.[0].title, { timeout: 60_000 }).toBe("A measured letter today");
+});
+
+test("clicking into the cover title and out keeps the cover as it was", async ({ page }) => {
+  const state = await fixture(page, document(2), "portrait", {
+    subtitle: "A short excerpt under the title.",
+    initialHeroImageUrl: "/storage/existing-cover.png",
+  });
+  const studio = await openStudio(page);
+  await setRangeValue(studio.getByRole("slider", { name: "Overall text size", exact: true }), 85);
+  await expect.poll(() => state.exported().pages?.[0].text_scale_mode, { timeout: 60_000 }).toBe("manual");
+  await expect(studio.getByText("Saved", { exact: true })).toBeVisible({ timeout: 60_000 });
+  // Let the slider's trailing save settle before counting.
+  await page.waitForTimeout(2_500);
+  const updates = state.updates.length;
+
+  const canvas = studio.locator("[data-studio-canvas]");
+  await canvas.getByRole("textbox", { name: "Cover title" }).dblclick();
+  await canvas.click({ position: { x: 8, y: 8 } });
+  await page.waitForTimeout(2_500);
+
+  expect(state.updates.length).toBe(updates);
+  expect(state.exported().pages?.[0]).toMatchObject({ text_scale: 0.85, text_scale_mode: "manual" });
+  await expect(studio.getByText("Saved", { exact: true })).toBeVisible();
+});
+
+test("cover sections follow a spacing rhythm", async ({ page }) => {
+  await fixture(page, document(2), "portrait", {
+    subtitle: "A short excerpt under the title.",
+    initialHeroImageUrl: "/storage/existing-cover.png",
+  });
+  const studio = await openStudio(page);
+  const canvas = studio.locator("[data-studio-canvas] [data-page-layout='cover']");
+  const bounds = await canvas.evaluate((element) =>
+    Object.fromEntries(
+      ["header", "title", "entry", "author", "hero"].map((name) => {
+        const section = element.querySelector(`[data-cover-section="${name}"]`);
+        if (!section) throw new Error(`Cover section is missing: ${name}`);
+        const { top, bottom } = section.getBoundingClientRect();
+        return [name, { top, bottom }];
+      }),
+    ),
+  );
+
+  const kickerGap = bounds.title.top - bounds.header.bottom;
+  const bylineGap = bounds.author.top - bounds.entry.bottom;
+  const imageGap = bounds.hero.top - bounds.author.bottom;
+  expect(kickerGap).toBeLessThan(bylineGap);
+  expect(bylineGap).toBeLessThan(imageGap);
+});
+
+test("centered cover quotes drop the side bar", async ({ page }) => {
+  await fixture(page, document(2), "portrait", {
+    initialCoverDescriptionBlocks: [{ type: "quote", content: "A line worth pulling out." }],
+  });
+  const studio = await openStudio(page);
+  const quote = studio.locator("[data-studio-canvas] .letter-cover-description blockquote");
+  await expect(quote).toHaveCSS("border-left-style", "solid");
+
+  await studio
+    .getByRole("group", { name: "Text alignment" })
+    .getByRole("button", { name: "Center", exact: true })
+    .click();
+  await expect(quote).toHaveCSS("border-left-style", "none");
+  await expect(quote).toHaveCSS("font-style", "italic");
+});
+
+test("the cover author signs off the last page", async ({ page }) => {
+  const state = await fixture(page, document(2));
+  const studio = await openStudio(page);
+  await openCoverSection(studio, "Author");
+  await studio.getByRole("textbox", { name: "Name", exact: true }).fill("Mina Reyes");
+
+  await studio.getByRole("button", { name: "Edit page 2", exact: true }).click();
+  const signature = studio.locator("[data-studio-canvas] [data-page-canvas] .letter-page-signature");
+  await expect(signature).toContainText("Mina Reyes");
+  await expect(signature).toContainText("@author");
+  await expect(studio.getByText("Signed as Mina Reyes · @author.")).toBeVisible();
+  await expect.poll(() => state.exported().pages?.at(-1)?.signature?.name, { timeout: 60_000 }).toBe("Mina Reyes");
+
+  await studio.getByRole("switch", { name: "Show closing signature" }).click();
+  await expect(signature).toHaveCount(0);
+  await expect.poll(() => state.exported().pages?.[0].cover?.show_signature, { timeout: 60_000 }).toBe(false);
+  expect(state.updates.at(-1)?.at(-1)?.signature).toEqual({ name: "", handle: "" });
+});
+
+test("page numbers can be hidden from any page", async ({ page }) => {
+  const state = await fixture(page, document(60));
+  const studio = await openStudio(page);
+  await studio.getByRole("button", { name: "Edit page 2", exact: true }).click();
+  const pageNumber = studio.locator("[data-studio-canvas] [data-page-number]");
+  await expect(pageNumber).toHaveText("1");
+
+  await studio.getByRole("switch", { name: "Show page numbers" }).click();
+  await expect(pageNumber).toHaveCount(0);
+  await expect.poll(() => state.exported().pages?.[0].cover?.show_page_numbers, { timeout: 60_000 }).toBe(false);
+});
+
+test("older covers move the byline under the title and keep one author", async ({ page }) => {
+  await fixture(page, document(2), "portrait", {
+    initialHeroImageUrl: "/storage/existing-cover.png",
+    legacyCover: { order: ["header", "title", "hero", "entry", "author"], authorName: "John Doe" },
+  });
+  const studio = await openStudio(page);
+  const canvas = studio.locator("[data-studio-canvas] [data-page-canvas]");
+  const order = await canvas
+    .locator("[data-cover-main] > [data-cover-section]")
+    .evaluateAll((sections) => sections.map((section) => section.getAttribute("data-cover-section")));
+  expect(order).toEqual(["header", "title", "author", "hero", "entry"]);
+  await expect(canvas.locator("[data-cover-byline-meta]")).toHaveText("@author");
+  // A byline right under the title sits as close to it as the kicker above.
+  const gaps = await canvas.evaluate((element) => {
+    const box = (name: string) =>
+      element.querySelector(`[data-cover-section="${name}"]`)!.getBoundingClientRect();
+    return {
+      kicker: box("title").top - box("header").bottom,
+      byline: box("author").top - box("title").bottom,
+    };
+  });
+  expect(Math.abs(gaps.byline - gaps.kicker)).toBeLessThanOrEqual(1);
+
+  await studio.getByRole("button", { name: "Edit page 2", exact: true }).click();
+  await expect(canvas.locator(".letter-page-signature")).toContainText("John Doe");
+});
+
 test("failed cover replacement shows the image validation error and keeps the current image", async ({ page }) => {
-  const state = await fixture(page, document(2), "portrait", { rejectMediaUploadNumber: 2 });
+  const state = await fixture(page, document(2), "portrait", { rejectMediaUploadNumber: 4 });
   await openStudio(page);
 
   const studio = studioRegion(page);
@@ -2080,17 +2393,70 @@ test("failed cover replacement shows the image validation error and keeps the cu
   let cropDialog = await chooseCoverImage(page, heroControl, "first-cover.png");
   await cropDialog.getByRole("button", { name: "Apply crop" }).click();
   await expect(cropDialog).toBeHidden();
-  await expect.poll(() => state.exported().pages?.[0].cover?.hero_image_url, { timeout: 60_000 }).toBe("/storage/uploaded-cover-1.png");
+  await expect.poll(() => state.exported().pages?.[0].cover?.hero_image_url, { timeout: 60_000 }).toBe("/storage/uploaded-cover-2.png");
 
   cropDialog = await chooseCoverImage(page, heroControl, "invalid-replacement.png");
   await cropDialog.getByRole("button", { name: "Apply crop" }).click();
   await expect(cropDialog.getByRole("alert")).toContainText("The replacement image could not be saved.");
-  expect(state.exported().pages?.[0].cover?.hero_image_url).toBe("/storage/uploaded-cover-1.png");
-  await expect(studio.locator('[data-studio-canvas] [data-cover-section="hero"] img')).toHaveAttribute("src", /uploaded-cover-1\.png/);
+  expect(state.exported().pages?.[0].cover?.hero_image_url).toBe("/storage/uploaded-cover-2.png");
+  await expect(studio.locator('[data-studio-canvas] [data-cover-section="hero"] img')).toHaveAttribute("src", /uploaded-cover-2\.png/);
 
   await cropDialog.getByRole("button", { name: "Apply crop" }).click();
   await expect(cropDialog).toBeHidden();
-  await expect.poll(() => state.exported().pages?.[0].cover?.hero_image_url, { timeout: 60_000 }).toBe("/storage/uploaded-cover-3.png");
+  await expect.poll(() => state.exported().pages?.[0].cover?.hero_image_url, { timeout: 60_000 }).toBe("/storage/uploaded-cover-5.png");
+});
+
+test("re-cropping the cover image starts from the whole original", async ({ page }) => {
+  const state = await fixture(page, document(2));
+  const studio = await openStudio(page);
+  const heroControl = await heroImageControl(studio);
+
+  let cropDialog = await chooseCoverImage(page, heroControl, "wide-cover.png");
+  await cropDialog.getByRole("button", { name: "Square" }).click();
+  await cropDialog.getByRole("button", { name: "Apply crop" }).click();
+  await expect(cropDialog).toBeHidden();
+  await expect
+    .poll(() => state.exported().pages?.[0].cover?.hero_image_url, { timeout: 60_000 })
+    .toBe("/storage/uploaded-cover-2.png");
+  const saved = state.exported().pages?.[0].cover;
+  expect(saved?.hero_image_original_url).toBe("/storage/uploaded-cover-1.png");
+  expect(saved?.hero_image_crop?.width).toBeCloseTo(0.9, 2);
+  expect(saved?.hero_image_crop?.height).toBeCloseTo(0.9, 2);
+  expect(saved?.hero_image_crop?.x).toBeCloseTo(0.05, 2);
+
+  await heroControl.getByRole("button", { name: "Crop", exact: true }).click();
+  cropDialog = page.getByRole("dialog", { name: "Crop cover image" });
+  await expect(cropDialog).toBeVisible();
+  await expect(cropDialog.getByRole("button", { name: "Current crop" })).toHaveAttribute("aria-pressed", "true");
+  const shown = cropDialog.locator('img[alt="Image being cropped"]');
+  await expect.poll(() => shown.evaluate((image: HTMLImageElement) => image.naturalWidth)).toBe(100);
+  const selection = await cropDialog.evaluate((dialog) => {
+    const image = dialog.querySelector("img")!.getBoundingClientRect();
+    const box = dialog.querySelector(".ReactCrop__crop-selection")!.getBoundingClientRect();
+    return {
+      x: (box.left - image.left) / image.width,
+      width: box.width / image.width,
+      height: box.height / image.height,
+    };
+  });
+  expect(selection.x).toBeCloseTo(0.05, 1);
+  expect(selection.width).toBeCloseTo(0.9, 1);
+  expect(selection.height).toBeCloseTo(0.9, 1);
+
+  await cropDialog.getByRole("button", { name: "Original" }).click();
+  await cropDialog.getByRole("button", { name: "Apply crop" }).click();
+  await expect(cropDialog).toBeHidden();
+  await expect
+    .poll(() => state.exported().pages?.[0].cover?.hero_image_url, { timeout: 60_000 })
+    .toBe("/storage/uploaded-cover-3.png");
+  expect(state.exported().pages?.[0].cover?.hero_image_original_url).toBe("/storage/uploaded-cover-1.png");
+  expect(state.mediaUploads()).toBe(3);
+
+  await heroControl.getByRole("button", { name: "Remove", exact: true }).click();
+  await expect
+    .poll(() => state.exported().pages?.[0].cover?.hero_image_original_url, { timeout: 60_000 })
+    .toBeNull();
+  expect(state.exported().pages?.[0].cover?.hero_image_crop).toBeNull();
 });
 
 async function chooseCoverImage(page: Page, control: Locator, name: string) {

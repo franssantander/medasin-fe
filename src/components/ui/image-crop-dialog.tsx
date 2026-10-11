@@ -8,7 +8,7 @@ import ReactCrop, {
   type PixelCrop,
 } from "react-image-crop";
 import "react-image-crop/dist/ReactCrop.css";
-import { cropImage } from "@/lib/image/crop-image";
+import { cropImage, type ImageCropArea } from "@/lib/image/crop-image";
 import { Button } from "./button";
 import {
   Dialog,
@@ -26,6 +26,8 @@ export type ImageCropAspectOption = {
 
 export type ImageCropMetadata = {
   aspectRatio: number;
+  /** The selected area as fractions (0–1) of the source image. */
+  crop: ImageCropArea;
 };
 
 function centeredCrop(
@@ -64,6 +66,7 @@ export function ImageCropDialog({
   source,
   file,
   aspect,
+  initialCrop,
   aspectOptions,
   maxBytes,
   title = "Crop image",
@@ -75,6 +78,8 @@ export function ImageCropDialog({
   source: string;
   file: File;
   aspect: number;
+  /** A saved crop (fractions of the image) to start from with the first option. */
+  initialCrop?: ImageCropArea | null;
   aspectOptions?: ImageCropAspectOption[];
   maxBytes?: number;
   title?: string;
@@ -95,6 +100,26 @@ export function ImageCropDialog({
   const [croppedArea, setCroppedArea] = useState<PixelCrop | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isApplying, setIsApplying] = useState(false);
+
+  const startingCrop = (
+    option: ImageCropAspectOption,
+    width: number,
+    height: number,
+  ): Crop =>
+    initialCrop && option.label === initialAspect.label
+      ? {
+          unit: "%",
+          x: initialCrop.x * 100,
+          y: initialCrop.y * 100,
+          width: initialCrop.width * 100,
+          height: initialCrop.height * 100,
+        }
+      : centeredCrop(
+          width,
+          height,
+          option.value,
+          option.value === aspect ? 100 : 90,
+        );
 
   const applyCrop = async () => {
     if (!croppedArea) return;
@@ -129,6 +154,12 @@ export function ImageCropDialog({
       );
       await onCrop(croppedImage.file, {
         aspectRatio: croppedImage.width / croppedImage.height,
+        crop: {
+          x: croppedArea.x / image.width,
+          y: croppedArea.y / image.height,
+          width: croppedArea.width / image.width,
+          height: croppedArea.height / image.height,
+        },
       });
       onOpenChange(false);
     } catch (cropError) {
@@ -172,12 +203,7 @@ export function ImageCropDialog({
                 className="max-h-[calc(min(50vh,24rem)-1.5rem)] max-w-full object-contain"
                 onLoad={(event) => {
                   const { width, height } = event.currentTarget;
-                  const nextCrop = centeredCrop(
-                    width,
-                    height,
-                    selectedAspect.value,
-                    selectedAspect.value === aspect ? 100 : 90,
-                  );
+                  const nextCrop = startingCrop(selectedAspect, width, height);
                   setSelection(nextCrop);
                   setCroppedArea(convertToPixelCrop(nextCrop, width, height));
                 }}
@@ -211,11 +237,10 @@ export function ImageCropDialog({
 
                     if (!option.value && selection) return;
 
-                    const nextCrop = centeredCrop(
+                    const nextCrop = startingCrop(
+                      option,
                       image.width,
                       image.height,
-                      option.value,
-                      option.value === aspect ? 100 : 90,
                     );
                     setSelection(nextCrop);
                     setCroppedArea(

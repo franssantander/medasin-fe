@@ -14,7 +14,12 @@ import type {
   LetterPage,
 } from "../type";
 import type { LetterPageFlowResult } from "../letter-page-flow";
-import { normalizeLetterPageCover } from "../letter-cover";
+import {
+  letterSignatureFromCover,
+  normalizeLetterCover,
+  normalizeLetterPageCover,
+  type LetterCoverDefaults,
+} from "../letter-cover";
 
 export type LetterPageSaveStatus = "idle" | "dirty" | "arranging" | "saving" | "saved" | "error";
 
@@ -26,6 +31,7 @@ export function useLetterPageAutosave({
   preparePages,
   onLayout,
   isComposing,
+  coverDefaults,
 }: {
   letterExport: LetterExport;
   letterUuid: string;
@@ -34,9 +40,12 @@ export function useLetterPageAutosave({
   preparePages: (pages: LetterPage[], signal: AbortSignal) => Promise<LetterPageFlowResult>;
   onLayout?: (result: LetterPageFlowResult) => void;
   isComposing?: () => boolean;
+  coverDefaults?: LetterCoverDefaults;
 }) {
   const mutation = useUpdateLetterExportMutation();
-  const [pages, setPages] = useState(() => normalizePages(letterExport));
+  const [pages, setPages] = useState(() =>
+    normalizePages(letterExport, coverDefaults),
+  );
   const [saveError, setSaveError] = useState<Error | undefined>();
   const [saveStatus, setSaveStatus] = useState<LetterPageSaveStatus>("idle");
   const pagesRef = useRef(pages);
@@ -139,6 +148,19 @@ export function useLetterPageAutosave({
     [flush],
   );
 
+  // Older exports continued long cover text on extra pages. The cover now
+  // keeps all of it, so save the set once without those pages.
+  const hadCoverContinuations = useRef(
+    hasCoverContinuations(letterExport.pages ?? []),
+  );
+  useEffect(() => {
+    if (!hadCoverContinuations.current) return;
+    hadCoverContinuations.current = false;
+    revisionRef.current += 1;
+    setSaveStatus("dirty");
+    void flush().catch(() => undefined);
+  }, [flush]);
+
   useEffect(() => {
     mountedRef.current = true;
     return () => {
@@ -153,11 +175,16 @@ export function useLetterPageAutosave({
   return { flush, getPages, pages, saveError, saveStatus, updatePages };
 }
 
-function normalizePages(letterExport: LetterExport) {
-  const sourcePages = letterExport.pages ?? [];
-  const sourceAuthor = [...sourcePages]
+function normalizePages(
+  letterExport: LetterExport,
+  coverDefaults?: LetterCoverDefaults,
+) {
+  const sourcePages = (letterExport.pages ?? []).filter(
+    (page) => !isCoverContinuation(page),
+  );
+  const sourceSignature = [...sourcePages]
     .reverse()
-    .find((page) => page.signature)?.signature?.name;
+    .find((page) => page.signature)?.signature;
 
   return renumberPages(
     unifyNonCoverTextScale(sourcePages.map((page) =>
@@ -172,14 +199,29 @@ function normalizePages(letterExport: LetterExport) {
             page.text_scale,
           ),
         },
-        { author_name: sourceAuthor },
+        {
+          author_name: sourceSignature?.name,
+          author_handle: sourceSignature?.handle,
+          avatar_url: coverDefaults?.avatarUrl ?? null,
+        },
       ),
     ), letterExport.canvas),
   );
 }
 
+function isCoverContinuation(page: LetterPage) {
+  return page.layout !== "cover" && page.content_source === "cover_entry";
+}
+
+function hasCoverContinuations(pages: LetterPage[]) {
+  return pages.some(isCoverContinuation);
+}
+
 function renumberPages(pages: LetterPage[]): LetterPage[] {
-  const signature = pages.find((page) => page.signature)?.signature ?? null;
+  const coverPage = pages.find((page) => page.layout === "cover");
+  const signature = coverPage
+    ? letterSignatureFromCover(normalizeLetterCover(coverPage.cover))
+    : pages.find((page) => page.signature)?.signature ?? null;
   const truncatedPage = pages.find((page) => page.truncated);
 
   return pages.map((page, index): LetterPage => {

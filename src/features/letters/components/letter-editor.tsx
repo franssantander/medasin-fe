@@ -79,7 +79,6 @@ export function LetterEditor({ letter }: { letter?: Letter }) {
   const autosave = useLetterAutosave({
     initialUuid: letter?.uuid,
     initialTitle: letter?.title ?? "",
-    initialSubtitle: letter?.subtitle ?? "",
     initialContent: letter?.content ?? EMPTY_NOTE_DOCUMENT,
     onCreated: handleCreated,
     onSaved: handleSaved,
@@ -176,7 +175,7 @@ export function LetterEditor({ letter }: { letter?: Letter }) {
           )}
           Letters
         </Button>
-        <Separator orientation="vertical" className="h-5" />
+        <Separator orientation="vertical" className="h-5 data-vertical:self-center" />
         <span
           className="min-w-0 truncate px-1 text-xs text-muted-foreground"
           aria-live="polite"
@@ -293,24 +292,6 @@ export function LetterEditor({ letter }: { letter?: Letter }) {
               maxLength={120}
               value={autosave.title}
               onChange={(event) => autosave.updateTitle(event.target.value)}
-              onBlur={() => void autosave.flush().catch(() => undefined)}
-              onKeyDown={(event) => {
-                if (event.key !== "Enter" || event.nativeEvent.isComposing) {
-                  return;
-                }
-
-                event.preventDefault();
-                editorControls?.focusFirstBlock();
-              }}
-            />
-            <Textarea
-              aria-label="Letter subtitle"
-              rows={1}
-              className="min-h-0 max-w-[65ch] resize-none overflow-hidden border-0 bg-transparent px-0 py-0 text-lg leading-relaxed font-normal text-zinc-500 caret-zinc-950 shadow-none placeholder:text-zinc-300 focus-visible:ring-0 sm:text-xl md:text-xl dark:bg-transparent"
-              placeholder="Add a subtitle…"
-              maxLength={240}
-              value={autosave.subtitle}
-              onChange={(event) => autosave.updateSubtitle(event.target.value)}
               onBlur={() => void autosave.flush().catch(() => undefined)}
               onKeyDown={(event) => {
                 if (event.key !== "Enter" || event.nativeEvent.isComposing) {

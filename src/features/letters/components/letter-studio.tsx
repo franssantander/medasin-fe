@@ -7,6 +7,7 @@ import {
   ChevronRight,
   Copy,
   Download,
+  Info,
   LoaderCircle,
   Redo2,
   RefreshCw,
@@ -36,12 +37,16 @@ import { toast } from "@/components/ui/toast";
 import { parseApiError } from "@/lib/axios";
 import { cn } from "@/lib/utils";
 import { getImageAspectRatio, imageUrlToFile } from "@/lib/image/crop-image";
+import { useCurrentUserQuery } from "@/features/auth/queries/auth-query";
 import { useLetterPageAutosave } from "../hooks/use-letter-page-autosave";
+import type { LetterCoverFit } from "../hooks/use-letter-cover-fit";
 import {
   LETTER_COVER_HERO_ASPECT_RATIO,
+  getLetterPageNumbersShown,
   getLetterPageTheme,
   normalizeLetterCover,
   normalizeLetterCoverHeroAspectRatio,
+  normalizeLetterCoverImageCrop,
 } from "../letter-cover";
 import {
   LetterCoverOverflowError,
@@ -63,6 +68,7 @@ import {
 import type {
   Letter,
   LetterCover,
+  LetterCoverImageCrop,
   LetterExport,
   LetterExportFormat,
   LetterPage,
@@ -92,6 +98,9 @@ type CoverCropSession = {
   originalAspect: number;
   initialAspect: number;
   initialAspectLabel: "Cover fit" | "Current crop";
+  /** The uploaded original; a new image is uploaded alongside its crop. */
+  originalUrl?: string;
+  initialCrop?: LetterCoverImageCrop | null;
 };
 
 function validateLetterImage(file: File) {
@@ -194,9 +203,11 @@ export function LetterStudio({
     (letter: Letter) => upsertLetterCache(queryClient, letter),
     [queryClient],
   );
+  const profileImageUrl = useCurrentUserQuery().data?.data.profile_image_url;
   const { flush, getPages, pages, saveError, saveStatus, updatePages } = useLetterPageAutosave({
     letterExport,
     letterUuid,
+    coverDefaults: { avatarUrl: profileImageUrl },
     onSaved: handleSaved,
     onPagesSaved: () => {
       const draft = editorDraftRef.current;
@@ -229,6 +240,9 @@ export function LetterStudio({
     Partial<Record<CoverImageKind, string>>
   >({});
   const [coverCrop, setCoverCrop] = useState<CoverCropSession>();
+  const uploadedOriginalRef = useRef<{ file: File; url: string }>(undefined);
+  // Reported by the cover on the canvas; kept while other pages are open.
+  const [coverFit, setCoverFit] = useState<LetterCoverFit>();
   const coverHeroRevisionRef = useRef(0);
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const heroInputRef = useRef<HTMLInputElement>(null);
@@ -251,6 +265,8 @@ export function LetterStudio({
   }, [restorePendingSelection]);
   const selectedPage = pages.find((page) => page.uuid === selectedUuid) ?? pages[0];
   const pageTheme = getLetterPageTheme(pages);
+  const showPageNumbers = getLetterPageNumbersShown(pages);
+  const coverPage = pages.find((page) => page.layout === "cover");
   const selectedIndex = selectedPage
     ? pages.findIndex((page) => page.uuid === selectedPage.uuid)
     : 0;
@@ -306,6 +322,7 @@ export function LetterStudio({
     const content = controlsRef.current?.getContent();
     if (!pageUuid || content === undefined) return;
 
+    const edited = editorDraftRef.current?.pageUuid === pageUuid;
     editorDraftRef.current = { pageUuid, content };
     const blocks = parseNoteDocument(content).blocks;
     const plainText = getNoteDocumentPreview(content);
@@ -317,9 +334,12 @@ export function LetterStudio({
 
     const subtitle = plainText.slice(0, 240) || null;
     if (currentPage.layout === "cover") {
+      // The cover's own blocks are only the part of the entry that fits, and
+      // stored entries can be in a shorter block shape than the editor's, so
+      // only commit what was typed; otherwise every blur would re-fit the cover.
+      if (!edited) return;
       const cover = normalizeLetterCover(currentPage.cover);
       if (
-        blocksMatch &&
         serializeNoteDocument(cover.description_blocks) === content &&
         currentPage.subtitle === subtitle
       ) return;
@@ -410,12 +430,10 @@ export function LetterStudio({
 
   const updateCover = useCallback(
     (update: Partial<LetterCover>) => {
-      const currentUuid = selectedUuidRef.current;
-      if (!currentUuid) return;
-
+      // Cover settings such as page numbers also apply from other pages.
       updatePages((current) =>
         current.map((page) =>
-          page.uuid === currentUuid && page.layout === "cover"
+          page.layout === "cover"
             ? {
                 ...page,
                 cover: { ...normalizeLetterCover(page.cover), ...update },
@@ -491,7 +509,8 @@ export function LetterStudio({
       (item) => item.uuid === selectedUuidRef.current,
     );
     const cover = normalizeLetterCover(page?.cover);
-    const url = cover.hero_image_url;
+    // Re-crop from the whole uploaded image, not the previous crop.
+    const url = cover.hero_image_original_url ?? cover.hero_image_url;
     if (!url) return;
 
     setCoverImageErrors((current) => ({ ...current, hero: undefined }));
@@ -511,6 +530,10 @@ export function LetterStudio({
         initialAspect:
           cover.hero_image_aspect_ratio ?? LETTER_COVER_HERO_ASPECT_RATIO,
         initialAspectLabel: "Current crop",
+        originalUrl: url,
+        initialCrop: cover.hero_image_original_url
+          ? cover.hero_image_crop
+          : null,
       });
     } catch (error) {
       if (source) URL.revokeObjectURL(source);
@@ -537,6 +560,8 @@ export function LetterStudio({
     if (heroInputRef.current) heroInputRef.current.value = "";
     updateCover({
       hero_image_url: null,
+      hero_image_original_url: null,
+      hero_image_crop: null,
       hero_image_aspect_ratio: null,
       hero_image_caption: "",
       hero_image_caption_alignment: "center",
@@ -547,12 +572,24 @@ export function LetterStudio({
   const applyCoverCrop = useCallback(
     async (file: File, metadata: ImageCropMetadata) => {
       const revision = coverHeroRevisionRef.current;
+      const session = coverCrop;
+      if (!session) return;
       setUploadingCoverImage("hero");
       try {
+        // A retry after a failed crop upload reuses the uploaded original.
+        const uploaded = uploadedOriginalRef.current;
+        const originalUrl =
+          session.originalUrl ??
+          (uploaded?.file === session.file
+            ? uploaded.url
+            : await uploadImage(session.file, { toastOnError: false }));
+        uploadedOriginalRef.current = { file: session.file, url: originalUrl };
         const url = await uploadImage(file, { toastOnError: false });
         if (revision !== coverHeroRevisionRef.current) return;
         updateCover({
           hero_image_url: url,
+          hero_image_original_url: originalUrl,
+          hero_image_crop: normalizeLetterCoverImageCrop(metadata.crop),
           hero_image_aspect_ratio: normalizeLetterCoverHeroAspectRatio(
             metadata.aspectRatio,
           ),
@@ -563,7 +600,7 @@ export function LetterStudio({
         );
       }
     },
-    [updateCover, uploadImage],
+    [coverCrop, updateCover, uploadImage],
   );
 
   useEffect(() => () => {
@@ -698,6 +735,7 @@ export function LetterStudio({
 
   if (!selectedPage) return null;
   const pageCannotFit =
+    Boolean(coverFit?.overflow) ||
     saveError instanceof LetterCoverOverflowError ||
     saveError instanceof LetterPageOverflowError;
   const textSize: StudioTextSize = {
@@ -803,6 +841,21 @@ export function LetterStudio({
           data-studio-canvas=""
           className="flex min-h-0 min-w-0 flex-col bg-muted/50 bg-[radial-gradient(color-mix(in_oklab,var(--muted-foreground)_18%,transparent)_1px,transparent_1px)] [background-size:16px_16px]"
         >
+          {coverFit?.overflow && selectedPage.layout === "cover" ? (
+            <div
+              role="status"
+              data-cover-full-banner
+              className="flex shrink-0 items-start gap-2.5 border-b bg-sky-500/10 px-4 py-2.5 text-xs text-sky-950 dark:text-sky-100"
+            >
+              <Info aria-hidden="true" className="mt-px size-4 shrink-0" />
+              <p className="leading-relaxed">
+                <span className="font-medium">The cover is full.</span> The
+                cover image and cover text are already at their smallest.
+                Shorten the cover text, make the title or subheader smaller, or
+                remove the cover image. Downloads are paused until it fits.
+              </p>
+            </div>
+          ) : null}
           <div className="min-h-0 flex-1 p-4 sm:p-8">
             <LetterPageViewport
               canvas={letterExport.canvas}
@@ -816,9 +869,11 @@ export function LetterStudio({
                 canvas={letterExport.canvas}
                 exportUuid={letterExport.uuid}
                 pageTheme={pageTheme}
+                showPageNumbers={showPageNumbers}
                 textScale={selectedTextScale}
                 editable={!selectedIsCoverContinuation}
                 onTitleChange={(title) => {
+                  if (title === (selectedPage.title ?? "")) return;
                   updateSelected({ title, text_scale_mode: "auto" });
                 }}
                 onBlocksChange={(blocks) => updateSelected({ blocks })}
@@ -834,6 +889,7 @@ export function LetterStudio({
                 onUploadFile={uploadImage}
                 onEditorReady={handleEditorReady}
                 onContentApplied={restorePendingSelection}
+                onCoverFitChange={setCoverFit}
                 onHistoryStateChange={setHistoryState}
                 onBlur={() => {
                   commitActiveEditor();
@@ -971,8 +1027,10 @@ export function LetterStudio({
               page={selectedPage}
               isLastPage={selectedIndex === pages.length - 1}
               textSize={textSize}
+              cover={normalizeLetterCover(coverPage?.cover)}
               onLayoutChange={(layout) => updateSelected({ layout })}
-              onSignatureChange={(signature) => updateSelected({ signature })}
+              onCoverChange={updateCover}
+              onEditAuthor={() => coverPage && selectPage(coverPage.uuid)}
             />
           ) : (
             <LetterCoverInspector
@@ -983,6 +1041,7 @@ export function LetterStudio({
               heroInputRef={heroInputRef}
               imageErrors={coverImageErrors}
               onTitleChange={(title) => {
+                if (title === (selectedPage.title ?? "")) return;
                 updateSelected({ title, text_scale_mode: "auto" });
               }}
               onCoverChange={updateCover}
@@ -991,6 +1050,7 @@ export function LetterStudio({
               }
               onCropCoverImage={() => void prepareExistingCoverCrop()}
               onRemoveCoverImage={removeCoverImage}
+              coverFit={coverFit}
             />
           )}
         </aside>
@@ -1002,6 +1062,7 @@ export function LetterStudio({
           source={coverCrop.source}
           file={coverCrop.file}
           aspect={coverCrop.initialAspect}
+          initialCrop={coverCrop.initialCrop}
           maxBytes={MAX_CROPPED_LETTER_IMAGE_BYTES}
           title="Crop cover image"
           description="Choose the area that should appear in the cover image section."

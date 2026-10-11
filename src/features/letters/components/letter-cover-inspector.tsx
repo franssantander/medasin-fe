@@ -37,6 +37,7 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { cn } from "@/lib/utils";
+import type { LetterCoverFit } from "../hooks/use-letter-cover-fit";
 import {
   LETTER_COVER_FONT_SCALE_DEFAULT,
   LETTER_COVER_FONT_SCALE_MAX,
@@ -49,6 +50,7 @@ import {
 } from "../letter-cover";
 import type {
   LetterCover,
+  LetterCoverBylinePlacement,
   LetterCoverCaptionPlacement,
   LetterCoverSection,
   LetterCoverTextAlignment,
@@ -95,6 +97,7 @@ export function LetterCoverInspector({
   onImageChange,
   onCropCoverImage,
   onRemoveCoverImage,
+  coverFit,
 }: {
   page: LetterPage;
   textSize: StudioTextSize;
@@ -107,11 +110,15 @@ export function LetterCoverInspector({
   onImageChange: (kind: CoverImageKind, file?: File) => void;
   onCropCoverImage: () => void;
   onRemoveCoverImage: () => void;
+  /** How the cover on the canvas fitted its text. */
+  coverFit?: LetterCoverFit;
 }) {
   const cover = normalizeLetterCover(page.cover);
-  const reorderableSections = cover.section_order.filter(
-    (section) => section !== "author",
-  );
+  const bylineAtBottom = cover.byline_placement === "bottom";
+  // A byline pinned beside the logo keeps its slot for when it moves back up.
+  const reorderableSections = bylineAtBottom
+    ? cover.section_order.filter((section) => section !== "author")
+    : cover.section_order;
   const coverSensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
@@ -125,12 +132,11 @@ export function LetterCoverInspector({
       (section) => section === over.id,
     );
     if (oldIndex < 0 || newIndex < 0) return;
-    onCoverChange({
-      section_order: [
-        ...arrayMove(reorderableSections, oldIndex, newIndex),
-        "author",
-      ],
-    });
+    const reordered = arrayMove(reorderableSections, oldIndex, newIndex);
+    if (bylineAtBottom) {
+      reordered.splice(cover.section_order.indexOf("author"), 0, "author");
+    }
+    onCoverChange({ section_order: reordered });
   };
   const coverSizesAreDefault =
     cover.subheader_font_scale === LETTER_COVER_FONT_SCALE_DEFAULT &&
@@ -138,7 +144,7 @@ export function LetterCoverInspector({
     cover.body_font_scale === LETTER_COVER_FONT_SCALE_DEFAULT;
 
   return (
-    <Accordion multiple defaultValue={["text", "style"]}>
+    <Accordion multiple defaultValue={["text", "author", "style"]}>
       <InspectorSection value="text" title="Text">
         <label className="flex flex-col gap-1.5 text-sm font-medium">
           Subheader
@@ -159,28 +165,108 @@ export function LetterCoverInspector({
             onChange={(event) => onTitleChange(event.target.value)}
           />
         </label>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
-          <label className="flex flex-col gap-1.5 text-sm font-medium">
-            Author name
-            <Input
-              value={cover.author_name}
-              maxLength={120}
-              onChange={(event) => onCoverChange({ author_name: event.target.value })}
+        <FieldHint>
+          The cover body text is edited directly on the page. Click it to
+          start typing.
+        </FieldHint>
+      </InspectorSection>
+
+      <InspectorSection value="author" title="Author">
+        <InspectorSwitch
+          id={`cover-show-author-${page.uuid}`}
+          label="Show byline"
+          checked={cover.show_author}
+          onCheckedChange={(show_author) => onCoverChange({ show_author })}
+        />
+        {cover.show_author ? (
+          <>
+            <CoverImageControl
+              kind="avatar"
+              label="Avatar"
+              imageUrl={cover.avatar_url}
+              uploading={uploading === "avatar"}
+              error={imageErrors.avatar}
+              inputRef={avatarInputRef}
+              onFile={(file) => onImageChange("avatar", file)}
+              onRemove={() => onCoverChange({ avatar_url: null })}
             />
-          </label>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
+              <label className="flex flex-col gap-1.5 text-sm font-medium">
+                Name
+                <Input
+                  value={cover.author_name}
+                  maxLength={120}
+                  onChange={(event) => onCoverChange({ author_name: event.target.value })}
+                />
+              </label>
+              <label className="flex flex-col gap-1.5 text-sm font-medium">
+                Username
+                <Input
+                  value={cover.author_handle}
+                  maxLength={80}
+                  placeholder="@username"
+                  onChange={(event) => onCoverChange({ author_handle: event.target.value })}
+                />
+              </label>
+            </div>
+          </>
+        ) : null}
+        <InspectorSwitch
+          id={`cover-show-date-${page.uuid}`}
+          label="Show date"
+          checked={cover.show_date}
+          onCheckedChange={(show_date) => onCoverChange({ show_date })}
+        />
+        {cover.show_date ? (
           <label className="flex flex-col gap-1.5 text-sm font-medium">
             Date label
             <Input
               value={cover.date_label}
               maxLength={80}
-              placeholder="September 10 at 10:35 PM"
+              placeholder="Oct 11, 2026"
               onChange={(event) => onCoverChange({ date_label: event.target.value })}
             />
           </label>
-        </div>
+        ) : null}
+        {cover.show_author || cover.show_date ? (
+          <div className="flex flex-col gap-2">
+            <p id={`cover-byline-placement-${page.uuid}`} className="text-sm font-medium">
+              Byline placement
+            </p>
+            <ToggleGroup
+              aria-labelledby={`cover-byline-placement-${page.uuid}`}
+              className="w-full"
+              value={[cover.byline_placement]}
+              variant="outline"
+              size="sm"
+              spacing={0}
+              onValueChange={(value) => {
+                const placement = value[0] as LetterCoverBylinePlacement | undefined;
+                if (placement) onCoverChange({ byline_placement: placement });
+              }}
+            >
+              <ToggleGroupItem className="flex-1" value="top">
+                Under title
+              </ToggleGroupItem>
+              <ToggleGroupItem className="flex-1" value="bottom">
+                Beside logo
+              </ToggleGroupItem>
+            </ToggleGroup>
+            <FieldHint>
+              Beside logo pins the byline to the bottom of the cover, across
+              from the Medasin logo.
+            </FieldHint>
+          </div>
+        ) : null}
+        <InspectorSwitch
+          id={`cover-show-signature-${page.uuid}`}
+          label="Show closing signature"
+          checked={cover.show_signature}
+          onCheckedChange={(show_signature) => onCoverChange({ show_signature })}
+        />
         <FieldHint>
-          The cover body text is edited directly on the page. Click it to
-          start typing.
+          The byline sits on the cover; the closing signature signs off the
+          last page with the same name and username.
         </FieldHint>
       </InspectorSection>
 
@@ -226,16 +312,18 @@ export function LetterCoverInspector({
           </ToggleGroup>
         </div>
 
-        <div className="flex items-center justify-between gap-3">
-          <label htmlFor={`cover-logo-${page.uuid}`} className="text-sm font-medium">
-            Show Medasin logo
-          </label>
-          <Switch
-            id={`cover-logo-${page.uuid}`}
-            checked={cover.show_logo}
-            onCheckedChange={(checked) => onCoverChange({ show_logo: checked })}
-          />
-        </div>
+        <InspectorSwitch
+          id={`cover-logo-${page.uuid}`}
+          label="Show Medasin logo"
+          checked={cover.show_logo}
+          onCheckedChange={(show_logo) => onCoverChange({ show_logo })}
+        />
+        <InspectorSwitch
+          id={`cover-page-numbers-${page.uuid}`}
+          label="Show page numbers"
+          checked={cover.show_page_numbers}
+          onCheckedChange={(show_page_numbers) => onCoverChange({ show_page_numbers })}
+        />
 
         <div className="flex flex-col gap-2">
           <p id={`cover-text-alignment-${page.uuid}`} className="text-sm font-medium">
@@ -246,7 +334,7 @@ export function LetterCoverInspector({
             value={cover.text_alignment}
             onChange={(text_alignment) => onCoverChange({ text_alignment })}
           />
-          <FieldHint>Applies to the cover subheader, title, and body text.</FieldHint>
+          <FieldHint>Applies to the cover subheader, title, byline, and body text.</FieldHint>
         </div>
 
         <div className="flex flex-col gap-2 rounded-lg border bg-muted/20 p-3">
@@ -298,26 +386,23 @@ export function LetterCoverInspector({
             >
               Reset cover sizes
             </ResetButton>
+            {coverFit && coverFit.scale < 1 && !coverFit.overflow ? (
+              <FieldHint>
+                Cover body text shrunk to {Math.round(coverFit.scale * 100)}%
+                to fit the cover.
+              </FieldHint>
+            ) : null}
           </div>
           <FieldHint>
             Overall size scales every cover section; the sliders below it
-            fine-tune each one. Oversized covers shrink to fit. Branding and
-            signatures stay fixed.
+            fine-tune each one. Everything stays on the cover: when it gets
+            full, the image and then the cover body text shrink to fit. The
+            logo stays fixed.
           </FieldHint>
         </div>
       </InspectorSection>
 
       <InspectorSection value="images" title="Images">
-        <CoverImageControl
-          kind="avatar"
-          label="Avatar image"
-          imageUrl={cover.avatar_url}
-          uploading={uploading === "avatar"}
-          error={imageErrors.avatar}
-          inputRef={avatarInputRef}
-          onFile={(file) => onImageChange("avatar", file)}
-          onRemove={() => onCoverChange({ avatar_url: null })}
-        />
         <CoverImageControl
           kind="hero"
           label="Cover image"
@@ -396,8 +481,8 @@ export function LetterCoverInspector({
 
       <InspectorSection value="arrange" title="Arrange">
         <FieldHint>
-          Drag to reorder the cover content. Author details and the Medasin
-          logo stay at the bottom.
+          Drag to reorder the cover content. The Medasin logo stays at the
+          bottom{bylineAtBottom ? ", and the byline is pinned beside it" : ""}.
         </FieldHint>
         <DndContext sensors={coverSensors} collisionDetection={closestCenter} onDragEnd={reorderSections}>
           <SortableContext items={reorderableSections} strategy={verticalListSortingStrategy}>
@@ -410,6 +495,27 @@ export function LetterCoverInspector({
         </DndContext>
       </InspectorSection>
     </Accordion>
+  );
+}
+
+function InspectorSwitch({
+  id,
+  label,
+  checked,
+  onCheckedChange,
+}: {
+  id: string;
+  label: string;
+  checked: boolean;
+  onCheckedChange: (checked: boolean) => void;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <label htmlFor={id} className="text-sm font-medium">
+        {label}
+      </label>
+      <Switch id={id} checked={checked} onCheckedChange={onCheckedChange} />
+    </div>
   );
 }
 

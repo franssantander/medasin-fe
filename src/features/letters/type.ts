@@ -22,6 +22,8 @@ export type LetterCoverTextAlignment = "left" | "center" | "right";
 
 export type LetterCoverCaptionPlacement = "overlay" | "below";
 
+export type LetterCoverBylinePlacement = "top" | "bottom";
+
 export type LetterExportStatus =
   | "queued"
   | "processing"
@@ -50,6 +52,14 @@ export type LetterCoverSection =
   | "author"
   | "hero";
 
+/** A crop area as fractions (0–1) of the original image. */
+export type LetterCoverImageCrop = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
 export type LetterCover = {
   theme: "light" | "dark";
   show_logo: boolean;
@@ -60,9 +70,23 @@ export type LetterCover = {
   body_font_scale: number;
   description_blocks: unknown[];
   author_name: string;
+  author_handle: string;
   date_label: string;
   avatar_url: string | null;
+  /** Byline (avatar, name, and username) on the cover. */
+  show_author: boolean;
+  /** Under the title in the cover order, or pinned beside the logo. */
+  byline_placement: LetterCoverBylinePlacement;
+  show_date: boolean;
+  /** Page numbers on every page after the cover. */
+  show_page_numbers: boolean;
+  /** The author sign-off at the end of the last page. */
+  show_signature: boolean;
   hero_image_url: string | null;
+  /** The uncropped upload, so a later crop can start from the whole image. */
+  hero_image_original_url: string | null;
+  /** Where `hero_image_url` was cut from the original. */
+  hero_image_crop: LetterCoverImageCrop | null;
   hero_image_aspect_ratio: number | null;
   hero_image_caption: string;
   hero_image_caption_alignment: LetterCoverTextAlignment;
@@ -141,7 +165,8 @@ export type LetterPageResponse = {
 
 export type LetterInput = {
   title: string;
-  subtitle: string | null;
+  /** Written by the Studio cover; the editor leaves it out. */
+  subtitle?: string | null;
   content: string;
 };
 

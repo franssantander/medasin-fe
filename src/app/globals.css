@@ -765,8 +765,16 @@ html[data-app-font="inter"] {
 .letter-page-document .note-rich-text .bn-editor {
   padding: 0;
   color: inherit;
-  font-size: var(--letter-page-editor-font-size, 1.72cqw);
-  line-height: 1.55;
+  font-size: var(--letter-page-editor-font-size, 2.7cqw);
+  line-height: 1.6;
+}
+
+/* Section breaks read as a short, quiet rule like a blog post. */
+.letter-page-document .note-rich-text [data-content-type="divider"] hr,
+.letter-cover-description .note-rich-text [data-content-type="divider"] hr {
+  margin: 0.9em auto;
+  max-width: 24%;
+  border-top: max(1px, 0.2cqw) solid color-mix(in oklab, currentColor 22%, transparent);
 }
 
 .letter-page-document .note-rich-text .bn-block-group,
@@ -803,8 +811,26 @@ html[data-app-font="inter"] {
 
 .letter-cover-description .note-rich-text .bn-editor {
   padding: 0;
-  font-size: var(--letter-cover-description-font-size, 1.8cqw);
-  line-height: 1.55;
+  font-size: var(--letter-cover-description-font-size, 2.5cqw);
+  line-height: 1.5;
+}
+
+/* BlockNote animates font-size changes. The cover fit measures text sizes
+   synchronously, so letter pages resize text at once. */
+.letter-page-canvas .bn-block-content {
+  transition-property: background-color, box-shadow;
+}
+
+.letter-page-canvas .bn-block-outer {
+  transition: none;
+}
+
+/* A cover that is full even at its smallest clips the entry with a fade
+   instead of pushing the byline or image off the page. */
+.letter-page-canvas[data-cover-fit="overflow"] .letter-cover-description {
+  min-height: 0;
+  flex-shrink: 1000;
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 4cqh), transparent);
 }
 
 .letter-cover-description .note-rich-text .bn-block-group,
@@ -832,6 +858,19 @@ html[data-app-font="inter"] {
   .bn-block-content {
   justify-content: flex-end !important;
   text-align: right !important;
+}
+
+/* A side bar beside centered or right-aligned text looks detached, so those
+   cover quotes read as italic pull lines instead. */
+.letter-cover-description[data-cover-text-alignment="center"]
+  [data-content-type="quote"]
+  blockquote,
+.letter-cover-description[data-cover-text-alignment="right"]
+  [data-content-type="quote"]
+  blockquote {
+  border-left: 0;
+  padding-left: 0;
+  font-style: italic;
 }
 
 .cover-description-editor .note-rich-text .bn-editor {

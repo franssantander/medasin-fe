@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { useCurrentUserQuery } from "@/features/auth/queries/auth-query";
 import {
   letterKeys,
   useCreateLetterExportMutation,
@@ -34,6 +35,7 @@ export function useLetterStudioExport({
 }) {
   const queryClient = useQueryClient();
   const exportMutation = useCreateLetterExportMutation();
+  const profileImageUrl = useCurrentUserQuery().data?.data.profile_image_url;
   const latestExport = letter.latest_export;
   const letterUuid = letter.uuid;
   const [format, setFormatState] = useState<LetterExportFormat>(
@@ -91,6 +93,7 @@ export function useLetterStudioExport({
         cachedLetter,
         nextFormat,
         previousCoverPage,
+        { avatarUrl: profileImageUrl },
       );
       const response = await exportMutation.mutateAsync({
         letterUuid,
@@ -100,7 +103,7 @@ export function useLetterStudioExport({
       });
       setActiveExportUuid(response.data.uuid);
     },
-    [exportMutation, letter, letterUuid, queryClient],
+    [exportMutation, letter, letterUuid, profileImageUrl, queryClient],
   );
 
   const renderFormat = useCallback(

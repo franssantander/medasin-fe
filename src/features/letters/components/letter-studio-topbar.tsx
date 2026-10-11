@@ -44,7 +44,7 @@ export function LetterStudioTopbar({
           )}
           <span className="hidden sm:inline">Editor</span>
         </Button>
-        <Separator orientation="vertical" className="hidden h-5 md:block" />
+        <Separator orientation="vertical" className="hidden h-5 data-vertical:self-center md:block" />
         <div className="hidden min-w-0 md:grid">
           <p className="truncate text-sm font-medium" title={letterTitle}>
             {letterTitle}

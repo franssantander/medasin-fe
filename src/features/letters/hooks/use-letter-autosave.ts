@@ -14,7 +14,6 @@ export type LetterSaveStatus =
 type UseLetterAutosaveOptions = {
   initialUuid?: string;
   initialTitle: string;
-  initialSubtitle: string | null;
   initialContent: string;
   onCreated: (letter: Letter) => void;
   onSaved: (letter: Letter, created: boolean) => void;
@@ -23,18 +22,15 @@ type UseLetterAutosaveOptions = {
 export function useLetterAutosave({
   initialUuid,
   initialTitle,
-  initialSubtitle,
   initialContent,
   onCreated,
   onSaved,
 }: UseLetterAutosaveOptions) {
   const [title, setTitle] = useState(initialTitle);
-  const [subtitle, setSubtitle] = useState(initialSubtitle ?? "");
   const [content, setContent] = useState(initialContent);
   const [saveStatus, setSaveStatus] = useState<LetterSaveStatus>("idle");
   const [activeUuid, setActiveUuid] = useState(initialUuid);
   const titleRef = useRef(initialTitle);
-  const subtitleRef = useRef(initialSubtitle ?? "");
   const contentRef = useRef(initialContent);
   const activeUuidRef = useRef(initialUuid);
   const lastSavedRef = useRef<Letter | undefined>(undefined);
@@ -56,8 +52,9 @@ export function useLetterAutosave({
 
   const currentInput = useCallback(
     (): LetterInput => ({
+      // The subtitle is the cover text, edited in the Studio; leaving it out
+      // keeps whatever the Studio saved.
       title: titleRef.current.trim() || "Untitled letter",
-      subtitle: subtitleRef.current.trim() || null,
       content: contentRef.current,
     }),
     [],
@@ -151,15 +148,6 @@ export function useLetterAutosave({
     [scheduleSave],
   );
 
-  const updateSubtitle = useCallback(
-    (value: string) => {
-      subtitleRef.current = value;
-      setSubtitle(value);
-      scheduleSave();
-    },
-    [scheduleSave],
-  );
-
   const updateContent = useCallback(
     (value: string) => {
       contentRef.current = value;
@@ -172,13 +160,11 @@ export function useLetterAutosave({
   const replaceSavedLetter = useCallback((letter: Letter) => {
     if (timerRef.current) window.clearTimeout(timerRef.current);
     titleRef.current = letter.title;
-    subtitleRef.current = letter.subtitle ?? "";
     contentRef.current = letter.content;
     activeUuidRef.current = letter.uuid;
     lastSavedRef.current = letter;
     dirtyRef.current = false;
     setTitle(letter.title);
-    setSubtitle(letter.subtitle ?? "");
     setContent(letter.content);
     setActiveUuid(letter.uuid);
     setSaveStatus("saved");
@@ -190,10 +176,8 @@ export function useLetterAutosave({
     flush,
     saveStatus,
     replaceSavedLetter,
-    subtitle,
     title,
     updateContent,
-    updateSubtitle,
     updateTitle,
   };
 }
