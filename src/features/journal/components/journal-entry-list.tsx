@@ -1,28 +1,35 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   BookHeart,
   ChevronDown,
-  Link2,
+  Ellipsis,
   LoaderCircle,
   PanelLeftClose,
   RefreshCw,
-  Trash2,
+  Search,
+  SquarePen,
   Timer,
+  Trash2,
 } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import {
+  JOURNAL_MOOD_DOT,
+  formatDayTile,
+  formatListTimestamp,
+  groupEntriesByDate,
+  journalEntryTitle,
+} from "../journal-utils";
 import type { JournalEntrySummary } from "../type";
 
 type JournalEntryListProps = {
@@ -37,9 +44,9 @@ type JournalEntryListProps = {
   onLoadMore: () => void;
   onNew: () => void;
   onOpen: (uuid: string) => void;
-  onDelete: (uuid: string) => Promise<void>;
+  onRequestDelete: (entry: JournalEntrySummary) => void;
   onRetry: () => void;
-  onClose: () => void;
+  onClose?: () => void;
 };
 
 export function JournalEntryList({
@@ -54,60 +61,46 @@ export function JournalEntryList({
   onLoadMore,
   onNew,
   onOpen,
-  onDelete,
+  onRequestDelete,
   onRetry,
   onClose,
 }: JournalEntryListProps) {
-  const [deleteEntry, setDeleteEntry] = useState<JournalEntrySummary>();
-  const [deletePending, setDeletePending] = useState(false);
-  const [deleteError, setDeleteError] = useState("");
-
-  const requestDelete = (entry: JournalEntrySummary) => {
-    setDeleteError("");
-    setDeleteEntry(entry);
-  };
-
-  const confirmDelete = async () => {
-    if (!deleteEntry) return;
-
-    setDeleteError("");
-    setDeletePending(true);
-    try {
-      await onDelete(deleteEntry.uuid);
-      setDeleteEntry(undefined);
-    } catch (error) {
-      setDeleteError(
-        error instanceof Error
-          ? error.message
-          : "The journal entry could not be deleted.",
-      );
-    } finally {
-      setDeletePending(false);
-    }
-  };
+  const [search, setSearch] = useState("");
+  const query = search.trim().toLocaleLowerCase();
+  const filtered = useMemo(
+    () =>
+      query
+        ? entries.filter((entry) =>
+            [entry.title, entry.content_preview, entry.source?.task_title]
+              .filter(Boolean)
+              .some((value) => value!.toLocaleLowerCase().includes(query)),
+          )
+        : entries,
+    [entries, query],
+  );
+  const groups = useMemo(() => groupEntriesByDate(filtered), [filtered]);
+  const count = total ?? entries.length;
 
   return (
-    <aside className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden border-b bg-muted/30 md:border-r md:border-b-0">
-      <div className="flex items-center justify-between gap-3 border-b px-3 py-3">
-        <div className="min-w-0">
-          <h2 className="font-semibold">Entries</h2>
+    <div className="flex h-full min-h-0 min-w-0 flex-col">
+      <div className="flex shrink-0 items-center gap-2 px-3 pt-3 pb-2">
+        <div className="min-w-0 flex-1">
+          <h2 className="text-sm font-semibold">Entries</h2>
           <p className="text-xs text-muted-foreground">
-            {total === undefined
-              ? `${entries.length} ${entries.length === 1 ? "entry" : "entries"}`
-              : `${total} ${total === 1 ? "entry" : "entries"}`}
+            {count} {count === 1 ? "entry" : "entries"}
           </p>
         </div>
-        <div className="flex items-center gap-1">
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            aria-label="New journal entry"
-            title="New journal entry"
-            onClick={onNew}
-          >
-            <BookHeart />
-          </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          aria-label="New journal entry"
+          title="New journal entry"
+          onClick={onNew}
+        >
+          <SquarePen />
+        </Button>
+        {onClose && (
           <Button
             type="button"
             variant="ghost"
@@ -118,10 +111,29 @@ export function JournalEntryList({
           >
             <PanelLeftClose />
           </Button>
-        </div>
+        )}
       </div>
 
-      <div className="workspace-list-scrollbar max-h-64 min-h-0 min-w-0 overflow-x-hidden overflow-y-auto p-2 md:max-h-none md:flex-1">
+      {entries.length > 0 && (
+        <div className="shrink-0 px-3 pb-2">
+          <div className="relative">
+            <Search
+              className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground"
+              aria-hidden="true"
+            />
+            <Input
+              type="search"
+              value={search}
+              aria-label="Search journal entries"
+              placeholder="Search entries…"
+              className="h-8 border-transparent bg-background/70 pl-8 text-sm shadow-none focus-visible:border-input dark:bg-background/30"
+              onChange={(event) => setSearch(event.target.value)}
+            />
+          </div>
+        </div>
+      )}
+
+      <div className="workspace-list-scrollbar min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-2 pb-3">
         {isLoading ? (
           <JournalEntryListSkeleton />
         ) : isError ? (
@@ -129,36 +141,50 @@ export function JournalEntryList({
             <p className="text-sm text-muted-foreground">
               Journal entries could not be loaded.
             </p>
-            <Button type="button" variant="outline" onClick={onRetry}>
+            <Button type="button" variant="outline" size="sm" onClick={onRetry}>
               <RefreshCw data-icon="inline-start" />
               Try again
             </Button>
           </div>
         ) : entries.length === 0 ? (
-          <div className="grid justify-items-center gap-3 px-3 py-10 text-center">
-            <BookHeart className="size-7 text-muted-foreground" />
-            <p className="text-sm font-medium">A quiet place to begin.</p>
-            <p className="text-sm text-muted-foreground">
-              Write down a thought, a moment, or a reflection.
+          <div className="grid justify-items-center gap-2 px-4 py-12 text-center">
+            <span className="mb-1 flex size-9 items-center justify-center rounded-full bg-background text-muted-foreground">
+              <BookHeart className="size-4" aria-hidden="true" />
+            </span>
+            <p className="text-sm font-medium">
+              A quiet place to begin.
             </p>
-            <Button type="button" size="sm" onClick={onNew}>
-              <BookHeart data-icon="inline-start" />
-              New entry
-            </Button>
+            <p className="text-xs leading-5 text-muted-foreground">
+              Your entries will gather here, one day at a time.
+            </p>
           </div>
+        ) : filtered.length === 0 ? (
+          <p className="px-4 py-10 text-center text-sm text-muted-foreground">
+            No entries match “{search.trim()}”
+            {hasNextPage ? " in the loaded entries." : "."}
+          </p>
         ) : (
-          <div className="grid gap-2">
-            {entries.map((entry) => (
-              <JournalEntryListItem
-                key={entry.uuid}
-                entry={entry}
-                selected={entry.uuid === selectedUuid}
-                onOpen={onOpen}
-                onDelete={requestDelete}
-              />
+          <div className="grid gap-3">
+            {groups.map((group) => (
+              <section key={group.key} aria-label={group.label}>
+                <h3 className="px-2 pt-1 pb-1.5 text-[0.6875rem] font-medium tracking-wider text-muted-foreground uppercase">
+                  {group.label}
+                </h3>
+                <ul className="grid gap-0.5">
+                  {group.entries.map((entry) => (
+                    <JournalEntryListItem
+                      key={entry.uuid}
+                      entry={entry}
+                      selected={entry.uuid === selectedUuid}
+                      onOpen={onOpen}
+                      onDelete={onRequestDelete}
+                    />
+                  ))}
+                </ul>
+              </section>
             ))}
-            {(hasNextPage || isFetchNextPageError) && (
-              <div className="grid gap-2 px-1 pt-2">
+            {!query && (hasNextPage || isFetchNextPageError) && (
+              <div className="grid gap-2 px-1">
                 {isFetchNextPageError && (
                   <p role="alert" className="text-xs text-destructive">
                     More entries could not be loaded.
@@ -167,8 +193,9 @@ export function JournalEntryList({
                 {hasNextPage && (
                   <Button
                     type="button"
-                    variant="outline"
+                    variant="ghost"
                     size="sm"
+                    className="text-muted-foreground"
                     disabled={isFetchingNextPage}
                     onClick={onLoadMore}
                   >
@@ -184,7 +211,7 @@ export function JournalEntryList({
                       ? "Loading…"
                       : isFetchNextPageError
                         ? "Retry loading more"
-                        : "Load more entries"}
+                        : "Load earlier entries"}
                   </Button>
                 )}
               </div>
@@ -192,50 +219,7 @@ export function JournalEntryList({
           </div>
         )}
       </div>
-
-      <Dialog
-        open={Boolean(deleteEntry)}
-        onOpenChange={(open) => {
-          if (!deletePending && !open) setDeleteEntry(undefined);
-        }}
-      >
-        {deleteEntry && (
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Delete journal entry?</DialogTitle>
-              <DialogDescription>
-                “{deleteEntry.title.trim() || "Untitled entry"}” will move to
-                Trash for 30 days. You can restore it from Settings before it
-                expires.
-              </DialogDescription>
-            </DialogHeader>
-            {deleteError && (
-              <p role="alert" className="text-sm text-destructive">
-                {deleteError}
-              </p>
-            )}
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                disabled={deletePending}
-                onClick={() => setDeleteEntry(undefined)}
-              >
-                Cancel
-              </Button>
-              <Button
-                type="button"
-                variant="destructive"
-                disabled={deletePending}
-                onClick={() => void confirmDelete()}
-              >
-                {deletePending ? "Deleting…" : "Delete entry"}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        )}
-      </Dialog>
-    </aside>
+    </div>
   );
 }
 
@@ -250,48 +234,61 @@ function JournalEntryListItem({
   onOpen: (uuid: string) => void;
   onDelete: (entry: JournalEntrySummary) => void;
 }) {
-  const title = entry.title.trim() || "Untitled entry";
-  const preview = entry.content_preview.trim() || "No reflection text yet.";
+  const title = journalEntryTitle(entry.title);
+  const preview = entry.content_preview.trim();
+  const tile = formatDayTile(entry.created_at ?? entry.updated_at);
+  const mood = entry.source?.mood;
 
   return (
-    <div
+    <li
       className={cn(
-        "group flex min-w-0 w-full items-start gap-2 rounded-lg border p-3 transition-colors hover:bg-background/80",
-        selected && "border-primary/40 bg-background shadow-xs",
+        "group relative flex min-w-0 items-start gap-3 rounded-lg px-2 py-2 transition-colors hover:bg-background/80 dark:hover:bg-muted/50",
+        selected && "bg-background shadow-xs dark:bg-muted",
       )}
     >
+      <span
+        aria-hidden="true"
+        className={cn(
+          "flex w-9 shrink-0 flex-col items-center rounded-md bg-muted/70 py-1 leading-none dark:bg-muted/50",
+          selected && "bg-foreground/5 dark:bg-foreground/10",
+        )}
+      >
+        <span className="text-[0.625rem] font-medium text-muted-foreground uppercase">
+          {tile.weekday}
+        </span>
+        <span className="mt-0.5 text-sm font-semibold tabular-nums">
+          {tile.day}
+        </span>
+      </span>
       <button
         type="button"
         aria-current={selected ? "page" : undefined}
-        className="flex min-w-0 flex-1 flex-col gap-2 rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+        className="flex min-w-0 flex-1 flex-col gap-0.5 rounded-sm text-left outline-none after:absolute after:inset-0 after:rounded-lg focus-visible:after:ring-2 focus-visible:after:ring-ring/60"
         onClick={() => onOpen(entry.uuid)}
       >
-        <span className="flex min-w-0 items-start gap-2">
-          <BookHeart
-            className={cn(
-              "mt-0.5 size-4 shrink-0 text-muted-foreground",
-              selected && "text-foreground",
-            )}
-            aria-hidden="true"
-          />
-          <span className="min-w-0 flex-1 truncate text-sm font-semibold">
-            {title}
-          </span>
-        </span>
-        <span className="line-clamp-2 text-sm leading-5 text-muted-foreground">
-          {preview}
-        </span>
-        <span className="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1 text-xs text-muted-foreground">
-          {entry.source && (
-            <Badge variant="secondary" className="max-w-full">
-              <Timer data-icon="inline-start" />
-              Focus reflection
-            </Badge>
+        <span className="truncate pr-6 text-sm font-medium">{title}</span>
+        <span
+          className={cn(
+            "truncate text-xs text-muted-foreground",
+            !preview && "italic opacity-70",
           )}
-          {entry.resources.length > 0 && (
+        >
+          {preview || "Nothing written yet"}
+        </span>
+        <span className="mt-1 flex min-w-0 items-center gap-2.5 text-[0.6875rem] text-muted-foreground">
+          {entry.source && (
             <span className="inline-flex items-center gap-1">
-              <Link2 className="size-3.5" aria-hidden="true" />
-              {entry.resources.length}
+              <Timer className="size-3" aria-hidden="true" />
+              Focus
+            </span>
+          )}
+          {mood && (
+            <span className="inline-flex items-center gap-1 capitalize">
+              <span
+                className={cn("size-1.5 rounded-full", JOURNAL_MOOD_DOT[mood])}
+                aria-hidden="true"
+              />
+              {mood}
             </span>
           )}
           {entry.updated_at && (
@@ -305,56 +302,47 @@ function JournalEntryListItem({
           )}
         </span>
       </button>
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon-sm"
-        className="shrink-0 text-muted-foreground hover:text-destructive"
-        aria-label={`Delete ${title}`}
-        title={`Delete ${title}`}
-        onClick={() => onDelete(entry)}
-      >
-        <Trash2 />
-      </Button>
-    </div>
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          render={
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-xs"
+              className={cn(
+                "absolute top-1.5 right-1.5 z-[1] text-muted-foreground pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 pointer-fine:focus-visible:opacity-100 pointer-fine:data-popup-open:opacity-100",
+                selected && "pointer-fine:opacity-100",
+              )}
+              aria-label={`Actions for ${title}`}
+            />
+          }
+        >
+          <Ellipsis />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent side="bottom" align="end" className="min-w-40">
+          <DropdownMenuItem destructive onClick={() => onDelete(entry)}>
+            <Trash2 />
+            Delete
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </li>
   );
 }
 
 function JournalEntryListSkeleton() {
   return (
-    <div className="grid gap-2" aria-label="Loading journal entries">
-      {[1, 2, 3, 4].map((item) => (
-        <div key={item} className="grid gap-2 rounded-lg border p-3">
-          <Skeleton className="h-4 w-3/4" />
-          <div className="grid gap-1">
+    <div className="grid gap-1 px-1" aria-label="Loading journal entries">
+      {[1, 2, 3, 4, 5].map((item) => (
+        <div key={item} className="flex items-start gap-3 rounded-lg px-1 py-2">
+          <Skeleton className="h-9 w-9 shrink-0 rounded-md" />
+          <div className="grid flex-1 gap-1.5">
+            <Skeleton className="h-3.5 w-3/4" />
             <Skeleton className="h-3 w-full" />
-            <Skeleton className="h-3 w-2/3" />
+            <Skeleton className="h-2.5 w-1/3" />
           </div>
-          <Skeleton className="h-3 w-1/3" />
         </div>
       ))}
     </div>
-  );
-}
-
-function formatListTimestamp(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-
-  const now = new Date();
-  const sameDay =
-    date.getFullYear() === now.getFullYear() &&
-    date.getMonth() === now.getMonth() &&
-    date.getDate() === now.getDate();
-
-  if (sameDay) {
-    return new Intl.DateTimeFormat(undefined, {
-      hour: "numeric",
-      minute: "2-digit",
-    }).format(date);
-  }
-
-  return new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(
-    date,
   );
 }

@@ -1,12 +1,22 @@
 "use client";
 
 import { useQueryClient } from "@tanstack/react-query";
-import { PanelLeftOpen, Plus, RefreshCw } from "lucide-react";
+import {
+  PanelLeft,
+  PanelLeftOpen,
+  RefreshCw,
+  SquarePen,
+} from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useCallback, useMemo, useRef, useState } from "react";
-import PageHeader from "@/components/shared/page-header";
+import { useCallback, useMemo, useRef, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
-import { Card, CardDescription, CardTitle } from "@/components/ui/card";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import {
@@ -17,6 +27,10 @@ import {
   useJournalEntryQuery,
 } from "../queries/journal-query";
 import type { JournalEntry, JournalEntrySummary } from "../type";
+import {
+  JournalDeleteDialog,
+  type JournalDeleteTarget,
+} from "./journal-delete-dialog";
 import { JournalEntryEditor } from "./journal-entry-editor";
 import { JournalEntryList } from "./journal-entry-list";
 
@@ -35,7 +49,9 @@ export function JournalWorkspace({
   const deleteMutation = useDeleteJournalEntryMutation();
   const [selection, setSelection] = useState<JournalSelection>();
   const [listOpen, setListOpen] = useState(true);
+  const [sheetOpen, setSheetOpen] = useState(false);
   const [draftKey, setDraftKey] = useState(0);
+  const [deleteTarget, setDeleteTarget] = useState<JournalDeleteTarget>();
   const deleteFlushRef = useRef<(() => Promise<void>) | null>(null);
 
   const registerDeleteFlush = useCallback(
@@ -70,6 +86,7 @@ export function JournalWorkspace({
   const openEntry = useCallback(
     (uuid: string) => {
       setSelection({ kind: "entry", uuid });
+      setSheetOpen(false);
       router.replace(`/journal?entry=${encodeURIComponent(uuid)}`, {
         scroll: false,
       });
@@ -81,6 +98,7 @@ export function JournalWorkspace({
     const nextKey = draftKey + 1;
     setDraftKey(nextKey);
     setSelection({ kind: "draft", key: nextKey });
+    setSheetOpen(false);
     router.replace("/journal", { scroll: false });
   }, [draftKey, router]);
 
@@ -98,6 +116,11 @@ export function JournalWorkspace({
     },
     [queryClient],
   );
+
+  const requestDelete = useCallback((target: JournalDeleteTarget) => {
+    setSheetOpen(false);
+    setDeleteTarget(target);
+  }, []);
 
   const handleDelete = useCallback(
     async (uuid: string) => {
@@ -132,37 +155,32 @@ export function JournalWorkspace({
 
   if (entriesQuery.isLoading) {
     return (
-      <div className="flex h-full min-h-0 min-w-0 flex-col gap-5">
-        <PageHeader
-          title="Journal"
-          description="Keep a private record of the moments, ideas, and reflections that matter."
-        />
-        <Skeleton className="min-h-0 flex-1 rounded-xl" />
-      </div>
+      <JournalShell>
+        <JournalFrameSkeleton />
+      </JournalShell>
     );
   }
 
   if (entriesQuery.isError && !entriesQuery.data) {
     return (
-      <div className="flex h-full min-h-0 min-w-0 flex-col gap-5">
-        <PageHeader
-          title="Journal"
-          description="Keep a private record of the moments, ideas, and reflections that matter."
-        />
-        <Card className="py-0">
-          <div className="grid justify-items-center gap-3 px-6 py-12 text-center">
-            <CardTitle>Journal entries could not be loaded</CardTitle>
-            <CardDescription>Check your connection and try again.</CardDescription>
-            <Button
-              variant="outline"
-              onClick={() => void entriesQuery.refetch()}
-            >
-              <RefreshCw data-icon="inline-start" />
-              Try again
-            </Button>
-          </div>
-        </Card>
-      </div>
+      <JournalShell>
+        <div className="grid flex-1 place-content-center justify-items-center gap-2 rounded-xl border bg-card px-6 py-12 text-center">
+          <h1 className="text-sm text-muted-foreground">Journal</h1>
+          <p className="text-base font-semibold">
+            Journal entries could not be loaded
+          </p>
+          <p className="text-sm text-muted-foreground">
+            Check your connection and try again.
+          </p>
+          <Button
+            variant="outline"
+            onClick={() => void entriesQuery.refetch()}
+          >
+            <RefreshCw data-icon="inline-start" />
+            Try again
+          </Button>
+        </div>
+      </JournalShell>
     );
   }
 
@@ -172,110 +190,219 @@ export function JournalWorkspace({
       ? loadedEntry
       : undefined;
 
-  return (
-    <div className="flex h-full min-h-0 min-w-0 flex-col gap-5">
-      <PageHeader
-        title="Journal"
-        description="Keep a private record of the moments, ideas, and reflections that matter."
-        action={
-          <Button onClick={startDraft}>
-            <Plus data-icon="inline-start" />
-            New entry
-          </Button>
-        }
-      />
+  const list = (inSheet: boolean) => (
+    <JournalEntryList
+      entries={entries}
+      selectedUuid={selectedUuid}
+      total={total}
+      hasNextPage={Boolean(entriesQuery.hasNextPage)}
+      isError={entriesQuery.isError && !entriesQuery.data}
+      isFetchNextPageError={entriesQuery.isFetchNextPageError}
+      isFetchingNextPage={entriesQuery.isFetchingNextPage}
+      isLoading={entriesQuery.isLoading}
+      onLoadMore={() => void entriesQuery.fetchNextPage()}
+      onNew={startDraft}
+      onOpen={openEntry}
+      onRequestDelete={(entry) =>
+        requestDelete({ uuid: entry.uuid, title: entry.title })
+      }
+      onRetry={() => void entriesQuery.refetch()}
+      onClose={inSheet ? undefined : () => setListOpen(false)}
+    />
+  );
 
-      <div className="flex min-h-0 min-w-0 flex-1">
-        <div
-          className={cn(
-            "grid h-full min-h-0 min-w-0 flex-1 overflow-hidden rounded-xl border bg-card md:grid-rows-[minmax(0,1fr)]",
-            listOpen
-              ? "grid-rows-[auto_minmax(0,1fr)] md:grid-cols-[23rem_minmax(0,1fr)]"
-              : "grid-rows-[minmax(0,1fr)] md:grid-cols-[minmax(0,1fr)]",
-          )}
+  const leading = (
+    <>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-sm"
+        className="md:hidden"
+        aria-label="Show entries"
+        title="Show entries"
+        onClick={() => setSheetOpen(true)}
+      >
+        <PanelLeft />
+      </Button>
+      {!listOpen && (
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          className="hidden md:inline-flex"
+          aria-label="Open entries list"
+          title="Open entries list"
+          onClick={() => setListOpen(true)}
         >
-          {listOpen && (
-            <JournalEntryList
-              entries={entries}
-              selectedUuid={selectedUuid}
-              total={total}
-              hasNextPage={Boolean(entriesQuery.hasNextPage)}
-              isError={entriesQuery.isError && !entriesQuery.data}
-              isFetchNextPageError={entriesQuery.isFetchNextPageError}
-              isFetchingNextPage={entriesQuery.isFetchingNextPage}
-              isLoading={entriesQuery.isLoading}
-              onLoadMore={() => void entriesQuery.fetchNextPage()}
-              onNew={startDraft}
-              onOpen={openEntry}
-              onDelete={handleDelete}
-              onRetry={() => void entriesQuery.refetch()}
-              onClose={() => setListOpen(false)}
+          <PanelLeftOpen />
+        </Button>
+      )}
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-sm"
+        className={cn(listOpen && "md:hidden")}
+        aria-label="New entry"
+        title="New entry"
+        onClick={startDraft}
+      >
+        <SquarePen />
+      </Button>
+    </>
+  );
+
+  return (
+    <JournalShell>
+      <div
+        className={cn(
+          "grid h-full min-h-0 min-w-0 flex-1 grid-rows-[minmax(0,1fr)] overflow-hidden rounded-xl border bg-card",
+          listOpen && "md:grid-cols-[18rem_minmax(0,1fr)]",
+        )}
+      >
+        {listOpen && (
+          <aside
+            aria-label="Journal entries"
+            className="hidden min-h-0 min-w-0 border-r bg-muted/40 md:block dark:bg-muted/20"
+          >
+            {list(false)}
+          </aside>
+        )}
+        <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
+          <SheetContent
+            side="left"
+            showCloseButton={false}
+            className="w-80 gap-0 bg-muted p-0 dark:bg-card"
+          >
+            <SheetHeader className="sr-only">
+              <SheetTitle>Journal entries</SheetTitle>
+              <SheetDescription>
+                Browse and open your journal entries.
+              </SheetDescription>
+            </SheetHeader>
+            {list(true)}
+          </SheetContent>
+        </Sheet>
+
+        <section
+          aria-label="Journal entry editor"
+          className="relative flex min-h-0 min-w-0 flex-col overflow-hidden bg-card"
+        >
+          {derivedSelection.kind === "draft" ? (
+            <JournalEntryEditor
+              key={`draft-${derivedSelection.key}`}
+              draftKey={derivedSelection.key}
+              leading={leading}
+              onCreated={handleCreated}
+              onSaved={handleSaved}
+              onRegisterDeleteFlush={registerDeleteFlush}
+              onRequestDelete={requestDelete}
+            />
+          ) : detailQuery.isLoading ? (
+            <EditorStateFrame leading={leading}>
+              <div className="grid content-start gap-3">
+                <Skeleton className="h-3 w-48" />
+                <Skeleton className="h-9 w-2/3" />
+                <Skeleton className="h-4 w-1/2" />
+                <div className="mt-6 grid gap-3">
+                  <Skeleton className="h-4 w-full" />
+                  <Skeleton className="h-4 w-11/12" />
+                  <Skeleton className="h-4 w-4/5" />
+                </div>
+              </div>
+            </EditorStateFrame>
+          ) : (detailQuery.isError && !detailQuery.data) || !selectedEntry ? (
+            <EditorStateFrame leading={leading}>
+              <div className="grid justify-items-center gap-3 py-16 text-center">
+                <p className="text-base font-semibold">
+                  Entry could not be opened
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  This journal entry may have been removed or is unavailable.
+                </p>
+                <Button
+                  variant="outline"
+                  onClick={() => void detailQuery.refetch()}
+                >
+                  <RefreshCw data-icon="inline-start" />
+                  Try again
+                </Button>
+              </div>
+            </EditorStateFrame>
+          ) : (
+            <JournalEntryEditor
+              key={selectedEntry.uuid}
+              entry={selectedEntry}
+              draftKey={draftKey}
+              leading={leading}
+              onCreated={handleCreated}
+              onSaved={handleSaved}
+              onRegisterDeleteFlush={registerDeleteFlush}
+              onRequestDelete={requestDelete}
             />
           )}
+        </section>
+      </div>
 
-          <section
-            aria-label="Journal entry editor"
-            className={cn(
-              "relative flex min-h-0 min-w-0 justify-center overflow-hidden bg-card p-4 sm:p-6",
-              !listOpen && "pt-14 sm:pt-16",
-            )}
-          >
-            {!listOpen && (
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                className="absolute top-4 left-4 z-10 sm:top-6 sm:left-6"
-                aria-label="Open entries list"
-                title="Open entries list"
-                onClick={() => setListOpen(true)}
-              >
-                <PanelLeftOpen />
-              </Button>
-            )}
-            <div className="h-full min-h-0 min-w-0 w-full flex-1">
-              {derivedSelection.kind === "draft" ? (
-                <JournalEntryEditor
-                  key={`draft-${derivedSelection.key}`}
-                  draftKey={derivedSelection.key}
-                  onCreated={handleCreated}
-                  onSaved={handleSaved}
-                  onRegisterDeleteFlush={registerDeleteFlush}
-                />
-              ) : detailQuery.isLoading ? (
-                <div className="grid h-full content-start gap-4">
-                  <Skeleton className="h-10 w-2/3" />
-                  <Skeleton className="h-6 w-1/3" />
-                  <Skeleton className="h-32 w-full" />
-                  <Skeleton className="min-h-96 w-full" />
-                </div>
-              ) : (detailQuery.isError && !detailQuery.data) || !selectedEntry ? (
-                <Card className="py-0">
-                  <div className="grid justify-items-center gap-3 px-6 py-12 text-center">
-                    <CardTitle>Entry could not be opened</CardTitle>
-                    <CardDescription>
-                      This journal entry may have been removed or is unavailable.
-                    </CardDescription>
-                    <Button
-                      variant="outline"
-                      onClick={() => void detailQuery.refetch()}
-                    >
-                      <RefreshCw data-icon="inline-start" />
-                      Try again
-                    </Button>
-                  </div>
-                </Card>
-              ) : (
-                <JournalEntryEditor
-                  key={selectedEntry.uuid}
-                  entry={selectedEntry}
-                  draftKey={draftKey}
-                  onCreated={handleCreated}
-                  onSaved={handleSaved}
-                  onRegisterDeleteFlush={registerDeleteFlush}
-                />
-              )}
+      <JournalDeleteDialog
+        target={deleteTarget}
+        onClose={() => setDeleteTarget(undefined)}
+        onConfirm={handleDelete}
+      />
+    </JournalShell>
+  );
+}
+
+function JournalShell({ children }: { children: ReactNode }) {
+  return (
+    <div className="flex h-full min-h-0 min-w-0 flex-col">{children}</div>
+  );
+}
+
+function EditorStateFrame({
+  leading,
+  children,
+}: {
+  leading: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="flex h-12 shrink-0 items-center gap-2 border-b px-2 sm:px-3">
+        {leading}
+        <h1 className="px-1 text-sm text-muted-foreground">Journal</h1>
+      </div>
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="journal-page-header">{children}</div>
+      </div>
+    </div>
+  );
+}
+
+function JournalFrameSkeleton() {
+  return (
+    <div className="grid h-full min-h-0 min-w-0 flex-1 grid-rows-[minmax(0,1fr)] overflow-hidden rounded-xl border bg-card md:grid-cols-[18rem_minmax(0,1fr)]">
+      <div className="hidden content-start gap-2 border-r bg-muted/40 p-3 md:grid dark:bg-muted/20">
+        <Skeleton className="mb-1 h-5 w-24" />
+        <Skeleton className="mb-3 h-8 w-full" />
+        {[1, 2, 3, 4].map((item) => (
+          <div key={item} className="flex items-start gap-3 py-1.5">
+            <Skeleton className="size-9 shrink-0 rounded-md" />
+            <div className="grid flex-1 gap-1.5">
+              <Skeleton className="h-3.5 w-3/4" />
+              <Skeleton className="h-3 w-full" />
             </div>
-          </section>
+          </div>
+        ))}
+      </div>
+      <div className="flex min-h-0 flex-col">
+        <div className="flex h-12 shrink-0 items-center border-b px-3">
+          <h1 className="px-1 text-sm text-muted-foreground">Journal</h1>
+        </div>
+        <div className="journal-page-header grid content-start gap-3">
+          <Skeleton className="h-3 w-48" />
+          <Skeleton className="h-9 w-2/3" />
+          <Skeleton className="mt-4 h-4 w-1/2" />
+          <Skeleton className="h-4 w-1/3" />
         </div>
       </div>
     </div>
