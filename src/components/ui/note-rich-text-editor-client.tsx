@@ -42,13 +42,24 @@ import "@blocknote/shadcn/style.css";
 import {
   BellRing,
   Bookmark,
+  Check,
+  ChevronDown,
   Crop,
   FilePlus2,
+  Heading1,
+  Heading2,
+  Heading3,
   ImagePlus,
   Link2,
+  List,
+  ListChecks,
+  ListOrdered,
   LoaderCircle,
   Minus,
   NotebookTabs,
+  Pilcrow,
+  TextQuote,
+  type LucideIcon,
 } from "lucide-react";
 import {
   useCallback,
@@ -72,6 +83,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import {
   ImageCropDialog,
@@ -196,12 +215,144 @@ function NoteFormattingToolbar({
 
   return (
     <FormattingToolbar>
-      {defaultItems.slice(0, 1)}
+      {allowBlockInsertion ? (
+        <LetterBlockTypeMenu key="letterBlockTypeMenu" />
+      ) : (
+        defaultItems.slice(0, 1)
+      )}
       {allowBlockInsertion && <LetterInsertToolbarButtons />}
       {defaultItems.slice(1, 4)}
       {allowImageCrop && <ImageCropToolbarButton onCropImage={onCropImage} />}
       {defaultItems.slice(4)}
     </FormattingToolbar>
+  );
+}
+
+type LetterBlockType = {
+  label: string;
+  type: "paragraph" | "heading" | "quote" | "bulletListItem" | "numberedListItem" | "checkListItem";
+  level?: 1 | 2 | 3;
+  icon: LucideIcon;
+};
+
+const letterBlockTypeGroups: { label: string; items: LetterBlockType[] }[] = [
+  {
+    label: "Text",
+    items: [
+      { label: "Paragraph", type: "paragraph", icon: Pilcrow },
+      { label: "Heading 1", type: "heading", level: 1, icon: Heading1 },
+      { label: "Heading 2", type: "heading", level: 2, icon: Heading2 },
+      { label: "Heading 3", type: "heading", level: 3, icon: Heading3 },
+      { label: "Quote", type: "quote", icon: TextQuote },
+    ],
+  },
+  {
+    label: "Lists",
+    items: [
+      { label: "Bullet list", type: "bulletListItem", icon: List },
+      { label: "Numbered list", type: "numberedListItem", icon: ListOrdered },
+      { label: "Check list", type: "checkListItem", icon: ListChecks },
+    ],
+  },
+];
+const letterBlockTypes = letterBlockTypeGroups.flatMap((group) => group.items);
+
+function LetterBlockTypeMenu() {
+  const editor = useBlockNoteEditor<
+    typeof noteEditorSchema.blockSchema,
+    typeof noteEditorSchema.inlineContentSchema,
+    typeof noteEditorSchema.styleSchema
+  >();
+  const current = useEditorState({
+    editor,
+    selector: ({ editor }) => {
+      if (!editor.isEditable) return undefined;
+      const block = (editor.getSelection()?.blocks ?? [
+        editor.getTextCursorPosition().block,
+      ])[0];
+      if (!block) return undefined;
+      const level =
+        block.type === "heading" && !block.props.isToggleable
+          ? block.props.level
+          : undefined;
+
+      return letterBlockTypes.find(
+        (item) => item.type === block.type && item.level === level,
+      );
+    },
+  });
+
+  if (!current) return null;
+
+  const CurrentIcon = current.icon;
+  const apply = (item: LetterBlockType) => {
+    const blocks = editor.getSelection()?.blocks ?? [
+      editor.getTextCursorPosition().block,
+    ];
+    editor.transact(() => {
+      for (const block of blocks) {
+        editor.updateBlock(
+          block,
+          item.type === "heading"
+            ? { type: "heading", props: { level: item.level, isToggleable: false } }
+            : { type: item.type },
+        );
+      }
+    });
+  };
+
+  return (
+    <DropdownMenu
+      onOpenChange={(open) => {
+        if (!open) requestAnimationFrame(() => editor.focus());
+      }}
+    >
+      <DropdownMenuTrigger
+        render={
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            aria-label="Text style"
+            className="h-8 w-36 justify-start gap-2 rounded-full px-3 font-normal"
+          />
+        }
+      >
+        <CurrentIcon className="text-muted-foreground" />
+        <span className="truncate">{current.label}</span>
+        <ChevronDown className="ml-auto text-muted-foreground" />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        side="bottom"
+        align="start"
+        className="w-56"
+        finalFocus={false}
+      >
+        {letterBlockTypeGroups.map((group, index) => (
+          <DropdownMenuGroup key={group.label}>
+            {index > 0 && <DropdownMenuSeparator />}
+            <div
+              aria-hidden="true"
+              className="px-2.5 pt-1.5 pb-1 text-xs font-medium text-muted-foreground"
+            >
+              {group.label}
+            </div>
+            {group.items.map((item) => {
+              const Icon = item.icon;
+              const selected = item === current;
+
+              return (
+                <DropdownMenuItem key={item.label} onClick={() => apply(item)}>
+                  <Icon className="text-muted-foreground" />
+                  <span className="flex-1">{item.label}</span>
+                  {selected && <Check aria-label="Current style" />}
+                </DropdownMenuItem>
+              );
+            })}
+          </DropdownMenuGroup>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
@@ -565,20 +716,15 @@ function isEmptyTrailingParagraph(block: TrailingParagraphBlock) {
 
 function redundantTrailingParagraphIds(
   blocks: readonly TrailingParagraphBlock[],
-  activeBlockId?: string,
 ) {
   let tailStart = blocks.length;
   while (tailStart > 0 && isEmptyTrailingParagraph(blocks[tailStart - 1])) {
     tailStart -= 1;
   }
 
-  const trailing = blocks.slice(tailStart);
-  if (trailing.length <= 1) return [];
-
-  const keptId = trailing.some((block) => block.id === activeBlockId)
-    ? activeBlockId
-    : trailing[trailing.length - 1].id;
-  return trailing.filter((block) => block.id !== keptId).map((block) => block.id);
+  return blocks
+    .slice(tailStart, -1)
+    .map((block) => block.id);
 }
 
 export function NoteRichTextEditorClient({
@@ -880,23 +1026,17 @@ export function NoteRichTextEditorClient({
     };
 
     if (isLetterComposer) {
-      queueMicrotask(() => {
-        if (applyingContentRef.current) return;
-        const blocks = editor.document;
-        const activeBlockId =
-          editor.prosemirrorView.hasFocus() && editor.prosemirrorState.selection.empty
-            ? editor.getTextCursorPosition().block.id
-            : undefined;
-        const redundantIds = redundantTrailingParagraphIds(blocks, activeBlockId);
-        if (redundantIds.length) {
-          editor.transact((transaction) => {
-            transaction.setMeta("addToHistory", false);
-            editor.removeBlocks(redundantIds);
-          });
-          return;
-        }
-        publish(serializeNoteDocument(blocks));
-      });
+      // Blank lines at the end stay editable while writing, but only one is
+      // saved, so Enter never fights the caret and pages get no blank tail.
+      const blocks = editor.document;
+      const redundantIds = new Set(redundantTrailingParagraphIds(blocks));
+      publish(
+        serializeNoteDocument(
+          redundantIds.size
+            ? blocks.filter((block) => !redundantIds.has(block.id))
+            : blocks,
+        ),
+      );
       return;
     }
 

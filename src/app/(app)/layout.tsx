@@ -8,11 +8,13 @@ import { useRoleGate } from "@/features/auth/hooks/use-role-gate";
 import { AppHeader } from "@/features/app-shell/components/app-header";
 import { appNavigationItems } from "@/features/app-shell/components/app-navigation";
 import { AppSidebar } from "@/features/app-shell/components/app-sidebar";
+import { isImmersiveRoute } from "@/features/app-shell/immersive-routes";
 import { useSidebar } from "@/features/app-shell/hooks/use-sidebar";
 import { useAppFont } from "@/features/settings/hooks/use-app-font";
 import type { CurrentUser } from "@/features/auth/type";
 import { FocusSessionBar } from "@/features/focus/components/focus-session-bar";
 import { FocusSessionProvider, useFocusView } from "@/features/focus/providers/focus-session-provider";
+import { cn } from "@/lib/utils";
 
 function AppLoadingSkeleton() {
   return (
@@ -60,12 +62,13 @@ export default function AppLayout({
 function AppShell({ currentUser, children }: { currentUser: CurrentUser; children: React.ReactNode }) {
   const pathname = usePathname();
   const { quiet } = useFocusView();
+  const immersive = isImmersiveRoute(pathname);
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const { isCollapsed, toggleSidebar } = useSidebar();
 
   return (
     <div id="app-shell" className="flex h-dvh overflow-hidden bg-background">
-      {!quiet && <AppSidebar
+      {!quiet && !immersive && <AppSidebar
         pathname={pathname}
         isCollapsed={isCollapsed}
         onToggle={toggleSidebar}
@@ -79,9 +82,15 @@ function AppShell({ currentUser, children }: { currentUser: CurrentUser; childre
           isMobileNavOpen={isMobileNavOpen}
           onOpenMobileNav={() => setIsMobileNavOpen(true)}
           quiet={quiet}
+          hidden={immersive}
         />
-        <FocusSessionBar pathname={pathname} />
-        <main className="workspace-list-scrollbar relative min-h-0 flex-1 overflow-y-auto bg-app-content p-4 sm:p-6">
+        {!immersive && <FocusSessionBar pathname={pathname} />}
+        <main
+          className={cn(
+            "workspace-list-scrollbar relative min-h-0 flex-1 bg-app-content",
+            immersive ? "overflow-hidden bg-background" : "overflow-y-auto p-4 sm:p-6",
+          )}
+        >
           {children}
         </main>
       </div>

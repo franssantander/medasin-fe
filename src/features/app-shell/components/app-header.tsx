@@ -33,6 +33,8 @@ type AppHeaderProps = {
   isMobileNavOpen: boolean;
   onOpenMobileNav: () => void;
   quiet: boolean;
+  /** Hides the header for immersive routes while keeping reminder toasts. */
+  hidden?: boolean;
 };
 
 function ProfileMenu({ user }: { user?: CurrentUser }) {
@@ -111,9 +113,12 @@ export function AppHeader({
   isMobileNavOpen,
   onOpenMobileNav,
   quiet,
+  hidden = false,
 }: AppHeaderProps) {
+  const concealed = quiet || hidden;
+
   return (
-    <header inert={quiet} aria-hidden={quiet || undefined} className={cn("relative z-20 flex h-14 shrink-0 items-center gap-2 border-b border-border bg-background px-2 sm:px-6", quiet && "hidden")}>
+    <header inert={concealed} aria-hidden={concealed || undefined} className={cn("relative z-20 flex h-14 shrink-0 items-center gap-2 border-b border-border bg-background px-2 sm:px-6", concealed && "hidden")}>
       <div className="flex min-w-0 flex-1 items-center gap-2">
         <Button
           id="app-navigation-trigger"
@@ -145,7 +150,7 @@ export function AppHeader({
             Medasin
           </span>
         </Link>
-        {!quiet && <GlobalSearch userId={currentUser?.id} />}
+        {!concealed && <GlobalSearch userId={currentUser?.id} />}
       </div>
       <div className="flex shrink-0 items-center justify-end gap-3">
         <PlanNotifications userId={currentUser?.id} toastsEnabled={!quiet} />

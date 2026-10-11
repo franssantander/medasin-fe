@@ -130,14 +130,12 @@ async function fixture(
     } else data = [];
     await route.fulfill({ json: { data, status: 200, message: "Saved" } });
   });
-  await page.goto("/letters?letter=letter-test");
-  if (format !== "portrait") {
-    await page.getByRole("button", { name: "Preview pages" }).click();
-    const formatSelect = page.getByRole("combobox", { name: "Export format" });
-    await expect(formatSelect).toBeEnabled({ timeout: 60_000 });
-    await formatSelect.click();
-    await page.getByRole("option", { name: new RegExp(LETTER_EXPORT_FORMATS[format].shortLabel) }).click();
-    await expect(page.getByText(new RegExp(`pages · ${LETTER_EXPORT_FORMATS[format].shortLabel}`))).toBeVisible({ timeout: 60_000 });
+  if (format === "portrait") {
+    await page.goto("/letters/letter-test");
+  } else {
+    await page.goto(`/letters/letter-test/studio?format=${format}`);
+    const { width, height } = LETTER_EXPORT_FORMATS[format];
+    await expect(studioRegion(page).getByText(`${width}×${height}`)).toBeAttached({ timeout: 120_000 });
   }
   return {
     letter: () => letter,
@@ -146,6 +144,52 @@ async function fixture(
     mediaUploads: () => mediaUploads,
     updates,
   };
+}
+
+function studioRegion(page: Page) {
+  return page.getByRole("region", { name: "Letter studio" });
+}
+
+/** Opens the page studio from the editor, or waits for it when already open. */
+async function openStudio(page: Page, timeout = 60_000) {
+  const studio = studioRegion(page);
+  if (!(await studio.isVisible())) {
+    await page.getByRole("button", { name: "Publish", exact: true }).click();
+  }
+  await expect(studio.getByRole("navigation", { name: "Pages" })).toBeVisible({ timeout });
+  return studio;
+}
+
+async function backToEditor(page: Page) {
+  await studioRegion(page).getByRole("button", { name: "Back to editor" }).click();
+  await expect(page.getByRole("textbox", { name: "Letter title" })).toBeVisible({ timeout: 60_000 });
+}
+
+/** Selects page 2 (retrying across a re-render of the page set) and checks its bold text. */
+async function expectStudioPageText(page: Page, value: string) {
+  const studio = studioRegion(page);
+  const canvas = studio.locator("[data-studio-canvas] [data-page-canvas]");
+  await expect(async () => {
+    await studio.getByRole("button", { name: "Edit page 2", exact: true }).click();
+    await expect(canvas).toContainText(value, { timeout: 2_000 });
+  }).toPass({ timeout: 60_000 });
+  await expect(canvas.locator("strong")).toContainText("Lorem Ipsum");
+}
+
+/** Waits until a re-render of stale pages has replaced the studio's page set. */
+async function waitForCurrentPages(studio: Locator) {
+  await expect(studio.getByText(/Your letter changed since these pages were made/)).toHaveCount(0, { timeout: 60_000 });
+  await expect(studio.getByRole("navigation", { name: "Pages" })).toBeVisible({ timeout: 60_000 });
+}
+
+async function openCoverSection(studio: Locator, name: "Text" | "Style" | "Images" | "Arrange") {
+  const trigger = studio.getByRole("button", { name, exact: true });
+  if ((await trigger.getAttribute("aria-expanded")) !== "true") await trigger.click();
+}
+
+async function heroImageControl(studio: Locator) {
+  await openCoverSection(studio, "Images");
+  return studio.locator('[data-cover-image-control="hero"]');
 }
 
 async function expectCoverColumnAlignment(
@@ -232,11 +276,8 @@ test("long cover text auto-fits before the export is created", async ({ page }) 
     subtitle: "Supporting cover copy that should continue onto generated pages without changing the original letter body. ".repeat(35).trim(),
   });
 
-  await page.getByRole("button", { name: "Preview pages" }).click();
-  await expect(
-    page.getByRole("button", { name: "Customize pages", exact: true }),
-  ).toBeVisible({ timeout: 60_000 });
-  await expect(page.getByRole("alert")).toHaveCount(0);
+  await openStudio(page);
+  await expect(studioRegion(page).getByRole("alert")).toHaveCount(0);
   expect(state.exported().pages?.[0].text_scale).toBeLessThanOrEqual(1);
   expect(state.exported().pages?.[1].content_source).toBe("cover_entry");
   expect(
@@ -253,10 +294,10 @@ test("long cover text auto-fits before the export is created", async ({ page }) 
   ).toBe(text(JSON.parse(document(2)).blocks));
 
   const coverScale = state.exported().pages?.[0].text_scale;
-  await page.getByRole("button", { name: "Customize pages", exact: true }).click();
-  const dialog = page.getByRole("dialog", { name: "Prepare social pages" });
-  await dialog.getByRole("button", { name: "Edit page 2", exact: true }).click();
-  await setRangeValue(dialog.getByRole("slider", { name: "Text size for all pages" }), 90);
+  await openStudio(page);
+  const studio = studioRegion(page);
+  await studio.getByRole("button", { name: "Edit page 2", exact: true }).click();
+  await setRangeValue(studio.getByRole("slider", { name: "Text size for all pages" }), 90);
   await expect.poll(() => state.exported().pages?.slice(1).every((item) => item.text_scale === 0.9)).toBe(true);
   expect(state.exported().pages?.[0].text_scale).toBe(coverScale);
 });
@@ -269,19 +310,13 @@ test("long cover text crops the image height without resizing the typography", a
     initialHeroAspectRatio: 16 / 9,
   });
 
-  const customizePages = page.getByRole("button", {
-    name: "Customize pages",
-    exact: true,
-  });
-  await page.getByRole("button", { name: "Preview pages" }).click();
-  await expect(customizePages).toBeVisible({ timeout: 60_000 });
-  await customizePages.click();
+  await openStudio(page);
 
-  const dialog = page.getByRole("dialog", { name: "Prepare social pages" });
-  const coverCanvas = dialog.locator('main [data-page-layout="cover"]');
+  const studio = studioRegion(page);
+  const coverCanvas = studio.locator('[data-studio-canvas] [data-page-layout="cover"]');
   const coverHero = coverCanvas.locator('[data-cover-section="hero"]');
-  const coverBody = dialog.locator(
-    'main .letter-cover-description [contenteditable="true"]',
+  const coverBody = studio.locator(
+    '[data-studio-canvas] .letter-cover-description [contenteditable="true"]',
   );
   await expect(coverHero).toBeVisible();
   await expect(coverBody).toBeVisible();
@@ -317,7 +352,7 @@ test("long cover text crops the image height without resizing the typography", a
       { timeout: 60_000 },
     )
     .toBe(true);
-  await expect(dialog.getByText("Saved", { exact: true })).toBeVisible();
+  await expect(studio.getByText("Saved", { exact: true })).toBeVisible();
 
   expect(state.exported().pages?.[0].text_scale).toBe(initialScale);
   const finalMetrics = await coverHero.evaluate((element) => {
@@ -439,25 +474,23 @@ async function selectPageEditorText(
 
 async function preparePageEditor(page: Page, content: string) {
   const state = await fixture(page, content);
-  await page.getByRole("button", { name: "Preview pages" }).click();
-  await expect(page.getByRole("button", { name: "Customize pages", exact: true })).toBeVisible({ timeout: 60_000 });
-  await page.getByRole("button", { name: "Customize pages", exact: true }).click();
-  const dialog = page.getByRole("dialog");
-  await dialog.getByRole("button", { name: "Edit page 2", exact: true }).click();
-  const editor = dialog.locator('main [data-page-canvas] .bn-editor[contenteditable="true"]');
+  await openStudio(page);
+  const studio = studioRegion(page);
+  await studio.getByRole("button", { name: "Edit page 2", exact: true }).click();
+  const editor = studio.locator('[data-studio-canvas] [data-page-canvas] .bn-editor[contenteditable="true"]');
   await expect(editor).toBeVisible();
-  return { state, dialog, editor };
+  return { state, studio, editor };
 }
 
 async function formatPrefixAndInsertSpace(
   page: Page,
-  dialog: Locator,
+  studio: Locator,
   editor: Locator,
   style: string,
   markSelector: string,
 ) {
   await selectPageEditorText(editor, 0, "Lorem Ipsum".length);
-  const toolbarButton = dialog.locator(`.bn-toolbar [data-test="${style}"]`);
+  const toolbarButton = studio.locator(`.bn-toolbar [data-test="${style}"]`);
   await expect(toolbarButton).toBeVisible();
   await toolbarButton.click();
 
@@ -542,7 +575,7 @@ test("a new letter keeps its editor and caret through the first autosave", async
     await route.fulfill({ json: { data, status: 200, message: "Saved" } });
   });
 
-  await page.goto("/letters");
+  await page.goto("/letters/new");
   const editor = page.locator(
     '.letter-composer-document .bn-editor[contenteditable="true"]',
   );
@@ -554,7 +587,7 @@ test("a new letter keeps its editor and caret through the first autosave", async
     Reflect.set(window, "letterEditorBeforeFirstSave", node),
   );
 
-  await expect(page).toHaveURL(/\/letters\?letter=created-letter$/, {
+  await expect(page).toHaveURL(/\/letters\/created-letter$/, {
     timeout: 60_000,
   });
   await expect(page.getByText("Saved", { exact: true })).toBeVisible();
@@ -576,49 +609,35 @@ test("a new letter keeps its editor and caret through the first autosave", async
     .toContain("Opening thought after save");
 
   await page.getByRole("button", { name: "Letters" }).click();
-  await expect(page.locator('button[aria-current="page"]')).toContainText(
-    "Untitled letter",
-  );
+  await expect(
+    page.getByRole("link", { name: "Open Untitled letter" }),
+  ).toBeVisible({ timeout: 60_000 });
 });
 
 test("letter preview follows the latest formatted editor text", async ({ page }) => {
   const state = await fixture(page, mixedFormattingDocument, "portrait", {
     invalidateExportOnLetterUpdate: true,
   });
-  await page.getByRole("button", { name: "Preview pages" }).click();
-  await expect(
-    page.getByRole("button", { name: "Customize pages", exact: true }),
-  ).toBeVisible({ timeout: 60_000 });
-  await page
-    .getByRole("dialog", { name: "Preview letter pages" })
-    .getByRole("button", { name: "Close", exact: true })
-    .click();
+  await openStudio(page);
+  await backToEditor(page);
 
   const editor = page.locator('.letter-composer-document [contenteditable="true"]');
   await typeSpaceAfterBold(page, editor);
-  await page.getByRole("button", { name: "Preview pages" }).click();
+  await openStudio(page);
   await expect
     .poll(() => text(state.exported().pages?.slice(1).flatMap((item) => item.blocks)), {
       timeout: 60_000,
     })
     .toBe("Lorem Ipsum is");
-  await page.getByRole("button", { name: "View page 2" }).click();
-
-  const preview = page.locator(
-    '[aria-label="Letter export preview"] [data-page-canvas]',
-  );
-  await expect(preview).toContainText("Lorem Ipsum is");
-  await expect(preview.locator("strong")).toContainText("Lorem Ipsum");
+  await expectStudioPageText(page, "Lorem Ipsum is");
 });
 
 test("page editor keeps formatted-boundary spaces after reflow and save", async ({ page }) => {
   const state = await fixture(page, mixedFormattingDocument);
-  await page.getByRole("button", { name: "Preview pages" }).click();
-  await expect(page.getByRole("button", { name: "Customize pages", exact: true })).toBeVisible({ timeout: 60_000 });
-  await page.getByRole("button", { name: "Customize pages", exact: true }).click();
-  const dialog = page.getByRole("dialog");
-  await dialog.getByRole("button", { name: "Edit page 2", exact: true }).click();
-  const editor = dialog.locator('main [data-page-canvas] .bn-editor[contenteditable="true"]');
+  await openStudio(page);
+  const studio = studioRegion(page);
+  await studio.getByRole("button", { name: "Edit page 2", exact: true }).click();
+  const editor = studio.locator('[data-studio-canvas] [data-page-canvas] .bn-editor[contenteditable="true"]');
   await expect(editor).toBeVisible();
   await typeSpaceAfterBold(page, editor);
   await expect(editor).toContainText("Lorem Ipsum is");
@@ -630,11 +649,11 @@ test("page editor keeps formatted-boundary spaces after reflow and save", async 
 });
 
 test("page preview matches formatted text entered in the page editor", async ({ page }) => {
-  const { state, dialog, editor } = await preparePageEditor(
+  const { state, studio, editor } = await preparePageEditor(
     page,
     unformattedDocument,
   );
-  await formatPrefixAndInsertSpace(page, dialog, editor, "bold", "strong");
+  await formatPrefixAndInsertSpace(page, studio, editor, "bold", "strong");
   await expect
     .poll(
       () => text(state.exported().pages?.slice(1).flatMap((item) => item.blocks)),
@@ -642,27 +661,18 @@ test("page preview matches formatted text entered in the page editor", async ({ 
     )
     .toBe("Lorem Ipsum is");
 
-  await dialog.getByRole("button", { name: "Close", exact: true }).click();
-  await expect(
-    page.getByRole("dialog", { name: "Prepare social pages" }),
-  ).toBeHidden();
-  await page.getByRole("button", { name: "View page 2" }).click();
-
-  const preview = page.locator(
-    '[aria-label="Letter export preview"] [data-page-canvas]',
-  );
-  await expect(preview).toContainText("Lorem Ipsum is");
-  await expect(preview.locator("strong")).toContainText("Lorem Ipsum");
+  await backToEditor(page);
+  await expect(studioRegion(page)).toBeHidden();
+  await openStudio(page);
+  await expectStudioPageText(page, "Lorem Ipsum is");
 });
 
 test("cover editor keeps a space between bold and plain text", async ({ page }) => {
   const state = await fixture(page, document(2), "portrait", {
     initialCoverDescriptionBlocks: JSON.parse(mixedFormattingDocument).blocks,
   });
-  await page.getByRole("button", { name: "Preview pages" }).click();
-  await expect(page.getByRole("button", { name: "Customize pages", exact: true })).toBeVisible({ timeout: 60_000 });
-  await page.getByRole("button", { name: "Customize pages", exact: true }).click();
-  const editor = page.getByRole("dialog").locator('main .letter-cover-description .bn-editor[contenteditable="true"]');
+  await openStudio(page);
+  const editor = studioRegion(page).locator('[data-studio-canvas] .letter-cover-description .bn-editor[contenteditable="true"]');
   await expect(editor).toBeVisible();
   await typeSpaceAfterBold(page, editor);
   await expect(editor).toContainText("Lorem Ipsum is");
@@ -671,12 +681,10 @@ test("cover editor keeps a space between bold and plain text", async ({ page }) 
 
 test("clicking beside bold page text allows inserting a space", async ({ page }) => {
   const state = await fixture(page, mixedFormattingDocument);
-  await page.getByRole("button", { name: "Preview pages" }).click();
-  await expect(page.getByRole("button", { name: "Customize pages", exact: true })).toBeVisible({ timeout: 60_000 });
-  await page.getByRole("button", { name: "Customize pages", exact: true }).click();
-  const dialog = page.getByRole("dialog");
-  await dialog.getByRole("button", { name: "Edit page 2", exact: true }).click();
-  const editor = dialog.locator('main [data-page-canvas] .bn-editor[contenteditable="true"]');
+  await openStudio(page);
+  const studio = studioRegion(page);
+  await studio.getByRole("button", { name: "Edit page 2", exact: true }).click();
+  const editor = studio.locator('[data-studio-canvas] [data-page-canvas] .bn-editor[contenteditable="true"]');
   const boundary = await editor.locator("strong").first().evaluate((bold) => {
     const text = bold.lastChild;
     if (!text) throw new Error("Expected bold text");
@@ -709,11 +717,11 @@ for (const { label, style, mark } of [
   { label: "strikethrough", style: "strike", mark: "s" },
 ]) {
   test(`page toolbar ${label} keeps spaces between formatted text`, async ({ page }) => {
-    const { state, dialog, editor } = await preparePageEditor(
+    const { state, studio, editor } = await preparePageEditor(
       page,
       unformattedDocument,
     );
-    await formatPrefixAndInsertSpace(page, dialog, editor, style, mark);
+    await formatPrefixAndInsertSpace(page, studio, editor, style, mark);
     await expect
       .poll(
         () => text(state.exported().pages?.slice(1).flatMap((item) => item.blocks)),
@@ -725,16 +733,16 @@ for (const { label, style, mark } of [
 }
 
 test("page toolbar combined styles keep spaces in formatted text", async ({ page }) => {
-  const { state, dialog, editor } = await preparePageEditor(
+  const { state, studio, editor } = await preparePageEditor(
     page,
     unformattedDocument,
   );
   await selectPageEditorText(editor, 0, "Lorem Ipsum".length);
-  await expect(dialog.locator('.bn-toolbar [data-test="bold"]')).toBeVisible();
-  await dialog.locator('.bn-toolbar [data-test="bold"]').click();
+  await expect(studio.locator('.bn-toolbar [data-test="bold"]')).toBeVisible();
+  await studio.locator('.bn-toolbar [data-test="bold"]').click();
   await selectPageEditorText(editor, 0, "Lorem Ipsum".length);
-  await expect(dialog.locator('.bn-toolbar [data-test="underline"]')).toBeVisible();
-  await dialog.locator('.bn-toolbar [data-test="underline"]').click();
+  await expect(studio.locator('.bn-toolbar [data-test="underline"]')).toBeVisible();
+  await studio.locator('.bn-toolbar [data-test="underline"]').click();
 
   const markedText = editor.locator("strong").first();
   await expect(markedText.locator("u")).toContainText("Lorem Ipsum");
@@ -764,13 +772,11 @@ test("cover toolbar formatting keeps spaces in cover text", async ({ page }) => 
   const state = await fixture(page, document(2), "portrait", {
     initialCoverDescriptionBlocks: JSON.parse(unformattedDocument).blocks,
   });
-  await page.getByRole("button", { name: "Preview pages" }).click();
-  await expect(page.getByRole("button", { name: "Customize pages", exact: true })).toBeVisible({ timeout: 60_000 });
-  await page.getByRole("button", { name: "Customize pages", exact: true }).click();
-  const dialog = page.getByRole("dialog");
-  const editor = dialog.locator('main .letter-cover-description .bn-editor[contenteditable="true"]');
+  await openStudio(page);
+  const studio = studioRegion(page);
+  const editor = studio.locator('[data-studio-canvas] .letter-cover-description .bn-editor[contenteditable="true"]');
   await expect(editor).toBeVisible();
-  await formatPrefixAndInsertSpace(page, dialog, editor, "underline", "u");
+  await formatPrefixAndInsertSpace(page, studio, editor, "underline", "u");
   await expect.poll(
     () => text(state.exported().pages?.[0].cover?.description_blocks),
     { timeout: 60_000 },
@@ -778,14 +784,13 @@ test("cover toolbar formatting keeps spaces in cover text", async ({ page }) => 
 });
 
 test("quote page toolbar formatting keeps spaces in quote text", async ({ page }) => {
-  const { state, dialog } = await preparePageEditor(page, unformattedDocument);
-  const canvas = dialog.locator("main [data-page-canvas]");
-  await dialog.getByRole("combobox", { name: "Page layout" }).click();
-  await page.getByRole("option", { name: "Featured quote", exact: true }).click();
+  const { state, studio } = await preparePageEditor(page, unformattedDocument);
+  const canvas = studio.locator("[data-studio-canvas] [data-page-canvas]");
+  await studio.getByRole("button", { name: "Featured quote" }).click();
   await expect(canvas).toHaveAttribute("data-page-layout", "quote");
   const editor = canvas.locator('.letter-page-quote-document .bn-editor[contenteditable="true"]');
   await expect(editor).toBeVisible();
-  await formatPrefixAndInsertSpace(page, dialog, editor, "italic", "em");
+  await formatPrefixAndInsertSpace(page, studio, editor, "italic", "em");
   await expect.poll(
     () => text(state.exported().pages?.[1].blocks),
     { timeout: 60_000 },
@@ -794,18 +799,17 @@ test("quote page toolbar formatting keeps spaces in quote text", async ({ page }
 
 test("a long quote flows across pages at the shared size and keeps rich text", async ({ page }) => {
   const content = `Lorem Ipsumis ${"word ".repeat(95)}`;
-  const { state, dialog } = await preparePageEditor(
+  const { state, studio } = await preparePageEditor(
     page,
     JSON.stringify({
       version: 1,
       blocks: [{ id: "paragraph", type: "paragraph", content }],
     }),
   );
-  const canvas = dialog.locator("main [data-page-canvas]");
-  const textSize = dialog.getByRole("slider", { name: "Text size for all pages" });
+  const canvas = studio.locator("[data-studio-canvas] [data-page-canvas]");
+  const textSize = studio.getByRole("slider", { name: "Text size for all pages" });
   const bodySize = await textSize.getAttribute("aria-valuetext");
-  await dialog.getByRole("combobox", { name: "Page layout" }).click();
-  await page.getByRole("option", { name: "Featured quote", exact: true }).click();
+  await studio.getByRole("button", { name: "Featured quote" }).click();
   const editor = canvas.locator('.letter-page-quote-document .bn-editor[contenteditable="true"]');
   await expect(editor).toBeVisible();
   await expect.poll(() => textSize.getAttribute("aria-valuetext")).toBe(bodySize);
@@ -813,7 +817,7 @@ test("a long quote flows across pages at the shared size and keeps rich text", a
   expect(new Set(state.exported().pages?.slice(1).map((page) => page.text_scale)).size).toBe(1);
 
   await selectPageEditorText(editor, 0, "Lorem Ipsum".length);
-  await dialog.locator('.bn-toolbar [data-test="bold"]').click();
+  await studio.locator('.bn-toolbar [data-test="bold"]').click();
   await expect.poll(
     () => JSON.stringify(state.exported().pages?.[1].blocks),
     { timeout: 60_000 },
@@ -835,12 +839,10 @@ test("a long quote flows across pages at the shared size and keeps rich text", a
 
 test("bold page text accepts a trailing space before more typing", async ({ page }) => {
   const state = await fixture(page, boldOnlyDocument);
-  await page.getByRole("button", { name: "Preview pages" }).click();
-  await expect(page.getByRole("button", { name: "Customize pages", exact: true })).toBeVisible({ timeout: 60_000 });
-  await page.getByRole("button", { name: "Customize pages", exact: true }).click();
-  const dialog = page.getByRole("dialog");
-  await dialog.getByRole("button", { name: "Edit page 2", exact: true }).click();
-  const editor = dialog.locator('main [data-page-canvas] .bn-editor[contenteditable="true"]');
+  await openStudio(page);
+  const studio = studioRegion(page);
+  await studio.getByRole("button", { name: "Edit page 2", exact: true }).click();
+  const editor = studio.locator('[data-studio-canvas] [data-page-canvas] .bn-editor[contenteditable="true"]');
   await editor.focus();
   await editor.locator("strong").first().evaluate((bold) => {
     const node = bold.lastChild;
@@ -860,12 +862,10 @@ test("bold page text accepts a trailing space before more typing", async ({ page
 
 test("bold page text accepts a space inserted inside the bold run", async ({ page }) => {
   const state = await fixture(page, boldOnlyDocument);
-  await page.getByRole("button", { name: "Preview pages" }).click();
-  await expect(page.getByRole("button", { name: "Customize pages", exact: true })).toBeVisible({ timeout: 60_000 });
-  await page.getByRole("button", { name: "Customize pages", exact: true }).click();
-  const dialog = page.getByRole("dialog");
-  await dialog.getByRole("button", { name: "Edit page 2", exact: true }).click();
-  const editor = dialog.locator('main [data-page-canvas] .bn-editor[contenteditable="true"]');
+  await openStudio(page);
+  const studio = studioRegion(page);
+  await studio.getByRole("button", { name: "Edit page 2", exact: true }).click();
+  const editor = studio.locator('[data-studio-canvas] [data-page-canvas] .bn-editor[contenteditable="true"]');
   await editor.focus();
   await editor.locator("strong").first().evaluate((bold) => {
     const node = bold.firstChild;
@@ -887,14 +887,13 @@ test("a split bold paragraph keeps spaces typed at a page boundary", async ({ pa
   const state = await fixture(page, JSON.stringify({ version: 1, blocks: [{ id: "paragraph", type: "paragraph", content: [
     { type: "text", text: content, styles: { bold: true } },
   ] }] }));
-  await page.getByRole("button", { name: "Preview pages" }).click();
-  await expect(page.getByRole("button", { name: "Customize pages", exact: true })).toBeVisible({ timeout: 60_000 });
+  await openStudio(page);
   expect(state.exported().pages?.length).toBeGreaterThan(2);
   const before = text(state.exported().pages?.slice(1).flatMap((item) => item.blocks));
-  await page.getByRole("button", { name: "Customize pages", exact: true }).click();
-  const dialog = page.getByRole("dialog");
-  await dialog.getByRole("button", { name: "Edit page 2", exact: true }).click();
-  const editor = dialog.locator('main [data-page-canvas] .bn-editor[contenteditable="true"]');
+  await openStudio(page);
+  const studio = studioRegion(page);
+  await studio.getByRole("button", { name: "Edit page 2", exact: true }).click();
+  const editor = studio.locator('[data-studio-canvas] [data-page-canvas] .bn-editor[contenteditable="true"]');
   await editor.focus();
   await editor.press("End");
   await page.keyboard.press("Space");
@@ -906,7 +905,7 @@ test("a split bold paragraph keeps spaces typed at a page boundary", async ({ pa
 
 test("paginated body keeps a space inserted after toolbar formatting", async ({ page }) => {
   const content = `Lorem Ipsumis ${sentence.repeat(85)}`;
-  const { state, dialog, editor } = await preparePageEditor(
+  const { state, studio, editor } = await preparePageEditor(
     page,
     JSON.stringify({
       version: 1,
@@ -916,7 +915,7 @@ test("paginated body keeps a space inserted after toolbar formatting", async ({ 
   expect(state.exported().pages?.length).toBeGreaterThan(2);
 
   await selectPageEditorText(editor, 0, "Lorem Ipsum".length);
-  await dialog.locator('.bn-toolbar [data-test="bold"]').click();
+  await studio.locator('.bn-toolbar [data-test="bold"]').click();
   await expect.poll(
     () => JSON.stringify(state.exported().pages?.[1].blocks),
     { timeout: 60_000 },
@@ -932,11 +931,11 @@ test("paginated body keeps a space inserted after toolbar formatting", async ({ 
 
 test("narrow page editor accepts a space beside bold text", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  const { state, dialog, editor } = await preparePageEditor(
+  const { state, studio, editor } = await preparePageEditor(
     page,
     unformattedDocument,
   );
-  await formatPrefixAndInsertSpace(page, dialog, editor, "bold", "strong");
+  await formatPrefixAndInsertSpace(page, studio, editor, "bold", "strong");
   await expect.poll(
     () => text(state.exported().pages?.slice(1).flatMap((item) => item.blocks)),
     { timeout: 60_000 },
@@ -1200,7 +1199,7 @@ test("long letter scroll ends near its final block and shrinks after deleting te
     .toBe("Short");
 });
 
-test("trailing blank letter blocks collapse while the caret stays editable", async ({
+test("blank lines at the end of a letter stay editable and are not saved", async ({
   page,
 }) => {
   const state = await fixture(
@@ -1232,7 +1231,11 @@ test("trailing blank letter blocks collapse while the caret stays editable", asy
   await blocks.last().click();
   await page.keyboard.press("Enter");
   await page.keyboard.press("Enter");
-  await expect(blocks).toHaveCount(4);
+  await page.keyboard.press("Enter");
+  await expect(blocks).toHaveCount(7);
+  await page.keyboard.press("Backspace");
+  await expect(blocks).toHaveCount(6);
+  expect(JSON.parse(state.letter().content).blocks).toHaveLength(4);
   await page.keyboard.type("Typed after Enter");
   await expect(editor).toContainText("Typed after Enter");
   await page.keyboard.press("ControlOrMeta+Z");
@@ -1244,6 +1247,38 @@ test("trailing blank letter blocks collapse while the caret stays editable", asy
       timeout: 60_000,
     })
     .toContain("Typed after Enter");
+  // The blank lines typed before the text are kept as intentional gaps.
+  expect(JSON.parse(state.letter().content).blocks).toHaveLength(6);
+});
+
+test("the letter text style menu changes the block type", async ({ page }) => {
+  const state = await fixture(
+    page,
+    JSON.stringify({
+      version: 1,
+      blocks: [{ id: "first", type: "paragraph", content: "Make me a heading" }],
+    }),
+  );
+  const editor = page.locator(".letter-composer-document .bn-editor");
+  await editor.getByText("Make me a heading").click({ timeout: 60_000 });
+
+  const trigger = page
+    .getByRole("toolbar", { name: "Letter formatting" })
+    .getByRole("button", { name: "Text style" });
+  await expect(trigger).toContainText("Paragraph");
+  await trigger.click();
+  const menu = page.getByRole("menu");
+  await expect(menu.getByRole("menuitem")).toHaveCount(8);
+  await expect(menu).not.toContainText("Toggle");
+  await expect(menu).not.toContainText("Heading 4");
+  await menu.getByRole("menuitem", { name: "Heading 2" }).click();
+
+  await expect(trigger).toContainText("Heading 2");
+  await expect
+    .poll(() => JSON.parse(state.letter().content).blocks[0], { timeout: 60_000 })
+    .toMatchObject({ type: "heading", props: { level: 2 } });
+  await page.keyboard.type(" now");
+  await expect(editor).toContainText("Make me a heading now");
 });
 
 test("letter body shortcuts nest blocks and distinguish soft from new lines", async ({
@@ -1293,32 +1328,32 @@ for (const format of ["portrait", "square", "story", "landscape"] as const) {
     const original = document(100);
     const state = await fixture(page, original, format);
     if (format === "portrait") {
-      await page.getByRole("button", { name: "Preview pages" }).click();
+      await openStudio(page);
     }
-    await expect(page.getByRole("button", { name: "Customize pages", exact: true })).toBeVisible({ timeout: 60_000 });
+    await openStudio(page);
     expect(text(state.exported().pages?.slice(1).flatMap((p) => p.blocks))).toBe(text(JSON.parse(original).blocks));
-    await page.getByRole("button", { name: "Customize pages", exact: true }).click();
-    const dialog = page.getByRole("dialog");
-    await dialog.getByRole("button", { name: "Edit page 2", exact: true }).click();
-    await expect(dialog.locator(".bn-editor")).toBeVisible();
+    await openStudio(page);
+    const studio = studioRegion(page);
+    await studio.getByRole("button", { name: "Edit page 2", exact: true }).click();
+    await expect(studio.locator(".bn-editor")).toBeVisible();
     for (const scale of [140, 70, 100]) {
       const count = state.updates.length;
-      await dialog.getByRole("slider", { name: "Text size for all pages", exact: true }).evaluate((node, value) => {
+      await studio.getByRole("slider", { name: "Text size for all pages", exact: true }).evaluate((node, value) => {
         const input = node as HTMLInputElement;
         Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, String(value));
         input.dispatchEvent(new Event("input", { bubbles: true }));
         input.dispatchEvent(new Event("change", { bubbles: true }));
       }, scale);
       await expect.poll(() => state.updates.length, { timeout: 60_000 }).toBeGreaterThan(count);
-      await expect(dialog.getByText("Saved", { exact: true })).toBeVisible();
+      await expect(studio.getByText("Saved", { exact: true })).toBeVisible();
       expect(text(state.exported().pages?.slice(1).flatMap((p) => p.blocks))).toBe(text(JSON.parse(original).blocks));
       expect(new Set(state.exported().pages?.slice(1).map((page) => page.text_scale))).toEqual(new Set([scale / 100]));
       for (const p of state.exported().pages!.slice(1)) {
-        await dialog.getByRole("button", { name: `Edit page ${p.number}`, exact: true }).click();
-        await expect(dialog.locator(".bn-editor")).toBeVisible();
-        await expect.poll(() => dialog.locator(".bn-editor").evaluate((node) => node.scrollHeight <= node.clientHeight + 1)).toBe(true);
+        await studio.getByRole("button", { name: `Edit page ${p.number}`, exact: true }).click();
+        await expect(studio.locator(".bn-editor")).toBeVisible();
+        await expect.poll(() => studio.locator(".bn-editor").evaluate((node) => node.scrollHeight <= node.clientHeight + 1)).toBe(true);
       }
-      await dialog.getByRole("button", { name: "Edit page 2", exact: true }).click();
+      await studio.getByRole("button", { name: "Edit page 2", exact: true }).click();
     }
   });
 }
@@ -1326,9 +1361,7 @@ for (const format of ["portrait", "square", "story", "landscape"] as const) {
 test("long letters create every page they need without blocking preparation", async ({ page }) => {
   const original = document(350);
   const state = await fixture(page, original, "landscape");
-  await expect(
-    page.getByRole("button", { name: "Customize pages", exact: true }),
-  ).toBeVisible({ timeout: 120_000 });
+  await openStudio(page, 120_000);
   expect(state.exported().pages?.length).toBeGreaterThan(10);
   const nextPage = page.getByRole("button", { name: "View next page" });
   const previousPage = page.getByRole("button", {
@@ -1339,7 +1372,7 @@ test("long letters create every page they need without blocking preparation", as
   await expect(page.getByText(/^Page 2 of \d+$/)).toBeVisible();
   await expect(previousPage).toBeEnabled();
   await expect(
-    page.getByRole("button", { name: "View page 2" }),
+    page.getByRole("button", { name: "Edit page 2", exact: true }),
   ).toHaveAttribute("aria-current", "page");
   expect(text(state.exported().pages?.slice(1).flatMap((p) => p.blocks))).toBe(
     text(JSON.parse(original).blocks),
@@ -1350,43 +1383,36 @@ test("page numbers exclude the cover and remain visible across page layouts", as
   page,
 }) => {
   await fixture(page, document(100));
-  await expect(
-    page.getByRole("button", { name: "Customize pages", exact: true }),
-  ).toBeVisible({ timeout: 60_000 });
-  await page
-    .getByRole("button", { name: "Customize pages", exact: true })
-    .click();
+  await openStudio(page);
 
-  const dialog = page.getByRole("dialog");
-  const canvas = dialog.locator("main [data-page-canvas]");
+  const studio = studioRegion(page);
+  const canvas = studio.locator("[data-studio-canvas] [data-page-canvas]");
   await expect(canvas).toHaveAttribute("data-page-layout", "cover");
   await expect(canvas.locator("[data-page-number]")).toHaveCount(0);
   await expect(canvas).toHaveAttribute("aria-label", "Editable social cover");
 
-  await dialog.getByRole("button", { name: "Edit page 2", exact: true }).click();
+  await studio.getByRole("button", { name: "Edit page 2", exact: true }).click();
   await expect(canvas.locator("[data-page-number]")).toHaveText("1");
   await expect(canvas).toHaveAttribute("aria-label", "Editable social page 1");
 
-  await dialog.getByRole("combobox", { name: "Page layout" }).click();
-  await page.getByRole("option", { name: "Featured quote", exact: true }).click();
+  await studio.getByRole("button", { name: "Featured quote" }).click();
   await expect(canvas).toHaveAttribute("data-page-layout", "quote");
   await expect(canvas.locator("[data-page-number]")).toHaveText("1");
 
-  await dialog.getByRole("button", { name: "Edit page 3", exact: true }).click();
+  await studio.getByRole("button", { name: "Edit page 3", exact: true }).click();
   await expect(canvas.locator("[data-page-number]")).toHaveText("2");
   await expect(canvas).toHaveAttribute("aria-label", "Editable social page 2");
 });
 
 test("last-page author details save independently and blank lines stay hidden", async ({ page }) => {
   const state = await fixture(page, document(2));
-  await expect(page.getByRole("button", { name: "Customize pages", exact: true })).toBeVisible({ timeout: 60_000 });
-  await page.getByRole("button", { name: "Customize pages", exact: true }).click();
+  await openStudio(page);
 
-  const dialog = page.getByRole("dialog");
-  await dialog.getByRole("button", { name: "Edit page 2", exact: true }).click();
-  const canvas = dialog.locator("main [data-page-canvas]");
-  const authorName = dialog.getByRole("textbox", { name: "Author name" });
-  const username = dialog.getByRole("textbox", { name: "Username" });
+  const studio = studioRegion(page);
+  await studio.getByRole("button", { name: "Edit page 2", exact: true }).click();
+  const canvas = studio.locator("[data-studio-canvas] [data-page-canvas]");
+  const authorName = studio.getByRole("textbox", { name: "Author name" });
+  const username = studio.getByRole("textbox", { name: "Username" });
   await expect(authorName).toHaveValue("Test Author");
   await expect(username).toHaveValue("@author");
 
@@ -1408,36 +1434,30 @@ test("last-page author details save independently and blank lines stay hidden", 
   await expect(canvas.locator(".letter-page-signature")).toHaveCount(0);
   await expect.poll(() => state.exported().pages?.at(-1)?.signature).toEqual({ name: "", handle: "" });
 
-  await dialog.getByRole("combobox", { name: "Page layout" }).click();
-  await page.getByRole("option", { name: "Featured quote", exact: true }).click();
+  await studio.getByRole("button", { name: "Featured quote" }).click();
   await expect(canvas).toHaveAttribute("data-page-layout", "quote");
   await expect(canvas.locator(".letter-page-signature")).toHaveCount(0);
   await expect(canvas).not.toContainText("Medasin");
 
-  await dialog.getByRole("button", { name: "Close", exact: true }).click();
-  await expect(dialog).toBeHidden();
-  await page.getByRole("button", { name: "Customize pages", exact: true }).click();
-  await page.getByRole("dialog").getByRole("button", { name: "Edit page 2", exact: true }).click();
-  await expect(page.getByRole("dialog").getByRole("textbox", { name: "Author name" })).toHaveValue("");
-  await expect(page.getByRole("dialog").getByRole("textbox", { name: "Username" })).toHaveValue("");
+  await backToEditor(page);
+  await expect(studio).toBeHidden();
+  await openStudio(page);
+  await studioRegion(page).getByRole("button", { name: "Edit page 2", exact: true }).click();
+  await expect(studioRegion(page).getByRole("textbox", { name: "Author name" })).toHaveValue("");
+  await expect(studioRegion(page).getByRole("textbox", { name: "Username" })).toHaveValue("");
 });
 
 test("the page workspace closes while pending edits save", async ({ page }) => {
   const state = await fixture(page, document(2), "portrait", {
     updateDelayMs: 1_500,
   });
-  await expect(
-    page.getByRole("button", { name: "Customize pages", exact: true }),
-  ).toBeVisible({ timeout: 60_000 });
-  await page
-    .getByRole("button", { name: "Customize pages", exact: true })
-    .click();
+  await openStudio(page);
 
-  const dialog = page.getByRole("dialog");
-  await dialog.getByRole("textbox", { name: "Subheader" }).fill("CLOSE NOW");
-  await dialog.getByRole("button", { name: "Close", exact: true }).click();
+  const studio = studioRegion(page);
+  await studio.getByRole("textbox", { name: "Subheader" }).fill("CLOSE NOW");
+  await backToEditor(page);
 
-  await expect(dialog).toBeHidden({ timeout: 500 });
+  await expect(studio).toBeHidden({ timeout: 500 });
   await expect
     .poll(() => state.updates.length, { timeout: 60_000 })
     .toBeGreaterThan(0);
@@ -1449,16 +1469,12 @@ test("the page workspace closes while pending edits save", async ({ page }) => {
 
 test("body text survives autosave, page changes, and an immediate close", async ({ page }) => {
   const state = await fixture(page, document(2));
-  await page.getByRole("button", { name: "Preview pages" }).click();
-  await expect(
-    page.getByRole("button", { name: "Customize pages", exact: true }),
-  ).toBeVisible({ timeout: 60_000 });
-  await page.getByRole("button", { name: "Customize pages", exact: true }).click();
+  await openStudio(page);
 
-  const dialog = page.getByRole("dialog", { name: "Prepare social pages" });
-  await dialog.getByRole("button", { name: "Edit page 2", exact: true }).click();
-  const bodyEditor = dialog.locator(
-    'main .letter-page-document [contenteditable="true"]',
+  const studio = studioRegion(page);
+  await studio.getByRole("button", { name: "Edit page 2", exact: true }).click();
+  const bodyEditor = studio.locator(
+    '[data-studio-canvas] .letter-page-document [contenteditable="true"]',
   );
   await bodyEditor.fill("A page draft that must survive autosave.");
 
@@ -1467,14 +1483,14 @@ test("body text survives autosave, page changes, and an immediate close", async 
     .toBeGreaterThan(0);
   await expect(bodyEditor).toContainText("A page draft that must survive autosave.");
 
-  await dialog.getByRole("button", { name: "Edit page 1", exact: true }).click();
-  await dialog.getByRole("button", { name: "Edit page 2", exact: true }).click();
+  await studio.getByRole("button", { name: "Edit page 1", exact: true }).click();
+  await studio.getByRole("button", { name: "Edit page 2", exact: true }).click();
   await expect(bodyEditor).toContainText("A page draft that must survive autosave.");
 
   await bodyEditor.press("End");
   await bodyEditor.pressSequentially(" Final words.");
-  await dialog.getByRole("button", { name: "Close", exact: true }).click();
-  await expect(dialog).toBeHidden({ timeout: 60_000 });
+  await backToEditor(page);
+  await expect(studio).toBeHidden({ timeout: 60_000 });
   await expect
     .poll(
       () => text(state.exported().pages?.slice(1).flatMap((item) => item.blocks)),
@@ -1485,50 +1501,42 @@ test("body text survives autosave, page changes, and an immediate close", async 
 
 test("text edits and one shared size survive delayed saves and reopening", async ({ page }) => {
   const state = await fixture(page, document(60), "portrait", { updateDelayMs: 800 });
-  await page.getByRole("button", { name: "Preview pages" }).click();
-  await expect(page.getByRole("button", { name: "Customize pages", exact: true })).toBeVisible({ timeout: 60_000 });
-  await page.getByRole("button", { name: "Customize pages", exact: true }).click();
-  const dialog = page.getByRole("dialog", { name: "Prepare social pages" });
-  const coverSize = await dialog.getByRole("slider", { name: "Overall text size" }).inputValue();
-  await dialog.getByRole("button", { name: "Edit page 2", exact: true }).click();
-  const size = dialog.getByRole("slider", { name: "Text size for all pages" });
+  await openStudio(page);
+  const studio = studioRegion(page);
+  const coverSize = await studio.getByRole("slider", { name: "Overall text size" }).inputValue();
+  await studio.getByRole("button", { name: "Edit page 2", exact: true }).click();
+  const size = studio.getByRole("slider", { name: "Text size for all pages" });
   await setRangeValue(size, 120);
-  const editor = dialog.locator('main .letter-page-document [contenteditable="true"]');
+  const editor = studio.locator('[data-studio-canvas] .letter-page-document [contenteditable="true"]');
   await editor.press("End");
   await editor.pressSequentially(" A saved addition.");
-  await dialog.getByRole("button", { name: "Close", exact: true }).click();
-  await expect(dialog).toBeHidden({ timeout: 60_000 });
+  await backToEditor(page);
+  await expect(studio).toBeHidden({ timeout: 60_000 });
 
   await expect.poll(() => state.letter().content).toContain("A saved addition.");
   expect(state.exported().pages?.[0].text_scale).toBe(Number(coverSize) / 100);
   expect(new Set(state.exported().pages?.slice(1).map((item) => item.text_scale))).toEqual(new Set([1.2]));
   expect(new Set(state.exported().pages?.slice(1).map((item) => item.text_scale_mode))).toEqual(new Set(["manual"]));
 
-  await page.getByRole("button", { name: "Customize pages", exact: true }).click();
-  await dialog.getByRole("button", { name: "Edit page 2", exact: true }).click();
-  await expect(dialog.getByRole("slider", { name: "Text size for all pages" })).toHaveValue("120");
-  await expect(dialog.locator('main .letter-page-document [contenteditable="true"]')).toContainText("A saved addition.");
+  await openStudio(page);
+  await studio.getByRole("button", { name: "Edit page 2", exact: true }).click();
+  await expect(studio.getByRole("slider", { name: "Text size for all pages" })).toHaveValue("120");
+  await expect(studio.locator('[data-studio-canvas] .letter-page-document [contenteditable="true"]')).toContainText("A saved addition.");
 });
 
 test("dark background applies to cover, body, rich text, logos, and thumbnails", async ({
   page,
 }) => {
   await fixture(page, document(2));
-  await expect(
-    page.getByRole("button", { name: "Customize pages", exact: true }),
-  ).toBeVisible({ timeout: 60_000 });
-  await page
-    .getByRole("button", { name: "Customize pages", exact: true })
-    .click();
+  await openStudio(page);
 
-  const dialog = page.getByRole("dialog");
-  await dialog.getByRole("combobox", { name: "Page background" }).click();
-  await page.getByRole("option", { name: "Dark", exact: true }).click();
+  const studio = studioRegion(page);
+  await studio.getByRole("button", { name: "Dark", exact: true }).click();
 
-  const coverCanvas = dialog.locator('main [data-page-layout="cover"]');
+  const coverCanvas = studio.locator('[data-studio-canvas] [data-page-layout="cover"]');
   const coverEditor = coverCanvas.locator(".letter-cover-description");
   await expect(coverCanvas).toHaveAttribute("data-page-theme", "dark");
-  await expect(coverEditor.locator(".bn-root")).toHaveAttribute(
+  await expect(coverEditor.locator(".bn-root").first()).toHaveAttribute(
     "data-color-scheme",
     "dark",
   );
@@ -1544,15 +1552,15 @@ test("dark background applies to cover, body, rich text, logos, and thumbnails",
   const coverBackground = await coverCanvas.evaluate(
     (element) => getComputedStyle(element).backgroundColor,
   );
-  const bodyThumbnail = dialog
+  const bodyThumbnail = studio
     .getByRole("button", { name: "Edit page 2" })
     .locator('[data-page-theme="dark"]');
   await expect(bodyThumbnail).toBeVisible();
-  await dialog.getByRole("button", { name: "Edit page 2" }).click();
+  await studio.getByRole("button", { name: "Edit page 2" }).click();
 
-  const bodyCanvas = dialog.locator('main [data-page-layout="body"]');
+  const bodyCanvas = studio.locator('[data-studio-canvas] [data-page-layout="body"]');
   await expect(bodyCanvas).toHaveAttribute("data-page-theme", "dark");
-  await expect(bodyCanvas.locator(".bn-root")).toHaveAttribute(
+  await expect(bodyCanvas.locator(".bn-root").first()).toHaveAttribute(
     "data-color-scheme",
     "dark",
   );
@@ -1570,13 +1578,12 @@ test("dark background applies to cover, body, rich text, logos, and thumbnails",
     )
     .toBe(coverBackground);
 
-  await dialog.getByRole("button", { name: "Edit page 1" }).click();
-  await dialog.getByRole("combobox", { name: "Page background" }).click();
-  await page.getByRole("option", { name: "White", exact: true }).click();
-  await dialog.getByRole("button", { name: "Edit page 2" }).click();
+  await studio.getByRole("button", { name: "Edit page 1" }).click();
+  await studio.getByRole("button", { name: "Light", exact: true }).click();
+  await studio.getByRole("button", { name: "Edit page 2" }).click();
 
   await expect(bodyCanvas).toHaveAttribute("data-page-theme", "light");
-  await expect(bodyCanvas.locator(".bn-root")).toHaveAttribute(
+  await expect(bodyCanvas.locator(".bn-root").first()).toHaveAttribute(
     "data-color-scheme",
     "light",
   );
@@ -1590,11 +1597,10 @@ test("cover font sizes adjust independently and persist in previews and download
   const state = await fixture(page, document(2), "portrait", {
     subtitle: "A short cover body.",
   });
-  await page.getByRole("button", { name: "Preview pages" }).click();
-  await page.getByRole("button", { name: "Customize pages", exact: true }).click();
+  await openStudio(page);
 
-  const dialog = page.getByRole("dialog", { name: "Prepare social pages" });
-  const cover = dialog.locator('main [data-page-layout="cover"]');
+  const studio = studioRegion(page);
+  const cover = studio.locator('[data-studio-canvas] [data-page-layout="cover"]');
   const fonts = async (canvas: Locator) =>
     canvas.evaluate((element) => {
       const size = (selector: string) => {
@@ -1609,10 +1615,10 @@ test("cover font sizes adjust independently and persist in previews and download
       };
     });
   const initial = await fonts(cover);
-  const subheaderSize = dialog.getByRole("slider", { name: "Subheader size" });
-  const titleSize = dialog.getByRole("slider", { name: "Title size" });
-  const bodySize = dialog.getByRole("slider", { name: "Cover body text size" });
-  const overallSize = dialog.getByRole("slider", { name: "Overall text size" });
+  const subheaderSize = studio.getByRole("slider", { name: "Subheader size" });
+  const titleSize = studio.getByRole("slider", { name: "Title size" });
+  const bodySize = studio.getByRole("slider", { name: "Cover body text size" });
+  const overallSize = studio.getByRole("slider", { name: "Overall text size" });
   await expect(subheaderSize).toHaveValue("100");
   await expect(titleSize).toHaveValue("100");
   await expect(bodySize).toHaveValue("100");
@@ -1629,33 +1635,29 @@ test("cover font sizes adjust independently and persist in previews and download
   await expect.poll(() => state.exported().pages?.[0].cover?.subheader_font_scale).toBe(1.3);
   await expect.poll(() => state.exported().pages?.[0].cover?.title_font_scale).toBe(0.9);
   await expect.poll(() => state.exported().pages?.[0].cover?.body_font_scale).toBe(1.2);
-  await expect(dialog.getByText("Saved", { exact: true })).toBeVisible();
+  await expect(studio.getByText("Saved", { exact: true })).toBeVisible();
   changed = await fonts(cover);
   expect(changed.subheader).toBeCloseTo(initial.subheader * 1.3 * 1.1, 1);
   expect(changed.title).toBeCloseTo(initial.title * 0.9 * 1.1, 1);
   expect(changed.body).toBeCloseTo(initial.body * 1.2 * 1.1, 1);
 
   const downloadPromise = page.waitForEvent("download");
-  await dialog.getByRole("button", { name: "Current page" }).click();
+  await studio.getByRole("button", { name: "Current page" }).click();
   const download = await downloadPromise;
   expect(download.suggestedFilename()).toMatch(/page-01\.png$/);
   expect(await download.failure()).toBeNull();
 
-  await dialog.getByRole("button", { name: "Close", exact: true }).click();
-  const preview = page
-    .locator('[aria-label="Letter export preview"] [data-page-layout="cover"]')
-    .first();
-  const previewFonts = await fonts(preview);
-  expect(previewFonts.subheader).toBeCloseTo(changed.subheader, 1);
-  expect(previewFonts.title).toBeCloseTo(changed.title, 1);
-  expect(previewFonts.body).toBeCloseTo(changed.body, 1);
-
-  await page.getByRole("button", { name: "Customize pages", exact: true }).click();
+  await backToEditor(page);
+  await openStudio(page);
+  const reopenedFonts = await fonts(cover);
+  expect(reopenedFonts.subheader).toBeCloseTo(changed.subheader, 1);
+  expect(reopenedFonts.title).toBeCloseTo(changed.title, 1);
+  expect(reopenedFonts.body).toBeCloseTo(changed.body, 1);
   await expect(subheaderSize).toHaveValue("130");
   await expect(titleSize).toHaveValue("90");
   await expect(bodySize).toHaveValue("120");
   await expect(overallSize).toHaveValue("110");
-  await dialog.getByRole("button", { name: "Reset cover sizes" }).click();
+  await studio.getByRole("button", { name: "Reset cover sizes" }).click();
   await expect.poll(() => state.exported().pages?.[0].cover?.subheader_font_scale).toBe(1);
   await expect.poll(() => state.exported().pages?.[0].cover?.title_font_scale).toBe(1);
   await expect.poll(() => state.exported().pages?.[0].cover?.body_font_scale).toBe(1);
@@ -1664,22 +1666,21 @@ test("cover font sizes adjust independently and persist in previews and download
 
 test("an oversized cover shows a fit error and recovers after resizing", async ({ page }) => {
   const state = await fixture(page, document(2));
-  await page.getByRole("button", { name: "Preview pages" }).click();
-  await page.getByRole("button", { name: "Customize pages", exact: true }).click();
-  const dialog = page.getByRole("dialog", { name: "Prepare social pages" });
+  await openStudio(page);
+  const studio = studioRegion(page);
 
-  await dialog.getByRole("textbox", { name: "Subheader" }).fill("W".repeat(80));
-  await setRangeValue(dialog.getByRole("slider", { name: "Subheader size" }), 140);
-  await expect(dialog.getByRole("alert")).toContainText(
+  await studio.getByRole("textbox", { name: "Subheader" }).fill("W".repeat(80));
+  await setRangeValue(studio.getByRole("slider", { name: "Subheader size" }), 140);
+  await expect(studio.getByRole("alert")).toContainText(
     "too large to fit",
     { timeout: 60_000 },
   );
-  await expect(dialog.getByRole("button", { name: "Current page" })).toBeDisabled();
+  await expect(studio.getByRole("button", { name: "Current page" })).toBeDisabled();
 
-  await dialog.getByRole("textbox", { name: "Subheader" }).fill("A LETTER");
-  await expect(dialog.getByText("Saved", { exact: true })).toBeVisible({ timeout: 60_000 });
-  await expect(dialog.getByRole("alert")).toHaveCount(0);
-  await expect(dialog.getByRole("button", { name: "Current page" })).toBeEnabled();
+  await studio.getByRole("textbox", { name: "Subheader" }).fill("A LETTER");
+  await expect(studio.getByText("Saved", { exact: true })).toBeVisible({ timeout: 60_000 });
+  await expect(studio.getByRole("alert")).toHaveCount(0);
+  await expect(studio.getByRole("button", { name: "Current page" })).toBeEnabled();
   expect(state.exported().pages?.[0].cover?.subheader_font_scale).toBe(1.4);
 });
 
@@ -1688,19 +1689,14 @@ test("cover controls persist styling, metadata, and image removal", async ({ pag
     initialHeroImageUrl: "http://localhost/storage/existing-cover.png",
     initialHeroAspectRatio: 1.25,
   });
-  await page.getByRole("button", { name: "Preview pages" }).click();
-  await expect(
-    page.getByRole("button", { name: "Customize pages", exact: true }),
-  ).toBeVisible({ timeout: 60_000 });
-  await page.getByRole("button", { name: "Customize pages", exact: true }).click();
-  const dialog = page.getByRole("dialog", { name: "Prepare social pages" });
+  await openStudio(page);
+  const studio = studioRegion(page);
 
-  await dialog.getByRole("combobox", { name: "Background" }).click();
-  await page.getByRole("option", { name: "Dark", exact: true }).click();
-  await dialog.getByRole("switch", { name: "Show Medasin logo" }).click();
-  await dialog.getByRole("textbox", { name: "Subheader" }).fill("CIPER DATASETS");
-  await dialog.getByRole("textbox", { name: "Author name" }).fill("Ciper");
-  await dialog
+  await studio.getByRole("button", { name: "Dark", exact: true }).click();
+  await studio.getByRole("switch", { name: "Show Medasin logo" }).click();
+  await studio.getByRole("textbox", { name: "Subheader" }).fill("CIPER DATASETS");
+  await studio.getByRole("textbox", { name: "Author name" }).fill("Ciper");
+  await studio
     .getByRole("slider", { name: "Overall text size", exact: true })
     .evaluate((node) => {
       const input = node as HTMLInputElement;
@@ -1709,18 +1705,19 @@ test("cover controls persist styling, metadata, and image removal", async ({ pag
       input.dispatchEvent(new Event("input", { bubbles: true }));
       input.dispatchEvent(new Event("change", { bubbles: true }));
     });
-  await expect(dialog.getByRole("button", { name: "Reorder Title" })).toBeVisible();
+  await openCoverSection(studio, "Arrange");
+  await expect(studio.getByRole("button", { name: "Reorder Title" })).toBeVisible();
   await expect(
-    dialog.getByRole("button", { name: "Reorder Cover body text" }),
+    studio.getByRole("button", { name: "Reorder Cover body text" }),
   ).toBeVisible();
   await expect(
-    dialog.getByRole("button", { name: "Reorder Author and date" }),
+    studio.getByRole("button", { name: "Reorder Author and date" }),
   ).toHaveCount(0);
-  const coverBody = dialog.locator(
-    'main .letter-cover-description [contenteditable="true"]',
+  const coverBody = studio.locator(
+    '[data-studio-canvas] .letter-cover-description [contenteditable="true"]',
   );
   await coverBody.fill("A formatted cover description");
-  const coverCanvas = dialog.locator('main [data-page-layout="cover"]');
+  const coverCanvas = studio.locator('[data-studio-canvas] [data-page-layout="cover"]');
   const coverTitle = coverCanvas.getByRole("textbox", {
     name: "Cover title",
   });
@@ -1764,7 +1761,7 @@ test("cover controls persist styling, metadata, and image removal", async ({ pag
       return (canvasBounds.bottom - footerBounds.bottom) / canvasBounds.height;
     }),
   ).toBeCloseTo(0.056, 1);
-  const coverTextAlignment = dialog.getByRole("group", { name: "Text alignment" });
+  const coverTextAlignment = studio.getByRole("group", { name: "Text alignment" });
   await coverTextAlignment.getByRole("button", { name: "Left", exact: true }).click();
   await expect(
     coverTextAlignment.getByRole("button", { name: "Left", exact: true }),
@@ -1786,15 +1783,13 @@ test("cover controls persist styling, metadata, and image removal", async ({ pag
   await expect(slashMenu.getByText("Video", { exact: true })).toHaveCount(0);
   await coverBody.fill("A formatted cover description");
   await expect(slashMenu).toBeHidden();
-  await expect(dialog).toBeVisible();
-  await expect(dialog.getByText("Saved", { exact: true })).toBeVisible({ timeout: 60_000 });
+  await expect(studio).toBeVisible();
+  await expect(studio.getByText("Saved", { exact: true })).toBeVisible({ timeout: 60_000 });
 
-  const heroControl = dialog
-    .getByText("Landscape cover image", { exact: true })
-    .locator("..");
+  const heroControl = await heroImageControl(studio);
   const updateCount = state.updates.length;
   await heroControl.getByRole("button", { name: "Remove", exact: true }).click();
-  await expect(dialog.locator('[data-cover-section="hero"]')).toHaveCount(0);
+  await expect(studio.locator('[data-cover-section="hero"]')).toHaveCount(0);
   await expect
     .poll(() => state.updates.length, { timeout: 60_000 })
     .toBeGreaterThan(updateCount);
@@ -1802,7 +1797,7 @@ test("cover controls persist styling, metadata, and image removal", async ({ pag
   await expect(coverFooter).toBeVisible();
 
   await expect.poll(() => state.updates.length, { timeout: 60_000 }).toBeGreaterThan(0);
-  await expect(dialog.getByText("Saved", { exact: true })).toBeVisible();
+  await expect(studio.getByText("Saved", { exact: true })).toBeVisible();
   const cover = state.exported().pages?.[0].cover;
   expect(cover?.theme).toBe("dark");
   expect(cover?.show_logo).toBe(false);
@@ -1841,13 +1836,11 @@ test("cover controls persist styling, metadata, and image removal", async ({ pag
 
 test("cover image replacement retains the caption, placement, and alignment", async ({ page }) => {
   const state = await fixture(page, document(2));
-  await page.getByRole("button", { name: "Preview pages" }).click();
-  await expect(page.getByRole("button", { name: "Customize pages", exact: true })).toBeVisible({ timeout: 60_000 });
-  await page.getByRole("button", { name: "Customize pages", exact: true }).click();
+  await openStudio(page);
 
-  const dialog = page.getByRole("dialog", { name: "Prepare social pages" });
-  const heroControl = dialog.getByText("Landscape cover image", { exact: true }).locator("..");
-  const captionInput = dialog.getByRole("textbox", { name: "Cover image caption" });
+  const studio = studioRegion(page);
+  const heroControl = await heroImageControl(studio);
+  const captionInput = studio.getByRole("textbox", { name: "Cover image caption" });
   await expect(captionInput).toBeHidden();
 
   let cropDialog = await chooseCoverImage(page, heroControl, "first-cover.png");
@@ -1858,9 +1851,9 @@ test("cover image replacement retains the caption, placement, and alignment", as
   await expect(captionInput).toBeVisible();
   await expect(captionInput).toHaveAttribute("maxlength", "120");
   await captionInput.fill("A quiet view of the city");
-  const alignment = dialog.getByRole("group", { name: "Caption alignment" });
-  const placement = dialog.getByRole("group", { name: "Caption placement" });
-  const hero = dialog.locator('main [data-cover-section="hero"]');
+  const alignment = studio.getByRole("group", { name: "Caption alignment" });
+  const placement = studio.getByRole("group", { name: "Caption placement" });
+  const hero = studio.locator('[data-studio-canvas] [data-cover-section="hero"]');
   await expect(placement.getByRole("button", { name: "On image" })).toHaveAttribute("aria-pressed", "true");
   await expect(hero).toHaveAttribute("data-caption-placement", "overlay");
   await alignment.getByRole("button", { name: "Right", exact: true }).click();
@@ -1890,13 +1883,13 @@ test("cover image replacement retains the caption, placement, and alignment", as
     return { imageBottom: image.bottom, captionTop: captionBounds.top };
   });
   expect(belowGeometry.captionTop).toBeGreaterThanOrEqual(belowGeometry.imageBottom);
-  await dialog.getByRole("button", { name: "Close", exact: true }).click();
-  await expect(dialog).toBeHidden();
-  const previewHero = page.locator('[aria-label="Letter export preview"] [data-cover-section="hero"]');
-  await expect(previewHero).toContainText("A quiet view of the city");
-  await expect(previewHero).toHaveAttribute("data-caption-placement", "below");
+  await backToEditor(page);
+  await expect(studio).toBeHidden();
 
-  await page.getByRole("button", { name: "Customize pages", exact: true }).click();
+  await openStudio(page);
+  await expect(hero).toContainText("A quiet view of the city");
+  await expect(hero).toHaveAttribute("data-caption-placement", "below");
+  await heroImageControl(studio);
   await expect(captionInput).toHaveValue("A quiet view of the city");
   await expect(alignment.getByRole("button", { name: "Right", exact: true })).toHaveAttribute("aria-pressed", "true");
   await expect(placement.getByRole("button", { name: "Below image" })).toHaveAttribute("aria-pressed", "true");
@@ -1913,7 +1906,7 @@ test("cover image replacement retains the caption, placement, and alignment", as
   expect(state.exported().pages?.[0].cover?.hero_image_caption_alignment).toBe("center");
   expect(state.exported().pages?.[0].cover?.hero_image_caption_placement).toBe("overlay");
   await expect(captionInput).toBeHidden();
-  await expect(dialog.locator('main [data-cover-section="hero"]')).toHaveCount(0);
+  await expect(studio.locator('[data-studio-canvas] [data-cover-section="hero"]')).toHaveCount(0);
 });
 
 test("saved cover edits carry across formats and a letter reload", async ({ page }) => {
@@ -1929,45 +1922,41 @@ test("saved cover edits carry across formats and a letter reload", async ({ page
     }],
     updateDelayMs: 500,
   });
-  await page.getByRole("button", { name: "Preview pages" }).click();
-  await page.getByRole("button", { name: "Customize pages", exact: true }).click();
-  const dialog = page.getByRole("dialog", { name: "Prepare social pages" });
+  await openStudio(page);
+  const studio = studioRegion(page);
 
-  await dialog.getByRole("combobox", { name: "Background" }).click();
-  await page.getByRole("option", { name: "Dark", exact: true }).click();
-  await dialog.getByRole("textbox", { name: "Subheader" }).fill("SAVED COVER");
-  await setRangeValue(dialog.getByRole("slider", { name: "Subheader size" }), 90);
-  await setRangeValue(dialog.getByRole("slider", { name: "Title size" }), 95);
-  await setRangeValue(dialog.getByRole("slider", { name: "Cover body text size" }), 90);
+  await studio.getByRole("button", { name: "Dark", exact: true }).click();
+  await studio.getByRole("textbox", { name: "Subheader" }).fill("SAVED COVER");
+  await setRangeValue(studio.getByRole("slider", { name: "Subheader size" }), 90);
+  await setRangeValue(studio.getByRole("slider", { name: "Title size" }), 95);
+  await setRangeValue(studio.getByRole("slider", { name: "Cover body text size" }), 90);
 
-  const heroControl = dialog.getByText("Landscape cover image", { exact: true }).locator("..");
+  const heroControl = await heroImageControl(studio);
   const cropDialog = await chooseCoverImage(page, heroControl, "saved-cover.png");
   await cropDialog.getByRole("button", { name: "4:5" }).click();
   await cropDialog.getByRole("button", { name: "Apply crop" }).click();
   await expect(cropDialog).toBeHidden();
-  await dialog.getByRole("textbox", { name: "Cover image caption" }).fill("Saved caption");
-  await dialog.getByRole("group", { name: "Caption placement" })
+  await studio.getByRole("textbox", { name: "Cover image caption" }).fill("Saved caption");
+  await studio.getByRole("group", { name: "Caption placement" })
     .getByRole("button", { name: "Below image" }).click();
 
-  await dialog.getByRole("button", { name: "Close", exact: true }).click();
-  await expect(dialog).toBeHidden({ timeout: 60_000 });
+  await backToEditor(page);
+  await expect(studio).toBeHidden({ timeout: 60_000 });
   const savedCover = structuredClone(state.exported().pages?.[0].cover);
   expect(savedCover?.hero_image_url).toBe("/storage/uploaded-cover-1.png");
   expect(JSON.stringify(savedCover?.description_blocks)).toContain('"bold":true');
 
-  const preview = page.getByRole("dialog", { name: "Preview letter pages" });
-  await preview.getByRole("combobox", { name: "Export format" }).click();
-  await page.getByRole("option", { name: /IG square/ }).click();
+  await openStudio(page);
+  await studio.getByRole("button", { name: "Square 1:1" }).click();
   await expect.poll(() => state.exported().format, { timeout: 60_000 }).toBe("square");
   expect(state.exportsCreated()).toBe(2);
   expect(state.exported().pages?.[0].cover).toEqual(savedCover);
   expect(state.mediaUploads()).toBe(1);
 
-  await preview.getByRole("button", { name: "Close", exact: true }).click();
+  await backToEditor(page);
   await page.reload();
-  await page.getByRole("button", { name: "Preview pages" }).click();
-  await preview.getByRole("combobox", { name: "Export format" }).click();
-  await page.getByRole("option", { name: /IG story/ }).click();
+  await openStudio(page);
+  await studio.getByRole("button", { name: "Story 9:16" }).click();
   await expect.poll(() => state.exported().format, { timeout: 60_000 }).toBe("story");
   expect(state.exportsCreated()).toBe(3);
   expect(state.exported().pages?.[0].cover).toEqual(savedCover);
@@ -1979,22 +1968,19 @@ test("new letter text replaces cover text while image and styling persist", asyn
     subtitle: "Original description",
     invalidateExportOnLetterUpdate: true,
   });
-  await page.getByRole("button", { name: "Preview pages" }).click();
-  await page.getByRole("button", { name: "Customize pages", exact: true }).click();
-  const dialog = page.getByRole("dialog", { name: "Prepare social pages" });
-  await dialog.getByRole("textbox", { name: "Subheader" }).fill("LETTER DESIGN");
-  const heroControl = dialog.getByText("Landscape cover image", { exact: true }).locator("..");
+  await openStudio(page);
+  const studio = studioRegion(page);
+  await studio.getByRole("textbox", { name: "Subheader" }).fill("LETTER DESIGN");
+  const heroControl = await heroImageControl(studio);
   const cropDialog = await chooseCoverImage(page, heroControl, "letter-cover.png");
   await cropDialog.getByRole("button", { name: "Apply crop" }).click();
   await expect(cropDialog).toBeHidden();
-  await dialog.getByRole("button", { name: "Close", exact: true }).click();
-  await expect(dialog).toBeHidden({ timeout: 60_000 });
-  await page.getByRole("dialog", { name: "Preview letter pages" })
-    .getByRole("button", { name: "Close", exact: true }).click();
+  await backToEditor(page);
+  await expect(studio).toBeHidden({ timeout: 60_000 });
 
   await page.getByRole("textbox", { name: "Letter title" }).fill("Updated letter title");
   await page.getByRole("textbox", { name: "Letter subtitle" }).fill("Updated description");
-  await page.getByRole("button", { name: "Preview pages" }).click();
+  await openStudio(page);
   await expect.poll(() => state.exportsCreated(), { timeout: 60_000 }).toBe(2);
   const updatedCoverPage = state.exported().pages?.[0];
   expect(updatedCoverPage?.title).toBe("Updated letter title");
@@ -2002,15 +1988,14 @@ test("new letter text replaces cover text while image and styling persist", asyn
   expect(updatedCoverPage?.cover?.hero_image_url).toBe("/storage/uploaded-cover-1.png");
   expect(updatedCoverPage?.cover?.subheader).toBe("LETTER DESIGN");
 
-  await page.getByRole("button", { name: "Customize pages", exact: true }).click();
+  await waitForCurrentPages(studio);
+  await heroImageControl(studio);
   await heroControl.getByRole("button", { name: "Remove", exact: true }).click();
-  await dialog.getByRole("button", { name: "Close", exact: true }).click();
-  await expect(dialog).toBeHidden({ timeout: 60_000 });
-  await page.getByRole("dialog", { name: "Preview letter pages" })
-    .getByRole("button", { name: "Close", exact: true }).click();
+  await backToEditor(page);
+  await expect(studio).toBeHidden({ timeout: 60_000 });
 
   await page.getByRole("textbox", { name: "Letter title" }).fill("Newest letter title");
-  await page.getByRole("button", { name: "Preview pages" }).click();
+  await openStudio(page);
   await expect.poll(() => state.exportsCreated(), { timeout: 60_000 }).toBe(3);
   expect(state.exported().pages?.[0].title).toBe("Newest letter title");
   expect(state.exported().pages?.[0].cover?.hero_image_url).toBeNull();
@@ -2023,13 +2008,12 @@ test("legacy image captions stay on the image", async ({ page }) => {
     initialHeroImageUrl: "http://localhost/storage/existing-cover.png",
     legacyCaptionPlacement: true,
   });
-  await page.getByRole("button", { name: "Preview pages" }).click();
-  await expect(page.getByRole("button", { name: "Customize pages", exact: true })).toBeVisible({ timeout: 60_000 });
-  await page.getByRole("button", { name: "Customize pages", exact: true }).click();
+  await openStudio(page);
 
-  const dialog = page.getByRole("dialog", { name: "Prepare social pages" });
-  await expect(dialog.getByRole("group", { name: "Caption placement" }).getByRole("button", { name: "On image" })).toHaveAttribute("aria-pressed", "true");
-  const caption = dialog.locator('main [data-cover-hero-caption]');
+  const studio = studioRegion(page);
+  await openCoverSection(studio, "Images");
+  await expect(studio.getByRole("group", { name: "Caption placement" }).getByRole("button", { name: "On image" })).toHaveAttribute("aria-pressed", "true");
+  const caption = studio.locator('[data-studio-canvas] [data-cover-hero-caption]');
   await expect(caption).toHaveText("An older image caption");
   await expect(caption).toHaveAttribute("data-caption-placement", "overlay");
 });
@@ -2045,20 +2029,15 @@ for (const format of ["portrait", "square", "story", "landscape"] as const) {
       initialHeroImageUrl: "http://localhost/storage/existing-cover.png",
       initialHeroAspectRatio: aspectRatio,
     });
-    await page.getByRole("button", { name: "Preview pages" }).click();
+    const studio = await openStudio(page);
     if (format !== "portrait") {
-      const formatSelect = page.getByRole("combobox", { name: "Export format" });
-      await expect(formatSelect).toBeEnabled({ timeout: 60_000 });
-      await formatSelect.click();
-      await page.getByRole("option", { name: new RegExp(LETTER_EXPORT_FORMATS[format].shortLabel) }).click();
+      const { name, ratio, width, height } = LETTER_EXPORT_FORMATS[format];
+      await studio.getByRole("button", { name: `${name} ${ratio}` }).click();
       await expect.poll(() => state.exported().format, { timeout: 60_000 }).toBe(format);
+      await expect(studio.getByText(`${width}×${height}`)).toBeAttached({ timeout: 60_000 });
     }
-    await expect(page.getByRole("button", { name: "Customize pages", exact: true })).toBeVisible({ timeout: 60_000 });
-    await page.getByRole("button", { name: "Customize pages", exact: true }).click();
-
-    const dialog = page.getByRole("dialog", { name: "Prepare social pages" });
     if (format === "story") {
-      const titleSize = dialog.getByRole("slider", { name: "Title size" });
+      const titleSize = studio.getByRole("slider", { name: "Title size" });
       await titleSize.scrollIntoViewIfNeeded();
       await titleSize.focus();
       await titleSize.press("ArrowRight");
@@ -2066,17 +2045,18 @@ for (const format of ["portrait", "square", "story", "landscape"] as const) {
       await expect.poll(() => state.exported().pages?.[0].cover?.title_font_scale).toBe(1.05);
     }
     const longCaption = "A city view with layers of quiet detail and people finding their way through an ordinary afternoon. ".repeat(2).slice(0, 120);
-    await dialog.getByRole("textbox", { name: "Cover image caption" }).fill(longCaption);
+    await openCoverSection(studio, "Images");
+    await studio.getByRole("textbox", { name: "Cover image caption" }).fill(longCaption);
     await expect.poll(() => state.exported().pages?.[0].cover?.hero_image_caption, { timeout: 60_000 }).toBe(longCaption);
-    const editorCanvas = dialog.locator('main [data-page-layout="cover"]');
-    const previewCanvas = page.locator('[aria-label="Letter export preview"] [data-page-layout="cover"]').first();
+    const editorCanvas = studio.locator('[data-studio-canvas] [data-page-layout="cover"]');
     await expectCoverColumnAlignment(editorCanvas, "overlay");
-    await dialog.getByRole("button", { name: "Close", exact: true }).click();
-    await expect(dialog).toBeHidden();
-    await expectCoverColumnAlignment(previewCanvas, "overlay");
+    await backToEditor(page);
+    await expect(studio).toBeHidden();
+    await openStudio(page);
+    await expectCoverColumnAlignment(editorCanvas, "overlay");
 
-    await page.getByRole("button", { name: "Customize pages", exact: true }).click();
-    await dialog.getByRole("group", { name: "Caption placement" }).getByRole("button", { name: "Below image" }).click();
+    await openCoverSection(studio, "Images");
+    await studio.getByRole("group", { name: "Caption placement" }).getByRole("button", { name: "Below image" }).click();
     await expect.poll(() => state.exported().pages?.[0].cover?.hero_image_caption_placement, { timeout: 60_000 }).toBe("below");
     await expect.poll(() => state.exported().pages?.[0].cover?.hero_image_caption, { timeout: 60_000 }).toBe(longCaption);
 
@@ -2084,20 +2064,19 @@ for (const format of ["portrait", "square", "story", "landscape"] as const) {
     await expect(hero.locator("[data-cover-hero-caption]")).toHaveText(longCaption);
     const geometry = await expectCoverColumnAlignment(editorCanvas, "below");
     expect(geometry.image.width / geometry.image.height).toBeGreaterThan(aspectRatio);
-    await dialog.getByRole("button", { name: "Close", exact: true }).click();
-    await expect(dialog).toBeHidden();
-    await expectCoverColumnAlignment(previewCanvas, "below");
+    await backToEditor(page);
+    await expect(studio).toBeHidden();
+    await openStudio(page);
+    await expectCoverColumnAlignment(editorCanvas, "below");
   });
 }
 
 test("failed cover replacement shows the image validation error and keeps the current image", async ({ page }) => {
   const state = await fixture(page, document(2), "portrait", { rejectMediaUploadNumber: 2 });
-  await page.getByRole("button", { name: "Preview pages" }).click();
-  await expect(page.getByRole("button", { name: "Customize pages", exact: true })).toBeVisible({ timeout: 60_000 });
-  await page.getByRole("button", { name: "Customize pages", exact: true }).click();
+  await openStudio(page);
 
-  const dialog = page.getByRole("dialog", { name: "Prepare social pages" });
-  const heroControl = dialog.getByText("Landscape cover image", { exact: true }).locator("..");
+  const studio = studioRegion(page);
+  const heroControl = await heroImageControl(studio);
   let cropDialog = await chooseCoverImage(page, heroControl, "first-cover.png");
   await cropDialog.getByRole("button", { name: "Apply crop" }).click();
   await expect(cropDialog).toBeHidden();
@@ -2107,7 +2086,7 @@ test("failed cover replacement shows the image validation error and keeps the cu
   await cropDialog.getByRole("button", { name: "Apply crop" }).click();
   await expect(cropDialog.getByRole("alert")).toContainText("The replacement image could not be saved.");
   expect(state.exported().pages?.[0].cover?.hero_image_url).toBe("/storage/uploaded-cover-1.png");
-  await expect(dialog.locator('main [data-cover-section="hero"] img')).toHaveAttribute("src", /uploaded-cover-1\.png/);
+  await expect(studio.locator('[data-studio-canvas] [data-cover-section="hero"] img')).toHaveAttribute("src", /uploaded-cover-1\.png/);
 
   await cropDialog.getByRole("button", { name: "Apply crop" }).click();
   await expect(cropDialog).toBeHidden();

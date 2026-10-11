@@ -52,7 +52,7 @@ async function openLetter(page: Page) {
   });
 
   await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
-  await page.goto(`/letters?letter=${letter.uuid}`);
+  await page.goto(`/letters/${letter.uuid}`);
   const editor = page.locator('.letter-composer-document .bn-editor[contenteditable="true"]');
   await expect(editor).toBeVisible({ timeout: 60_000 });
   return editor;
@@ -83,6 +83,14 @@ test("letter copy provides readable plain text and semantic HTML", async ({ page
   const editor = await openLetter(page);
   await editor.click();
   await page.keyboard.press("ControlOrMeta+A");
+  // The browser performs select-all natively; ProseMirror picks it up from an
+  // async selectionchange event, so wait for the editor state before copying.
+  await page.waitForFunction(() => {
+    const view = document.querySelector<HTMLElement & {
+      editor?: { state: { selection: { empty: boolean } } };
+    }>(".letter-composer-document .ProseMirror");
+    return view?.editor?.state.selection.empty === false;
+  });
   await page.keyboard.press("ControlOrMeta+C");
 
   const clipboard = await readClipboard(page);

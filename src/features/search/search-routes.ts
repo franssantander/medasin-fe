@@ -14,7 +14,7 @@ export function searchResultHref(result: SearchResult): string {
     case "journal":
       return `/journal?entry=${id}`;
     case "letter":
-      return `/letters?letter=${id}`;
+      return `/letters/${id}`;
     case "plan":
       return `/plans?plan=${id}`;
     case "habit":
