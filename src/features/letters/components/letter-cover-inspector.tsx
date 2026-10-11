@@ -52,6 +52,7 @@ import type {
   LetterCover,
   LetterCoverBylinePlacement,
   LetterCoverCaptionPlacement,
+  LetterCoverLogoPlacement,
   LetterCoverSection,
   LetterCoverTextAlignment,
   LetterPage,
@@ -115,6 +116,9 @@ export function LetterCoverInspector({
 }) {
   const cover = normalizeLetterCover(page.cover);
   const bylineAtBottom = cover.byline_placement === "bottom";
+  // A byline beside the logo takes the footer's left side, so the logo stays right.
+  const logoPlacementLocked =
+    bylineAtBottom && (cover.show_author || cover.show_date);
   // A byline pinned beside the logo keeps its slot for when it moves back up.
   const reorderableSections = bylineAtBottom
     ? cover.section_order.filter((section) => section !== "author")
@@ -318,6 +322,38 @@ export function LetterCoverInspector({
           checked={cover.show_logo}
           onCheckedChange={(show_logo) => onCoverChange({ show_logo })}
         />
+        {cover.show_logo ? (
+          <div className="flex flex-col gap-2">
+            <p id={`cover-logo-placement-${page.uuid}`} className="text-sm font-medium">
+              Logo placement
+            </p>
+            <ToggleGroup
+              aria-labelledby={`cover-logo-placement-${page.uuid}`}
+              className="w-full"
+              value={[logoPlacementLocked ? "right" : cover.logo_placement]}
+              variant="outline"
+              size="sm"
+              spacing={0}
+              disabled={logoPlacementLocked}
+              onValueChange={(value) => {
+                const placement = value[0] as LetterCoverLogoPlacement | undefined;
+                if (placement) onCoverChange({ logo_placement: placement });
+              }}
+            >
+              <ToggleGroupItem className="flex-1" value="center">
+                Center
+              </ToggleGroupItem>
+              <ToggleGroupItem className="flex-1" value="right">
+                Right
+              </ToggleGroupItem>
+            </ToggleGroup>
+            <FieldHint>
+              {logoPlacementLocked
+                ? "Logo placement is available when the byline is under the title."
+                : "Where the Medasin logo sits at the bottom of the cover."}
+            </FieldHint>
+          </div>
+        ) : null}
         <InspectorSwitch
           id={`cover-page-numbers-${page.uuid}`}
           label="Show page numbers"

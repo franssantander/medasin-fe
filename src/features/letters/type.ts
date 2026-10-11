@@ -32,6 +32,8 @@ export type LetterCoverCaptionPlacement = "overlay" | "below";
 
 export type LetterCoverBylinePlacement = "top" | "bottom";
 
+export type LetterCoverLogoPlacement = "center" | "right";
+
 export type LetterExportStatus =
   | "queued"
   | "processing"
@@ -71,6 +73,8 @@ export type LetterCoverImageCrop = {
 export type LetterCover = {
   theme: "light" | "dark";
   show_logo: boolean;
+  /** Center or right of the cover footer; right while the byline sits beside the logo. */
+  logo_placement: LetterCoverLogoPlacement;
   text_alignment: LetterCoverTextAlignment;
   subheader: string;
   subheader_font_scale: number;

@@ -2248,6 +2248,43 @@ test("the byline can sit beside the logo at the bottom of the cover", async ({ p
   await expect(studio.getByRole("button", { name: "Reorder Byline" })).toBeVisible();
 });
 
+test("the logo can be centered while the byline sits under the title", async ({ page }) => {
+  const state = await fixture(page, document(2));
+  const studio = await openStudio(page);
+  const canvas = studio.locator("[data-studio-canvas] [data-page-layout='cover']");
+  const footer = canvas.locator("[data-cover-footer]");
+  const logo = footer.locator('[data-cover-section="logo"]');
+  const logoPlacement = studio.getByRole("group", { name: "Logo placement" });
+  const middle = (selector: Locator) =>
+    selector.evaluate((element) => {
+      const { left, right } = element.getBoundingClientRect();
+      return (left + right) / 2;
+    });
+
+  await openCoverSection(studio, "Style");
+  await expect(logo).toHaveAttribute("data-logo-placement", "right");
+  await logoPlacement.getByRole("button", { name: "Center", exact: true }).click();
+  await expect(logo).toHaveAttribute("data-logo-placement", "center");
+  expect(Math.abs((await middle(logo)) - (await middle(footer)))).toBeLessThan(2);
+  await expect.poll(() => state.exported().pages?.[0].cover?.logo_placement, { timeout: 60_000 }).toBe("center");
+
+  await openCoverSection(studio, "Author");
+  await studio
+    .getByRole("group", { name: "Byline placement" })
+    .getByRole("button", { name: "Beside logo" })
+    .click();
+  await expect(logo).toHaveAttribute("data-logo-placement", "right");
+  await expect(logoPlacement.getByRole("button", { name: "Center", exact: true })).toBeDisabled();
+  await expect(logoPlacement.getByRole("button", { name: "Right", exact: true })).toHaveAttribute("aria-pressed", "true");
+
+  await studio
+    .getByRole("group", { name: "Byline placement" })
+    .getByRole("button", { name: "Under title" })
+    .click();
+  await expect(logo).toHaveAttribute("data-logo-placement", "center");
+  await expect(logoPlacement.getByRole("button", { name: "Center", exact: true })).toBeEnabled();
+});
+
 test("editing the cover title draws no box over its neighbours", async ({ page }) => {
   const state = await fixture(page, document(2));
   const studio = await openStudio(page);

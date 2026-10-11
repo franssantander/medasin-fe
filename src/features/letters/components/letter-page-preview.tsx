@@ -156,6 +156,8 @@ export const LetterPageCanvas = forwardRef<
       (section !== "author" || (hasByline && !bylineAtBottom)),
   );
   const footerByline = hasByline && bylineAtBottom;
+  // Centering only applies while the byline stays under the title.
+  const logoCentered = cover.logo_placement === "center" && !footerByline;
   const coverHeroAspectRatio =
     cover.hero_image_aspect_ratio ?? LETTER_COVER_HERO_ASPECT_RATIO;
   const heroCaption = cover.hero_image_caption.trim();
@@ -436,7 +438,11 @@ export const LetterPageCanvas = forwardRef<
               className={cn(
                 COVER_COLUMN_CLASS,
                 "flex shrink-0 items-center gap-[2.5cqw]",
-                footerByline ? "justify-between" : "justify-end",
+                footerByline
+                  ? "justify-between"
+                  : logoCentered
+                    ? "justify-center"
+                    : "justify-end",
               )}
             >
               {footerByline ? (
@@ -449,17 +455,26 @@ export const LetterPageCanvas = forwardRef<
                 />
               ) : null}
               {cover.show_logo ? (
-                <span data-cover-section="logo" className="flex shrink-0">
+                <span
+                  data-cover-section="logo"
+                  data-logo-placement={logoCentered ? "center" : "right"}
+                  className="flex shrink-0"
+                >
                   <Image
                     src="/images/medasin-leaf.svg"
                     alt="Medasin"
                     width={96}
                     height={96}
                     className={cn(
-                      "size-[6cqw] shrink-0 object-contain object-right",
+                      "size-[6cqw] shrink-0 object-contain",
+                      logoCentered ? "object-center" : "object-right",
                       pageIsDark && "invert",
                     )}
-                    style={{ transform: `translateX(${COVER_LOGO_RIGHT_INSET})` }}
+                    style={
+                      logoCentered
+                        ? undefined
+                        : { transform: `translateX(${COVER_LOGO_RIGHT_INSET})` }
+                    }
                     priority={!editable}
                   />
                 </span>

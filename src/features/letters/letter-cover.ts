@@ -48,6 +48,7 @@ export function createLetterCover(
   return {
     theme: "light",
     show_logo: true,
+    logo_placement: "right",
     text_alignment: "left",
     subheader: "A LETTER",
     subheader_font_scale: LETTER_COVER_FONT_SCALE_DEFAULT,
@@ -120,6 +121,7 @@ export function normalizeLetterCover(
   return {
     theme: source.theme === "dark" ? "dark" : "light",
     show_logo: source.show_logo !== false,
+    logo_placement: source.logo_placement === "center" ? "center" : "right",
     text_alignment:
       source.text_alignment === "left" || source.text_alignment === "right"
         ? source.text_alignment
