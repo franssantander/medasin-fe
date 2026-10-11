@@ -2,7 +2,6 @@
 
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import PageHeader from "@/components/shared/page-header";
 import { Button } from "@/components/ui/button";
 import { areaKeys } from "@/features/areas/queries/area-query";
 import { areaService } from "@/features/areas/services/area-service";
@@ -50,27 +49,19 @@ export function NotesPage({ initialNoteUuid }: { initialNoteUuid?: string }) {
   return (
     <div className="h-full min-h-0 min-w-0">
       {areasQuery.isError ? (
-        <div className="flex h-full min-h-0 min-w-0 flex-col gap-5">
-          <PageHeader
-            title="Notes"
-            description="Capture ideas, write freely, and keep related pages together."
-          />
-          <div className="flex min-h-0 flex-1 items-center justify-center rounded-xl border bg-card p-8 text-center">
-            <div className="grid max-w-sm gap-3">
-              <h2 className="font-semibold">Could not load Areas</h2>
-              <p className="text-sm text-muted-foreground">
-                Area notes could not be synchronized with the standalone Notes
-                page.
-              </p>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => void areasQuery.refetch()}
-              >
-                Try again
-              </Button>
-            </div>
-          </div>
+        <div className="flex h-full min-h-0 min-w-0 flex-col items-center justify-center gap-3 rounded-xl border bg-card p-8 text-center">
+          <h1 className="text-base font-semibold">Notes</h1>
+          <p className="max-w-sm text-sm text-muted-foreground">
+            Your Areas could not be loaded, so their notes can&apos;t be shown
+            yet.
+          </p>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => void areasQuery.refetch()}
+          >
+            Try again
+          </Button>
         </div>
       ) : (
         <NoteWorkspace

@@ -78,6 +78,42 @@ export function formatNoteTimestamp(value: string, now = new Date()) {
   );
 }
 
+export type NoteTimeGroup = "today" | "yesterday" | "week" | "earlier";
+
+export function noteTimeGroup(value: string, now = new Date()): NoteTimeGroup {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "earlier";
+
+  const days = calendarDayDifference(now, date);
+  if (days <= 0) return "today";
+  if (days === 1) return "yesterday";
+  if (days <= 7) return "week";
+  return "earlier";
+}
+
+// Short label for the notes list: a time today, then a day name, then a date.
+export function formatNoteListTime(value: string, now = new Date()) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+
+  const group = noteTimeGroup(value, now);
+  if (group === "today") {
+    return new Intl.DateTimeFormat(undefined, {
+      hour: "numeric",
+      minute: "2-digit",
+    }).format(date);
+  }
+  if (group === "yesterday") return "Yesterday";
+  if (group === "week") {
+    return new Intl.DateTimeFormat(undefined, { weekday: "short" }).format(date);
+  }
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    ...(date.getFullYear() !== now.getFullYear() ? { year: "numeric" } : {}),
+  }).format(date);
+}
+
 function calendarDayDifference(later: Date, earlier: Date) {
   const laterDay = Date.UTC(
     later.getFullYear(),

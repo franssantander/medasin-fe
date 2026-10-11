@@ -872,7 +872,7 @@ html[data-app-font="inter"] {
   content: attr(data-placeholder);
 }
 
-/* Area notes read like one page: the title and the editor body share a
+/* Notes and Area notes read like one page: the title and the editor body share a
    centered column and scroll together inside the workspace. */
 .notes-page-header {
   box-sizing: border-box;
