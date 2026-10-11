@@ -248,9 +248,16 @@ async function fixture(page: Page, options: Options = {}) {
     !options.failCalendar &&
     habits.length
   )
+  {
     await expect(
       page.getByRole("region", { name: "Habit calendar", exact: true }),
     ).toBeVisible();
+    // Streak history loads in the background once the range is ready.
+    await expect(page.locator('[data-slot="habit-today"]')).toHaveAttribute(
+      "aria-busy",
+      "false",
+    );
+  }
   return {
     requests,
     hold,
@@ -484,16 +491,63 @@ for (const kind of ["list", "calendar"] as const) {
 
 test("loading keeps the card and controls stable until history arrives", async ({
   page,
-}) => {
+}, testInfo) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
   const state = await fixture(page, { holdCalendar: true });
+  const skeleton = page.getByRole("status", {
+    name: "Loading habit calendar",
+    exact: true,
+  });
+  await expect(skeleton).toBeVisible();
+  // The skeleton shows the real week, with today highlighted.
+  await expect(skeleton.locator(".habit-calendar-header")).toContainText("Thu");
   await expect(
-    page.getByLabel("Loading habit calendar", { exact: true }),
-  ).toBeVisible();
-  const bounds = await page.locator(".habits-workspace-card").boundingBox();
+    skeleton.locator(".habit-calendar-header .habit-column-current"),
+  ).toContainText("8");
+  await expect(skeleton.locator(".habit-calendar-row")).toHaveCount(6);
+  await page.screenshot({ path: testInfo.outputPath("habits-loading.png") });
+  const measure = async () => ({
+    card: (await page.locator(".habits-workspace-card").boundingBox())!,
+    title: (await page.locator("#habit-range-title").boundingBox())!,
+    legend: (await page.getByText("Completed", { exact: true }).boundingBox())!,
+    today: (await page.locator('[data-slot="habit-today"]').boundingBox())!,
+  });
+  const before = await measure();
   state.releaseCalendar();
   await expect(rows(page)).toHaveCount(4);
-  const loaded = await page.locator(".habits-workspace-card").boundingBox();
-  expect(loaded!.height).toBeCloseTo(bounds!.height, 0);
+  await expect(page.locator('[data-slot="habit-today"]')).toHaveAttribute(
+    "aria-busy",
+    "false",
+  );
+  const after = await measure();
+  expect(after.card.height).toBeCloseTo(before.card.height, 0);
+  expect(after.title.y).toBeCloseTo(before.title.y, 0);
+  expect(after.legend.y).toBeCloseTo(before.legend.y, 0);
+  expect(after.today.height).toBeCloseTo(before.today.height, 0);
+});
+
+test("phone loading shows week strips without overflow", async ({
+  page,
+}, testInfo) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await fixture(page, { holdCalendar: true });
+  const skeleton = page.getByRole("status", {
+    name: "Loading habit calendar",
+    exact: true,
+  });
+  await expect(skeleton).toBeVisible();
+  const row = skeleton.locator(".habit-calendar-row").first();
+  const identity = await row.locator(".habit-identity").boundingBox();
+  const cell = await row.locator(".habit-day-cell").first().boundingBox();
+  expect(cell!.y).toBeGreaterThan(identity!.y);
+  expect(
+    await page
+      .locator("main")
+      .evaluate((element) => element.scrollWidth - element.clientWidth),
+  ).toBeLessThanOrEqual(2);
+  await page.screenshot({
+    path: testInfo.outputPath("habits-loading-mobile.png"),
+  });
 });
 
 test("keyboard check-in and edit closing restore the row action focus", async ({
@@ -693,6 +747,115 @@ test("failed deletion keeps its confirmation and supports retry", async ({
     .click();
   await expect(dialog).not.toBeVisible();
   await expect(rows(page)).toHaveCount(3);
+});
+
+test("today checklist checks in, updates progress and starts a streak", async ({
+  page,
+}, testInfo) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await fixture(page);
+  const panel = page.locator('[data-slot="habit-today"]');
+  await expect(
+    panel.getByText("0 of 3 done today", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    panel.getByRole("button", { name: /^Check in Meditate/ }),
+  ).toHaveCount(0);
+  const item = panel.getByRole("button", {
+    name: "Check in Read for 20 minutes for today",
+    exact: true,
+  });
+  await item.click();
+  await expect(item).toHaveAttribute("aria-pressed", "true");
+  await expect(todayButton(page)).toHaveAttribute("aria-pressed", "true");
+  await expect(
+    panel.getByText("1 of 3 done today", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    rows(page).first().getByText("1-day streak.", { exact: true }),
+  ).toBeAttached();
+  await page.screenshot({ path: testInfo.outputPath("habits-today.png") });
+});
+
+test("checking in every due habit celebrates the finished day", async ({
+  page,
+}, testInfo) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await fixture(page, { dark: true });
+  const panel = page.locator('[data-slot="habit-today"]');
+  for (const name of [
+    "Read for 20 minutes",
+    "Go for a walk",
+    "Reflect on the month",
+  ]) {
+    const item = panel.getByRole("button", {
+      name: "Check in " + name + " for today",
+      exact: true,
+    });
+    await item.click();
+    await expect(item).toHaveAttribute("aria-pressed", "true");
+  }
+  await expect(
+    panel.getByText("All done for today", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    panel.getByText("3 of 3 done today", { exact: true }),
+  ).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath("habits-all-done.png") });
+});
+
+test("a quick-start idea opens the form with its name and icon", async ({
+  page,
+}, testInfo) => {
+  const state = await fixture(page, { habits: [] });
+  await expect(
+    page.getByText("A small habit is a good start", { exact: true }),
+  ).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath("habits-empty.png") });
+  await page.getByRole("button", { name: "Drink water", exact: true }).click();
+  const dialog = formDialog(page);
+  await expect(
+    dialog.getByRole("textbox", { name: "Habit name", exact: true }),
+  ).toHaveValue("Drink water");
+  await dialog.getByRole("button", { name: "Add habit", exact: true }).click();
+  await expect(dialog).not.toBeVisible();
+  expect(
+    state.requests.find(
+      (request) => request.method === "POST" && request.path === "/habits",
+    )?.body,
+  ).toMatchObject({ name: "Drink water", icon: "GlassWater" });
+});
+
+test("weekday presets fill the schedule and the summary reads it back", async ({
+  page,
+}) => {
+  await fixture(page);
+  await page.getByRole("button", { name: "Add habit", exact: true }).click();
+  const dialog = formDialog(page);
+  await expect(dialog.getByText("Repeats every day", { exact: true })).toBeVisible();
+  await dialog.getByRole("combobox", { name: "Repeat", exact: true }).click();
+  await page
+    .getByRole("option", { name: "Selected weekdays", exact: true })
+    .click();
+  await dialog.getByRole("button", { name: "Weekdays", exact: true }).click();
+  for (const day of ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"])
+    await expect(
+      dialog.getByRole("button", { name: day, exact: true }),
+    ).toHaveAttribute("aria-pressed", "true");
+  await expect(
+    dialog.getByRole("button", { name: "Sunday", exact: true }),
+  ).toHaveAttribute("aria-pressed", "false");
+  await expect(
+    dialog.getByText("Repeats every weekday", { exact: true }),
+  ).toBeVisible();
+  await dialog.getByRole("button", { name: "Saturday", exact: true }).click();
+  await dialog.getByRole("button", { name: "Monday", exact: true }).click();
+  await expect(
+    dialog.getByText(
+      "Repeats every Tuesday, Wednesday, Thursday, Friday and Saturday",
+      { exact: true },
+    ),
+  ).toBeVisible();
 });
 
 for (const viewport of [

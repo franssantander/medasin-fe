@@ -223,3 +223,85 @@ export function aggregateMonth(
 
   return { scheduled, completed };
 }
+
+// Streaks only count scheduled days. Today stays open until it is checked in,
+// so an unfinished day never breaks the current streak.
+export function getStreaks(
+  habit: Habit,
+  entries: Map<string, HabitCheckIn>,
+  today: Date,
+) {
+  const created = startOfDay(new Date(habit.created_at));
+  let best = 0;
+  let run = 0;
+  for (let date = created; date <= today; date = addDays(date, 1)) {
+    if (!isScheduled(habit, date)) continue;
+    if (entries.get(localDate(date))?.completed) {
+      run += 1;
+      best = Math.max(best, run);
+    } else if (date < today) run = 0;
+  }
+  return { current: run, best };
+}
+
+const weekdayNames = [
+  "Sunday",
+  "Monday",
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+  "Friday",
+  "Saturday",
+];
+
+function listJoin(items: string[]) {
+  if (items.length <= 1) return items.join("");
+  return items.slice(0, -1).join(", ") + " and " + items[items.length - 1];
+}
+
+function ordinal(day: number) {
+  const suffix =
+    day % 10 === 1 && day !== 11
+      ? "st"
+      : day % 10 === 2 && day !== 12
+        ? "nd"
+        : day % 10 === 3 && day !== 13
+          ? "rd"
+          : "th";
+  return day + suffix;
+}
+
+export function describeSchedule(
+  frequency: Habit["frequency"],
+  schedule: Habit["schedule"],
+) {
+  if (frequency === "daily") return "Repeats every day";
+  if (frequency === "monthly") {
+    const dates = [...(schedule?.dates ?? [])].sort((a, b) => a - b);
+    return dates.length
+      ? "Repeats on the " + listJoin(dates.map(ordinal)) + " of each month"
+      : "Choose the dates you want to repeat";
+  }
+  const days = weekdays.filter((day) => schedule?.days?.includes(day));
+  if (!days.length) return "Choose the days you want to repeat";
+  if (days.length === 7) return "Repeats every day";
+  const key = days.join();
+  if (key === "monday,tuesday,wednesday,thursday,friday")
+    return "Repeats every weekday";
+  if (key === "sunday,saturday") return "Repeats every weekend";
+  return (
+    "Repeats every " +
+    listJoin(days.map((day) => weekdayNames[weekdays.indexOf(day)]))
+  );
+}
+
+export function rateTone(rate: number) {
+  if (rate >= 0.85) return "bg-emerald-500 text-white dark:bg-emerald-500/90";
+  if (rate >= 0.6)
+    return "bg-emerald-500/60 text-emerald-950 dark:bg-emerald-500/55 dark:text-white";
+  if (rate >= 0.35)
+    return "bg-emerald-500/35 text-emerald-950 dark:bg-emerald-500/30 dark:text-emerald-50";
+  if (rate > 0)
+    return "bg-emerald-500/15 text-emerald-900 dark:bg-emerald-500/15 dark:text-emerald-100";
+  return "bg-muted text-muted-foreground";
+}

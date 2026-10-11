@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronDown, ChevronUp, Loader2, Search, X } from "lucide-react";
+import { CalendarCheck, Loader2, Pencil, Search, X } from "lucide-react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useEffect, useId, useMemo, useState } from "react";
 import { Controller, useForm, useWatch } from "react-hook-form";
@@ -22,6 +22,8 @@ import {
   FieldError,
   FieldGroup,
   FieldLabel,
+  FieldLegend,
+  FieldSet,
   FieldTitle,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
@@ -52,6 +54,7 @@ import {
   type HabitResolvedValues,
 } from "../schemas/habit-schema";
 import type { Habit, HabitInput, HabitWeekday } from "../type";
+import { describeSchedule } from "./habit-calendar-utils";
 
 const frequencies = [
   { value: "daily", label: "Every day" },
@@ -68,6 +71,15 @@ const weekdays: { value: HabitWeekday; label: string; short: string }[] = [
   { value: "friday", label: "Friday", short: "F" },
   { value: "saturday", label: "Saturday", short: "S" },
 ];
+const dayPresets: { label: string; days: HabitWeekday[] }[] = [
+  {
+    label: "Weekdays",
+    days: ["monday", "tuesday", "wednesday", "thursday", "friday"],
+  },
+  { label: "Weekends", days: ["sunday", "saturday"] },
+];
+const chip =
+  "rounded-full border-border data-[pressed]:border-emerald-500 data-[pressed]:bg-emerald-500 data-[pressed]:text-white aria-pressed:border-emerald-500 aria-pressed:bg-emerald-500 aria-pressed:text-white hover:aria-pressed:bg-emerald-500/90 dark:aria-pressed:bg-emerald-500";
 
 export function HabitFormDialog({
   open,
@@ -77,6 +89,7 @@ export function HabitFormDialog({
   isPending,
   onSubmit,
   initialAreaUuid,
+  defaults,
   opener,
 }: {
   open: boolean;
@@ -86,6 +99,7 @@ export function HabitFormDialog({
   isPending: boolean;
   onSubmit: (input: HabitInput) => Promise<void>;
   initialAreaUuid?: string | null;
+  defaults?: { name: string; icon: string };
   opener?: HTMLElement | null;
 }) {
   const id = useId();
@@ -125,6 +139,14 @@ export function HabitFormDialog({
   const selectedIcon = useWatch({ control, name: "icon" }) || "Repeat2";
   const selectedDays = useWatch({ control, name: "schedule_days" }) ?? [];
   const selectedDates = useWatch({ control, name: "schedule_dates" }) ?? [];
+  const scheduleSummary = describeSchedule(
+    frequency,
+    frequency === "monthly"
+      ? { dates: selectedDates }
+      : frequency === "daily"
+        ? null
+        : { days: selectedDays },
+  );
   const areaOptions = useMemo(
     () => [
       { value: "none", label: "No Area" },
@@ -145,8 +167,8 @@ export function HabitFormDialog({
   useEffect(() => {
     if (!open) return;
     reset({
-      name: habit?.name ?? "",
-      icon: habit?.icon || "Repeat2",
+      name: habit?.name ?? defaults?.name ?? "",
+      icon: habit?.icon || defaults?.icon || "Repeat2",
       description: habit?.description ?? "",
       frequency: habit?.frequency ?? "daily",
       schedule_days: habit?.schedule?.days ?? [],
@@ -154,7 +176,7 @@ export function HabitFormDialog({
       is_active: habit?.is_active ?? true,
       area_uuid: habit?.area?.uuid ?? initialAreaUuid ?? null,
     });
-  }, [habit, initialAreaUuid, open, reset]);
+  }, [defaults, habit, initialAreaUuid, open, reset]);
 
   const submit = handleSubmit(async (values) => {
     if (isPending) return;
@@ -225,7 +247,7 @@ export function HabitFormDialog({
             ? target
             : document.getElementById("add-habit-trigger");
         }}
-        className="max-h-[92dvh] max-w-2xl gap-0 overflow-hidden p-0"
+        className="max-h-[92dvh] max-w-xl gap-0 overflow-hidden p-0"
       >
         <DialogHeader className="shrink-0 px-5 py-4 pr-14 sm:px-6 sm:pr-14">
           <DialogTitle>{habit ? "Edit habit" : "Add habit"}</DialogTitle>
@@ -252,74 +274,73 @@ export function HabitFormDialog({
           noValidate
           className="flex min-h-0 flex-1 flex-col"
         >
-          <FieldGroup className="workspace-list-scrollbar min-h-0 flex-1 gap-5 overflow-y-auto overscroll-contain px-5 py-5 sm:px-6">
-            <Field
-              data-invalid={Boolean(errors.name)}
-              data-disabled={isPending}
-            >
-              <FieldLabel htmlFor={id + "-name"}>Habit name</FieldLabel>
-              <Input
-                {...register("name")}
-                id={id + "-name"}
-                disabled={isPending}
-                maxLength={120}
-                placeholder="e.g. Read for 20 minutes"
-                aria-invalid={Boolean(errors.name)}
-                aria-describedby={
-                  id +
-                  "-name-help" +
-                  (errors.name ? " " + id + "-name-error" : "")
-                }
-              />
-              <FieldDescription id={id + "-name-help"}>
-                Keep it specific and easy to start.
-              </FieldDescription>
-              {errors.name && (
-                <FieldError id={id + "-name-error"}>
-                  {errors.name.message}
-                </FieldError>
-              )}
-            </Field>
-            <Field
-              data-invalid={Boolean(errors.icon)}
-              data-disabled={isPending}
-              className="gap-2"
-            >
-              <FieldTitle id={id + "-icon-label"}>Habit icon</FieldTitle>
-              <div className="flex items-center justify-between gap-3 rounded-lg border p-3">
-                <div className="flex min-w-0 items-center gap-3">
-                  <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted">
-                    <AreaIcon name={selectedIcon} className="size-4" />
-                  </span>
-                  <span className="truncate text-sm text-muted-foreground">
-                    {selectedIcon}
-                  </span>
+          <FieldGroup className="workspace-list-scrollbar min-h-0 flex-1 gap-6 overflow-y-auto overscroll-contain px-5 py-5 sm:px-6">
+            <div className="flex flex-col gap-3">
+              <div className="flex items-start gap-4">
+                <div className="flex flex-col items-center gap-1.5 pt-6">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    aria-label="Change icon"
+                    title="Change icon"
+                    aria-expanded={iconPickerOpen}
+                    aria-controls={id + "-icon-picker"}
+                    disabled={isPending}
+                    onClick={() => setIconPickerOpen(!iconPickerOpen)}
+                    className="relative size-12 rounded-xl border-emerald-500/30 bg-emerald-500/10 text-emerald-700 hover:bg-emerald-500/15 hover:text-emerald-700 aria-expanded:bg-emerald-500/20 aria-expanded:text-emerald-700 dark:border-emerald-400/30 dark:bg-emerald-500/15 dark:text-emerald-300 dark:hover:text-emerald-300 dark:aria-expanded:text-emerald-300"
+                  >
+                    <AreaIcon name={selectedIcon} className="size-5" />
+                    <span
+                      aria-hidden="true"
+                      className="absolute -right-1.5 -bottom-1.5 flex size-5 items-center justify-center rounded-full border bg-background text-muted-foreground shadow-xs"
+                    >
+                      <Pencil className="size-2.5" />
+                    </span>
+                  </Button>
                 </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  aria-expanded={iconPickerOpen}
-                  aria-controls={id + "-icon-picker"}
-                  disabled={isPending}
-                  onClick={() => setIconPickerOpen(!iconPickerOpen)}
+                <Field
+                  data-invalid={Boolean(errors.name)}
+                  data-disabled={isPending}
+                  className="min-w-0 flex-1"
                 >
-                  Change icon
-                  {iconPickerOpen ? (
-                    <ChevronUp data-icon="inline-end" />
-                  ) : (
-                    <ChevronDown data-icon="inline-end" />
+                  <FieldLabel htmlFor={id + "-name"}>Habit name</FieldLabel>
+                  <Input
+                    {...register("name")}
+                    id={id + "-name"}
+                    disabled={isPending}
+                    maxLength={120}
+                    placeholder="e.g. Read for 20 minutes"
+                    aria-invalid={Boolean(errors.name)}
+                    aria-describedby={
+                      id +
+                      "-name-help" +
+                      (errors.name ? " " + id + "-name-error" : "")
+                    }
+                  />
+                  <FieldDescription id={id + "-name-help"}>
+                    Keep it specific and easy to start.
+                  </FieldDescription>
+                  {errors.name && (
+                    <FieldError id={id + "-name-error"}>
+                      {errors.name.message}
+                    </FieldError>
                   )}
-                </Button>
+                </Field>
               </div>
               {iconPickerOpen && (
                 <div
                   id={id + "-icon-picker"}
                   role="region"
                   aria-labelledby={id + "-icon-label"}
-                  className="flex flex-col gap-3 rounded-lg border p-3"
+                  className="flex flex-col gap-3 rounded-lg border bg-muted/30 p-3 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-top-1"
                 >
-                  <InputGroup>
+                  <div className="flex items-center justify-between gap-2">
+                    <FieldTitle id={id + "-icon-label"}>Habit icon</FieldTitle>
+                    <span className="truncate text-xs text-muted-foreground">
+                      {selectedIcon}
+                    </span>
+                  </div>
+                  <InputGroup className="bg-background">
                     <InputGroupAddon>
                       <Search aria-hidden="true" />
                     </InputGroupAddon>
@@ -341,9 +362,9 @@ export function HabitFormDialog({
                         aria-pressed={selectedIcon === name}
                         disabled={isPending}
                         className={cn(
-                          "flex min-h-11 items-center justify-center rounded-md outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring disabled:opacity-50",
+                          "flex min-h-11 items-center justify-center rounded-md outline-none transition-colors hover:bg-background focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring disabled:opacity-50",
                           selectedIcon === name
-                            ? "bg-primary text-primary-foreground"
+                            ? "bg-emerald-500 text-white hover:bg-emerald-500"
                             : "text-muted-foreground",
                         )}
                         onClick={() =>
@@ -365,8 +386,10 @@ export function HabitFormDialog({
                 </div>
               )}
               {errors.icon && <FieldError>{errors.icon.message}</FieldError>}
-            </Field>
-            <div className="grid gap-5 sm:grid-cols-2">
+            </div>
+
+            <FieldSet className="gap-4 border-t pt-5">
+              <FieldLegend className="mb-0 text-sm">Schedule</FieldLegend>
               <Field
                 data-invalid={Boolean(errors.frequency)}
                 data-disabled={isPending}
@@ -405,6 +428,136 @@ export function HabitFormDialog({
                   <FieldError>{errors.frequency.message}</FieldError>
                 )}
               </Field>
+              {(frequency === "weekly" || frequency === "custom") && (
+                <Field
+                  data-invalid={Boolean(errors.schedule_days)}
+                  data-disabled={isPending}
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <FieldTitle id={id + "-days-label"}>
+                      Days of the week
+                    </FieldTitle>
+                    <div className="flex gap-1">
+                      {dayPresets.map((preset) => (
+                        <Button
+                          key={preset.label}
+                          type="button"
+                          variant="ghost"
+                          size="xs"
+                          disabled={isPending}
+                          onClick={() =>
+                            setValue("schedule_days", preset.days, {
+                              shouldDirty: true,
+                              shouldValidate: true,
+                            })
+                          }
+                        >
+                          {preset.label}
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+                  <ToggleGroup
+                    multiple
+                    value={selectedDays}
+                    disabled={isPending}
+                    aria-labelledby={id + "-days-label"}
+                    aria-invalid={Boolean(errors.schedule_days)}
+                    aria-describedby={
+                      errors.schedule_days ? id + "-days-error" : undefined
+                    }
+                    variant="outline"
+                    spacing={1}
+                    className="grid w-full grid-cols-7 justify-items-center"
+                    onValueChange={(values) =>
+                      setValue("schedule_days", values as HabitWeekday[], {
+                        shouldDirty: true,
+                        shouldValidate: true,
+                      })
+                    }
+                  >
+                    {weekdays.map((day) => (
+                      <ToggleGroupItem
+                        key={day.value}
+                        value={day.value}
+                        aria-label={day.label}
+                        title={day.label}
+                        className={cn("aspect-square h-auto w-full max-w-11 min-w-0 px-0", chip)}
+                      >
+                        {day.short}
+                      </ToggleGroupItem>
+                    ))}
+                  </ToggleGroup>
+                  {errors.schedule_days && (
+                    <FieldError id={id + "-days-error"}>
+                      {errors.schedule_days.message}
+                    </FieldError>
+                  )}
+                </Field>
+              )}
+              {frequency === "monthly" && (
+                <Field
+                  data-invalid={Boolean(errors.schedule_dates)}
+                  data-disabled={isPending}
+                >
+                  <FieldTitle id={id + "-dates-label"}>
+                    Dates of the month
+                  </FieldTitle>
+                  <ToggleGroup
+                    multiple
+                    value={selectedDates.map(String)}
+                    disabled={isPending}
+                    aria-labelledby={id + "-dates-label"}
+                    aria-invalid={Boolean(errors.schedule_dates)}
+                    aria-describedby={
+                      id +
+                      "-dates-help" +
+                      (errors.schedule_dates ? " " + id + "-dates-error" : "")
+                    }
+                    variant="outline"
+                    spacing={1}
+                    className="grid w-full grid-cols-7 justify-items-center"
+                    onValueChange={(values) =>
+                      setValue("schedule_dates", values.map(Number), {
+                        shouldDirty: true,
+                        shouldValidate: true,
+                      })
+                    }
+                  >
+                    {Array.from({ length: 31 }, (_, index) => index + 1).map(
+                      (date) => (
+                        <ToggleGroupItem
+                          key={date}
+                          value={String(date)}
+                          aria-label={"Day " + date}
+                          className={cn("aspect-square h-auto w-full max-w-11 min-w-0 px-0 tabular-nums", chip)}
+                        >
+                          {date}
+                        </ToggleGroupItem>
+                      ),
+                    )}
+                  </ToggleGroup>
+                  <FieldDescription id={id + "-dates-help"}>
+                    Dates that do not occur in a month are skipped.
+                  </FieldDescription>
+                  {errors.schedule_dates && (
+                    <FieldError id={id + "-dates-error"}>
+                      {errors.schedule_dates.message}
+                    </FieldError>
+                  )}
+                </Field>
+              )}
+              <p
+                className="flex items-center gap-2 rounded-lg bg-emerald-500/10 px-3 py-2 text-sm text-emerald-800 dark:text-emerald-200"
+                aria-live="polite"
+              >
+                <CalendarCheck className="size-4 shrink-0" aria-hidden="true" />
+                {scheduleSummary}
+              </p>
+            </FieldSet>
+
+            <FieldSet className="gap-4 border-t pt-5">
+              <FieldLegend className="mb-0 text-sm">Details</FieldLegend>
               <Field
                 data-invalid={Boolean(errors.area_uuid)}
                 data-disabled={isPending}
@@ -464,150 +617,53 @@ export function HabitFormDialog({
                   <FieldError>{errors.area_uuid.message}</FieldError>
                 )}
               </Field>
-            </div>
-            {(frequency === "weekly" || frequency === "custom") && (
               <Field
-                data-invalid={Boolean(errors.schedule_days)}
+                data-invalid={Boolean(errors.description)}
                 data-disabled={isPending}
               >
-                <FieldTitle id={id + "-days-label"}>
-                  Days of the week
-                </FieldTitle>
-                <ToggleGroup
-                  multiple
-                  value={selectedDays}
+                <FieldLabel htmlFor={id + "-description"}>
+                  Description{" "}
+                  <span className="font-normal text-muted-foreground">
+                    (optional)
+                  </span>
+                </FieldLabel>
+                <Textarea
+                  {...register("description")}
+                  id={id + "-description"}
                   disabled={isPending}
-                  aria-labelledby={id + "-days-label"}
-                  aria-invalid={Boolean(errors.schedule_days)}
-                  aria-describedby={
-                    errors.schedule_days ? id + "-days-error" : undefined
-                  }
-                  variant="outline"
-                  spacing={1}
-                  className="w-full"
-                  onValueChange={(values) =>
-                    setValue("schedule_days", values as HabitWeekday[], {
-                      shouldDirty: true,
-                      shouldValidate: true,
-                    })
-                  }
-                >
-                  {weekdays.map((day) => (
-                    <ToggleGroupItem
-                      key={day.value}
-                      value={day.value}
-                      aria-label={day.label}
-                      className="min-h-11 min-w-0 flex-1 px-0"
-                    >
-                      {day.short}
-                    </ToggleGroupItem>
-                  ))}
-                </ToggleGroup>
-                {errors.schedule_days && (
-                  <FieldError id={id + "-days-error"}>
-                    {errors.schedule_days.message}
-                  </FieldError>
+                  className="min-h-20"
+                  placeholder="A reminder of why this matters to you."
+                  aria-invalid={Boolean(errors.description)}
+                />
+                {errors.description && (
+                  <FieldError>{errors.description.message}</FieldError>
                 )}
               </Field>
-            )}
-            {frequency === "monthly" && (
               <Field
-                data-invalid={Boolean(errors.schedule_dates)}
+                orientation="horizontal"
                 data-disabled={isPending}
+                className="items-center justify-between rounded-lg border p-3"
               >
-                <FieldTitle id={id + "-dates-label"}>
-                  Dates of the month
-                </FieldTitle>
-                <ToggleGroup
-                  multiple
-                  value={selectedDates.map(String)}
-                  disabled={isPending}
-                  aria-labelledby={id + "-dates-label"}
-                  aria-invalid={Boolean(errors.schedule_dates)}
-                  aria-describedby={
-                    id +
-                    "-dates-help" +
-                    (errors.schedule_dates ? " " + id + "-dates-error" : "")
-                  }
-                  variant="outline"
-                  spacing={1}
-                  className="grid w-full grid-cols-7"
-                  onValueChange={(values) =>
-                    setValue("schedule_dates", values.map(Number), {
-                      shouldDirty: true,
-                      shouldValidate: true,
-                    })
-                  }
-                >
-                  {Array.from({ length: 31 }, (_, index) => index + 1).map(
-                    (date) => (
-                      <ToggleGroupItem
-                        key={date}
-                        value={String(date)}
-                        aria-label={"Day " + date}
-                        className="min-h-11 min-w-0 px-0"
-                      >
-                        {date}
-                      </ToggleGroupItem>
-                    ),
+                <FieldContent>
+                  <FieldLabel htmlFor={id + "-active"}>Active habit</FieldLabel>
+                  <FieldDescription>
+                    Pause check-ins while keeping your history.
+                  </FieldDescription>
+                </FieldContent>
+                <Controller
+                  control={control}
+                  name="is_active"
+                  render={({ field }) => (
+                    <Switch
+                      id={id + "-active"}
+                      checked={field.value}
+                      onCheckedChange={field.onChange}
+                      disabled={isPending}
+                    />
                   )}
-                </ToggleGroup>
-                <FieldDescription id={id + "-dates-help"}>
-                  Dates that do not occur in a month are skipped.
-                </FieldDescription>
-                {errors.schedule_dates && (
-                  <FieldError id={id + "-dates-error"}>
-                    {errors.schedule_dates.message}
-                  </FieldError>
-                )}
+                />
               </Field>
-            )}
-            <Field
-              data-invalid={Boolean(errors.description)}
-              data-disabled={isPending}
-            >
-              <FieldLabel htmlFor={id + "-description"}>
-                Description{" "}
-                <span className="font-normal text-muted-foreground">
-                  (optional)
-                </span>
-              </FieldLabel>
-              <Textarea
-                {...register("description")}
-                id={id + "-description"}
-                disabled={isPending}
-                className="min-h-20"
-                placeholder="A reminder of why this matters to you."
-                aria-invalid={Boolean(errors.description)}
-              />
-              {errors.description && (
-                <FieldError>{errors.description.message}</FieldError>
-              )}
-            </Field>
-            <Field
-              orientation="horizontal"
-              data-disabled={isPending}
-              className="items-center justify-between rounded-lg border p-3"
-            >
-              <FieldContent>
-                <FieldLabel htmlFor={id + "-active"}>Active habit</FieldLabel>
-                <FieldDescription>
-                  Pause check-ins while keeping your history.
-                </FieldDescription>
-              </FieldContent>
-              <Controller
-                control={control}
-                name="is_active"
-                render={({ field }) => (
-                  <Switch
-                    id={id + "-active"}
-                    checked={field.value}
-                    onCheckedChange={field.onChange}
-                    disabled={isPending}
-                  />
-                )}
-              />
-            </Field>
+            </FieldSet>
             {errors.root && (
               <Alert variant="destructive">
                 <AlertDescription>{errors.root.message}</AlertDescription>

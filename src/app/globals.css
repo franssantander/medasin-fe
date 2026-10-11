@@ -203,15 +203,28 @@ html[data-app-font="inter"] {
     display: contents;
   }
 
+  /* A soft band runs down the current day or month. */
+  .habit-column-current {
+    background-color: color-mix(in oklab, var(--primary) 4%, transparent);
+  }
+
   @media (min-width: 768px) {
     .habit-calendar-scroll {
       --habit-label-width: 16rem;
     }
   }
 
-  @media (min-width: 1280px) {
+  /* Beside the Today aside the calendar is narrower, so the label shrinks
+     to keep a full week visible without sideways scrolling. */
+  @container (min-width: 56rem) {
     .habit-calendar-scroll {
-      --habit-label-width: 18rem;
+      --habit-label-width: 14rem;
+    }
+  }
+
+  @container (min-width: 84rem) {
+    .habit-calendar-scroll {
+      --habit-label-width: 17rem;
     }
   }
 
@@ -249,6 +262,7 @@ html[data-app-font="inter"] {
     .habit-calendar-table[data-view="week"] .habit-identity {
       position: static;
       border-right: 0;
+      background: transparent;
       padding: 1rem 0.75rem 0.5rem;
     }
 
@@ -259,15 +273,13 @@ html[data-app-font="inter"] {
     .habit-calendar-table[data-view="week"] .habit-date-cells {
       display: grid;
       grid-template-columns: repeat(7, minmax(2.75rem, 1fr));
-      gap: 0.25rem;
       overflow-x: auto;
-      padding: 0.25rem 0.5rem 0.75rem;
+      padding: 0 0.5rem 0.75rem;
     }
 
     .habit-calendar-table[data-view="week"] .habit-day-cell {
       min-height: 5rem;
-      border: 0;
-      border-radius: var(--radius-md);
+      border-radius: var(--radius-lg);
     }
 
     .habit-calendar-table[data-view="week"] .habit-day-cell > button {

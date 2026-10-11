@@ -9,6 +9,7 @@ import type {
   PendingHabitCheckIn,
 } from "../type";
 import { useHabitCalendarState } from "../hooks/use-habit-calendar";
+import type { HabitStreak } from "../hooks/use-habit-insights";
 import { HabitCalendarHeader } from "./habit-calendar-header";
 import { HabitCalendarRow } from "./habit-calendar-row";
 
@@ -18,6 +19,7 @@ export function HabitCalendar({
   columns,
   view,
   rangeKey,
+  streaks,
   pending,
   pendingCheckIn,
   onCheckIn,
@@ -30,6 +32,7 @@ export function HabitCalendar({
   columns: HabitCalendarColumn[];
   view: HabitCalendarView;
   rangeKey: string;
+  streaks: Map<string, HabitStreak>;
   pending: boolean;
   pendingCheckIn?: PendingHabitCheckIn;
   onCheckIn: (habitUuid: string, date: string, completed: boolean) => void;
@@ -97,6 +100,7 @@ export function HabitCalendar({
               entries={entryMaps.get(habit.uuid)}
               columns={columns}
               today={today}
+              streak={streaks.get(habit.uuid)}
               pending={pending}
               pendingCheckIn={pendingCheckIn}
               onCheckIn={onCheckIn}

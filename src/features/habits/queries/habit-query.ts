@@ -28,7 +28,10 @@ export function useHabitsQuery(enabled = true) {
   });
 }
 
-export function useHabitCalendarQuery(range: HabitCalendarRange) {
+export function useHabitCalendarQuery(
+  range: HabitCalendarRange,
+  enabled = true,
+) {
   return useQuery({
     queryKey: habitKeys.calendar(range.startDate, range.endDate),
     queryFn: ({ signal }) =>
@@ -38,6 +41,7 @@ export function useHabitCalendarQuery(range: HabitCalendarRange) {
         browserTimezone(),
         signal,
       ),
+    enabled,
   });
 }
 
