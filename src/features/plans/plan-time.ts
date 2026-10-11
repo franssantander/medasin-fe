@@ -50,3 +50,53 @@ export function reminderLabel(plan: CalendarPlan, now = new Date()) {
   if (minutes < 1440) return `Reminder in ${Math.ceil(minutes / 60)}h`;
   return `Reminder in ${Math.ceil(minutes / 1440)}d`;
 }
+
+export type PlanAccent = "project" | "area" | "none";
+
+export function planAccent(plan: Pick<CalendarPlan, "project" | "area">): PlanAccent {
+  if (plan.project) return "project";
+  if (plan.area) return "area";
+  return "none";
+}
+
+/** The plan's calendar day in the viewer's timezone, as YYYY-MM-DD. */
+export function planDayKey(plan: CalendarPlan) {
+  return plan.is_all_day ? plan.date : localDateKey(new Date(plan.starts_at));
+}
+
+export function dateFromKey(key: string) {
+  const [year, month, day] = key.split("-").map(Number);
+  return new Date(year, month - 1, day, 12);
+}
+
+export function addDaysToKey(key: string, days: number) {
+  const date = dateFromKey(key);
+  date.setDate(date.getDate() + days);
+  return localDateKey(date);
+}
+
+/** "Mon, Oct 12" */
+export function formatDayKey(key: string, options?: { year?: boolean }) {
+  return new Intl.DateTimeFormat(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    ...(options?.year ? { year: "numeric" as const } : {}),
+  }).format(dateFromKey(key));
+}
+
+/** "10:00 AM", or "All day". */
+export function formatPlanTime(plan: CalendarPlan) {
+  if (plan.is_all_day) return "All day";
+  return new Intl.DateTimeFormat(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(plan.starts_at));
+}
+
+/** "Today", "Tomorrow", or "Mon, Oct 12". */
+export function dayGroupLabel(key: string, todayKey: string) {
+  if (key === todayKey) return "Today";
+  if (key === addDaysToKey(todayKey, 1)) return "Tomorrow";
+  return formatDayKey(key);
+}

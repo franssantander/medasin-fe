@@ -306,8 +306,8 @@ test("the bell marks a reminder read and opens its plan", async ({ page }) => {
   await page.getByRole("button", { name: /Notifications, 1 unread/ }).click();
   const sheet = page.getByRole("dialog", { name: "Notifications" });
   await expect(sheet.getByRole("link", { name: "View plan: Meet the team" })).toBeVisible();
-  await expect(sheet.getByText("New", { exact: true })).toBeVisible();
-  await sheet.locator("[data-slot=card]").click({ position: { x: 20, y: 24 } });
+  await expect(sheet.getByRole("listitem").getByText("Unread", { exact: true })).toBeVisible();
+  await sheet.getByRole("listitem").click({ position: { x: 20, y: 24 } });
   await expect.poll(state.noticeRead).toBe(true);
   await expect(page).toHaveURL(new RegExp(`/plans\\?plan=${planUuid}`));
   await expect(page.getByRole("dialog").getByText("Bring the agenda")).toBeVisible();
@@ -329,16 +329,16 @@ test("notification cards fit and mark read independently on a narrow dark screen
   const state = await fixture(page);
   await page.getByRole("button", { name: /Notifications, 1 unread/ }).click();
   const sheet = page.getByRole("dialog", { name: "Notifications" });
-  const card = sheet.locator("[data-slot=card]");
+  const card = sheet.getByRole("listitem");
   await expect(card).toBeVisible();
   await expect.poll(() => card.evaluate((element) => {
     const bounds = element.getBoundingClientRect();
     return bounds.left >= 0 && bounds.right <= window.innerWidth;
   })).toBe(true);
-  await sheet.getByRole("button", { name: "Mark read" }).click();
+  await sheet.getByRole("button", { name: "Mark as read: Meet the team" }).click();
   await expect.poll(state.noticeRead).toBe(true);
   await expect(page).toHaveURL(/\/plans$/);
-  await expect(sheet.getByText("New", { exact: true })).toHaveCount(0);
+  await expect(card.getByText("Unread", { exact: true })).toHaveCount(0);
 });
 
 test("the calendar and upcoming list fit a narrow dark screen", async ({ page }) => {

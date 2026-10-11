@@ -382,7 +382,7 @@ export function PlanNotifications({
           role="region"
           aria-label="Notification list"
           tabIndex={0}
-          className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto overscroll-contain p-3 outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset md:p-4"
+          className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto overscroll-contain p-3 outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset md:p-4"
           aria-busy={listQuery.isFetching}
           onFocusCapture={(event) => {
             lastListFocusRef.current = event.target;
@@ -392,10 +392,10 @@ export function PlanNotifications({
             <div
               role="status"
               aria-label="Loading notifications"
-              className="flex flex-col gap-3"
+              className="flex flex-col gap-2"
             >
               {[0, 1, 2, 3].map((index) => (
-                <Skeleton key={index} className="h-24 rounded-lg" />
+                <Skeleton key={index} className="h-20 rounded-xl" />
               ))}
             </div>
           ) : initialError ? (
@@ -467,7 +467,7 @@ export function PlanNotifications({
                   )}
                 </Empty>
               ) : (
-                <ItemGroup aria-label="Plan reminders">
+                <ItemGroup aria-label="Plan reminders" className="gap-2">
                   {items.map((item) => (
                     <NotificationRow
                       key={item.id}

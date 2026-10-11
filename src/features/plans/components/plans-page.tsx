@@ -1,19 +1,21 @@
 "use client";
 
-import { CalendarDays, Plus, RefreshCw } from "lucide-react";
+import { AlertCircle, LoaderCircle, Plus, RefreshCw } from "lucide-react";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { useCallback, useState, useSyncExternalStore } from "react";
 import PageHeader from "@/components/shared/page-header";
-import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { browserTimezone, localDateKey } from "../plan-time";
 import {
@@ -30,7 +32,7 @@ import { UpcomingPlans } from "./upcoming-plans";
 
 const PlansCalendar = dynamic(
   () => import("./plans-calendar").then((module) => module.PlansCalendar),
-  { ssr: false, loading: () => <Skeleton className="h-[36rem] rounded-xl" /> },
+  { ssr: false, loading: () => <CalendarSkeleton /> },
 );
 
 const subscribeTimezone = () => () => {};
@@ -47,9 +49,15 @@ export function PlansPage({ initialPlanUuid }: { initialPlanUuid?: string }) {
   const timezone = useSyncExternalStore(subscribeTimezone, browserTimezone, serverTimezone);
   if (!timezone) {
     return (
-      <div className="grid gap-4">
-        <Skeleton className="h-12 w-64" />
-        <Skeleton className="h-[36rem] rounded-xl" />
+      <div className="mx-auto grid w-full max-w-[110rem] gap-6">
+        <div className="grid gap-2">
+          <Skeleton className="h-6 w-24" />
+          <Skeleton className="h-4 w-72" />
+        </div>
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_19rem] xl:grid-cols-[minmax(0,1fr)_21rem]">
+          <CalendarSkeleton />
+          <Skeleton className="hidden h-72 rounded-xl lg:block" />
+        </div>
       </div>
     );
   }
@@ -101,34 +109,44 @@ function PlansWorkspace({
     setDeletePlan(undefined);
   };
 
+  const newPlan = () => setForm({ date: localDateKey(new Date()) });
+  const rangeEmpty =
+    !listQuery.isFetching && !listQuery.isError && listQuery.data?.data.length === 0;
+
   return (
-    <div className="mx-auto grid w-full max-w-[110rem] gap-5">
+    <div className="mx-auto grid w-full max-w-[110rem] gap-6">
       <PageHeader
         title="Plans"
         description="See what is ahead and make space for what matters."
-        action={<Button onClick={() => setForm({ date: localDateKey(new Date()) })}><Plus /> New plan</Button>}
+        action={<Button onClick={newPlan}><Plus data-icon="inline-start" /> New plan</Button>}
       />
-      <div className="grid min-w-0 gap-5 lg:grid-cols-[minmax(0,1fr)_19rem] xl:grid-cols-[minmax(0,1fr)_21rem]">
+      <div className="grid min-w-0 gap-6 lg:grid-cols-[minmax(0,1fr)_19rem] xl:grid-cols-[minmax(0,1fr)_21rem]">
         <div className="grid min-w-0 gap-3 self-start">
+          {listQuery.isError && (
+            <Alert variant="destructive">
+              <AlertCircle />
+              <AlertTitle>Plans could not be loaded for this date range.</AlertTitle>
+              <AlertDescription>
+                <Button size="sm" variant="outline" className="mt-2" onClick={() => void listQuery.refetch()}>
+                  {listQuery.isFetching
+                    ? <LoaderCircle className="animate-spin" data-icon="inline-start" />
+                    : <RefreshCw data-icon="inline-start" />}
+                  Try again
+                </Button>
+              </AlertDescription>
+            </Alert>
+          )}
           <PlansCalendar
             plans={listQuery.data?.data ?? []}
             focusDate={focusDate}
+            isFetching={listQuery.isFetching}
+            status={rangeEmpty ? "No plans in this view. Select a date or add a new plan." : undefined}
             onRangeChange={changeRange}
             onCreate={(date, time, allDay) => setForm({ date, time, allDay })}
             onOpenPlan={openPlan}
           />
-          {listQuery.isFetching && <p className="px-1 text-xs text-muted-foreground" role="status">Loading plans…</p>}
-          {listQuery.isError && (
-            <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm">
-              <p>Plans could not be loaded for this date range.</p>
-              <Button size="sm" variant="outline" onClick={() => void listQuery.refetch()}><RefreshCw /> Try again</Button>
-            </div>
-          )}
-          {!listQuery.isFetching && !listQuery.isError && listQuery.data?.data.length === 0 && (
-            <p className="flex items-center gap-2 px-1 text-xs text-muted-foreground"><CalendarDays className="size-3.5" aria-hidden="true" /> No plans in this view. Select a date or add a new plan.</p>
-          )}
         </div>
-        <UpcomingPlans timezone={timezone} onOpenPlan={openPlan} />
+        <UpcomingPlans timezone={timezone} onOpenPlan={openPlan} onCreate={newPlan} />
       </div>
 
       <PlanDetailDialog
@@ -156,22 +174,38 @@ function PlansWorkspace({
         />
       )}
 
-      <Dialog open={Boolean(deletePlan)} onOpenChange={(open) => { if (!open && !deleteMutation.isPending) setDeletePlan(undefined); }}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Move plan to Trash?</DialogTitle>
-            <DialogDescription>
+      <AlertDialog
+        open={Boolean(deletePlan)}
+        onOpenChange={(open) => { if (!open && !deleteMutation.isPending) setDeletePlan(undefined); }}
+      >
+        <AlertDialogContent className="max-w-md">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Move plan to Trash?</AlertDialogTitle>
+            <AlertDialogDescription>
               “{deletePlan?.title}” will leave the calendar. You can restore it from Trash for 30 days.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" disabled={deleteMutation.isPending} onClick={() => setDeletePlan(undefined)}>Cancel</Button>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteMutation.isPending}>Cancel</AlertDialogCancel>
             <Button variant="destructive" disabled={deleteMutation.isPending} onClick={() => void confirmDelete()}>
+              {deleteMutation.isPending && <LoaderCircle className="animate-spin" data-icon="inline-start" />}
               {deleteMutation.isPending ? "Moving…" : "Move to Trash"}
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+}
+
+function CalendarSkeleton() {
+  return (
+    <div className="overflow-hidden rounded-xl border bg-card" role="status" aria-label="Loading calendar">
+      <div className="flex items-center justify-between gap-3 border-b p-4">
+        <Skeleton className="h-8 w-56" />
+        <Skeleton className="hidden h-9 w-64 sm:block" />
+      </div>
+      <Skeleton className="m-4 h-[30rem] rounded-lg" />
     </div>
   );
 }

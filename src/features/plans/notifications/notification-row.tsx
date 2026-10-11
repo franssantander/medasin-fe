@@ -1,19 +1,16 @@
 "use client";
 
-import { BellRing, CalendarDays, Check, LoaderCircle } from "lucide-react";
+import { Bell, BellRing, CalendarClock, Check, LoaderCircle } from "lucide-react";
 import Link from "next/link";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
-  Card,
-  CardAction,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+  Item,
+  ItemContent,
+  ItemDescription,
+  ItemMedia,
+} from "@/components/ui/item";
+import { cn } from "@/lib/utils";
 import {
   notificationReceived,
   notificationSchedule,
@@ -39,25 +36,44 @@ export function NotificationRow({
   const unread = !item.read_at;
   const schedule = notificationSchedule(item);
   const received = notificationReceived(item, now);
+  const planUuid = item.data.plan_uuid;
 
   return (
-    <Card
+    <Item
       role="listitem"
+      variant="outline"
       size="sm"
-      className="min-w-0 gap-3"
       aria-busy={pending}
+      className={cn(
+        "relative min-w-0 flex-nowrap items-start gap-3 rounded-xl",
+        unread ? "border-primary/20 bg-primary/[0.04]" : "bg-card",
+        planUuid &&
+          "hover:bg-muted/50 has-[a:focus-visible]:ring-2 has-[a:focus-visible]:ring-ring",
+      )}
     >
-      <CardHeader className="min-w-0 gap-2">
-        <CardTitle className="min-w-0 wrap-anywhere">
-          <div className="flex min-w-0 items-start gap-2">
-            <span className="mt-1 shrink-0 [&_svg]:size-4" aria-hidden="true">
-              {unread ? <BellRing /> : <CalendarDays />}
-            </span>
-            {item.data.plan_uuid ? (
+      <ItemMedia
+        variant="icon"
+        className={cn(
+          "size-8 rounded-lg",
+          unread
+            ? "bg-primary/10 text-primary"
+            : "bg-muted text-muted-foreground",
+        )}
+        aria-hidden="true"
+      >
+        {unread ? <BellRing /> : <Bell />}
+      </ItemMedia>
+      <ItemContent className="min-w-0 gap-1">
+        <div className="flex min-w-0 items-start gap-3">
+          <div
+            data-slot="item-title"
+            className="flex min-w-0 flex-1 items-start gap-2 text-sm leading-snug font-medium wrap-anywhere"
+          >
+            {planUuid ? (
               <Link
-                href={`/plans?plan=${encodeURIComponent(item.data.plan_uuid)}`}
+                href={`/plans?plan=${encodeURIComponent(planUuid)}`}
                 aria-label={`View plan: ${title}`}
-                className="block min-h-11 min-w-0 flex-1 rounded-sm py-1 underline-offset-4 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring md:min-h-0 md:py-0"
+                className="min-w-0 outline-none after:absolute after:inset-0 after:rounded-xl after:content-['']"
                 onNavigate={(event) => {
                   event.preventDefault();
                   onOpenPlan(item);
@@ -66,68 +82,64 @@ export function NotificationRow({
                 {title}
               </Link>
             ) : (
-              <span className="min-w-0 flex-1">{title}</span>
+              <span className="min-w-0">{title}</span>
+            )}
+            {unread && (
+              <span className="mt-1.5 block size-2 shrink-0 rounded-full bg-primary">
+                <span className="sr-only">Unread</span>
+              </span>
             )}
           </div>
-        </CardTitle>
-        {schedule && (
-          <CardDescription
-            className="wrap-anywhere"
-            aria-label={`Scheduled for ${schedule}`}
-          >
-            {schedule}
-          </CardDescription>
-        )}
-        {unread && (
-          <CardAction>
-            <Badge variant="secondary">Unread</Badge>
-          </CardAction>
-        )}
-      </CardHeader>
-      {error && unread && (
-        <CardContent>
-          <Alert variant="destructive">
-            <AlertTitle>Couldn’t mark as read</AlertTitle>
-            <AlertDescription>
-              Your reminder is still unread. Please try again.
-            </AlertDescription>
-          </Alert>
-        </CardContent>
-      )}
-      {(received || unread) && (
-        <CardFooter className="flex-wrap justify-between gap-2 border-t">
           {received && (
             <time
               dateTime={received.dateTime}
               title={`Received ${received.absolute}`}
-              className="text-xs text-muted-foreground"
+              className="shrink-0 pt-px text-xs text-muted-foreground tabular-nums"
             >
-              Received {received.relative}
+              <span className="sr-only">Received </span>
+              {received.relative}
             </time>
           )}
-          {unread && (
-            <Button
-              size="sm"
-              variant="ghost"
-              className="ml-auto min-h-11 md:min-h-8"
-              aria-label={`Mark as read: ${title}`}
-              disabled={pending}
-              focusableWhenDisabled
-              onClick={() => onRead(item)}
-            >
-              {pending ? (
-                <LoaderCircle
-                  data-icon="inline-start"
-                  className="animate-spin motion-reduce:animate-none"
-                />
-              ) : (
-                <Check data-icon="inline-start" />
-              )}
-              {pending ? "Marking…" : "Mark read"}
-            </Button>
-          )}
-        </CardFooter>
-      )}
-    </Card>
+        </div>
+        {schedule && (
+          <ItemDescription
+            className="flex items-start gap-1.5 text-xs wrap-anywhere"
+            aria-label={`Scheduled for ${schedule}`}
+          >
+            <CalendarClock className="mt-px size-3.5 shrink-0" aria-hidden="true" />
+            {schedule}
+          </ItemDescription>
+        )}
+        {error && unread && (
+          <Alert variant="destructive" className="relative z-10 mt-1 px-3 py-2 text-xs">
+            <AlertTitle className="text-xs">Couldn’t mark as read</AlertTitle>
+            <AlertDescription className="text-xs">
+              Your reminder is still unread. Please try again.
+            </AlertDescription>
+          </Alert>
+        )}
+        {unread && (
+          <Button
+            size="xs"
+            variant="ghost"
+            className="relative z-10 -ml-2 mt-1 min-h-11 w-fit text-muted-foreground hover:text-foreground md:min-h-6"
+            aria-label={`Mark as read: ${title}`}
+            disabled={pending}
+            focusableWhenDisabled
+            onClick={() => onRead(item)}
+          >
+            {pending ? (
+              <LoaderCircle
+                data-icon="inline-start"
+                className="animate-spin motion-reduce:animate-none"
+              />
+            ) : (
+              <Check data-icon="inline-start" />
+            )}
+            {pending ? "Marking…" : "Mark read"}
+          </Button>
+        )}
+      </ItemContent>
+    </Item>
   );
 }

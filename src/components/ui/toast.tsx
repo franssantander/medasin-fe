@@ -13,6 +13,7 @@ import {
   OctagonXIcon,
   Loader2Icon,
   BellRingIcon,
+  CalendarClockIcon,
 } from "lucide-react";
 
 export type PlanReminderToastData = {
@@ -60,7 +61,7 @@ function Toast({ className, ...props }: ToastPrimitive.Root.Props) {
     <ToastPrimitive.Root
       data-slot="toast"
       className={cn(
-        "group/toast pointer-events-auto absolute right-0 bottom-0 z-[calc(1000-var(--toast-index))] w-full origin-bottom rounded-2xl border bg-popover text-popover-foreground shadow-lg will-change-transform outline-none select-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50",
+        "group/toast pointer-events-auto absolute right-0 bottom-0 z-[calc(1000-var(--toast-index))] w-full origin-bottom rounded-xl border bg-popover text-popover-foreground shadow-lg will-change-transform outline-none select-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50",
         "[--gap:0.75rem] [--height:var(--toast-frontmost-height,var(--toast-height))] [--offset-y:calc(var(--toast-offset-y)*-1+calc(var(--toast-index)*var(--gap)*-1)+var(--toast-swipe-movement-y))] [--peek:0.75rem] [--scale:calc(max(0,1-(var(--toast-index)*0.1)))] [--shrink:calc(1-var(--scale))]",
         "h-(--height) [transform:translateX(var(--toast-swipe-movement-x))_translateY(calc(var(--toast-swipe-movement-y)-(var(--toast-index)*var(--peek))-(var(--shrink)*var(--height))))_scale(var(--scale))] [transition:transform_500ms_cubic-bezier(0.22,1,0.36,1),opacity_500ms,height_150ms]",
         "after:absolute after:top-full after:left-0 after:h-[calc(var(--gap)+1px)] after:w-full after:content-['']",
@@ -160,11 +161,16 @@ function ToastIcon({ type }: { type: string | undefined }) {
   let icon: React.ReactNode = null;
 
   if (type === "success") {
-    icon = <CircleCheckIcon aria-hidden="true" />;
+    icon = (
+      <CircleCheckIcon
+        className="text-emerald-600 dark:text-emerald-400"
+        aria-hidden="true"
+      />
+    );
   }
 
   if (type === "info") {
-    icon = <InfoIcon aria-hidden="true" />;
+    icon = <InfoIcon className="text-muted-foreground" aria-hidden="true" />;
   }
 
   if (type === "reminder") {
@@ -172,7 +178,12 @@ function ToastIcon({ type }: { type: string | undefined }) {
   }
 
   if (type === "warning") {
-    icon = <TriangleAlertIcon aria-hidden="true" />;
+    icon = (
+      <TriangleAlertIcon
+        className="text-amber-600 dark:text-amber-400"
+        aria-hidden="true"
+      />
+    );
   }
 
   if (type === "error") {
@@ -195,7 +206,7 @@ function ToastIcon({ type }: { type: string | undefined }) {
   return (
     <span
       data-slot="toast-icon"
-      className="shrink-0 [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4"
+      className="mt-0.5 shrink-0 [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4"
     >
       {icon}
     </span>
@@ -209,35 +220,44 @@ function ToastList() {
     isPlanReminderToastData(toastItem.data) ? (
       <Toast key={toastItem.id} toast={toastItem} data-variant="plan-reminder">
         <ToastContent className="items-start">
-          <span className="mt-0.5 shrink-0">
-            <ToastIcon type="reminder" />
+          <span
+            className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary"
+            aria-hidden="true"
+          >
+            <BellRingIcon className="size-4" />
           </span>
-          <div className="flex min-w-0 flex-1 flex-col gap-1">
-            <ToastTitle />
-            <ToastDescription className="line-clamp-2 wrap-anywhere" />
+          <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+            <ToastTitle className="text-xs font-medium text-muted-foreground" />
+            <ToastDescription className="line-clamp-2 font-medium wrap-anywhere text-foreground" />
             {toastItem.data.schedule && (
-              <p
-                data-slot="toast-schedule"
-                className="text-xs leading-relaxed wrap-anywhere text-muted-foreground"
-              >
-                {toastItem.data.schedule}
+              <p className="mt-1 flex items-start gap-1.5 text-xs leading-relaxed text-muted-foreground">
+                <CalendarClockIcon
+                  className="mt-[0.2rem] size-3.5 shrink-0"
+                  aria-hidden="true"
+                />
+                <span data-slot="toast-schedule" className="min-w-0 wrap-anywhere">
+                  {toastItem.data.schedule}
+                </span>
               </p>
             )}
-            <ToastAction className="mt-2 min-h-11 w-fit sm:min-h-8" />
+            <ToastAction
+              render={<Button size="sm" />}
+              className="mt-3 min-h-11 w-fit sm:min-h-8"
+            />
           </div>
           <ToastClose className="-mt-1 -mr-1 min-h-11 min-w-11 sm:min-h-8 sm:min-w-8" />
         </ToastContent>
       </Toast>
     ) : (
       <Toast key={toastItem.id} toast={toastItem}>
-        <ToastContent>
+        <ToastContent className="items-start">
           <ToastIcon type={toastItem.type} />
           <div className="flex min-w-0 flex-1 flex-col gap-1">
             <ToastTitle />
             <ToastDescription />
           </div>
-          <ToastAction />
-          <ToastClose />
+          <ToastAction className="self-center" />
+          <ToastClose className="-mt-1 -mr-1" />
         </ToastContent>
       </Toast>
     ),
