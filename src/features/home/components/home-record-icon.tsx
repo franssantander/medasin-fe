@@ -1,6 +1,8 @@
 import { Leaf, Rocket } from "lucide-react";
 import { DynamicIcon, iconNames, type IconName } from "lucide-react/dynamic";
 
+import { cn } from "@/lib/utils";
+
 type RecordKind = "project" | "area";
 
 // Saved icon names use PascalCase, while Lucide's dynamic imports use kebab-case.
@@ -24,9 +26,11 @@ function AreaFallbackIcon() {
 export function HomeRecordIcon({
   kind,
   name,
+  size = "default",
 }: {
   kind: RecordKind;
   name?: string | null;
+  size?: "default" | "sm";
 }) {
   const normalized = name?.replaceAll("-", "").toLowerCase();
   const resolvedName = normalized
@@ -35,7 +39,12 @@ export function HomeRecordIcon({
   const FallbackIcon = kind === "project" ? ProjectFallbackIcon : AreaFallbackIcon;
 
   return (
-    <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted text-foreground ring-1 ring-foreground/5">
+    <span
+      className={cn(
+        "flex shrink-0 items-center justify-center rounded-lg bg-muted text-foreground ring-1 ring-foreground/5",
+        size === "sm" ? "size-8 [&_svg]:size-4" : "size-10",
+      )}
+    >
       {resolvedName ? (
         <DynamicIcon
           key={resolvedName}

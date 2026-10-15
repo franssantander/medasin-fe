@@ -18,11 +18,16 @@ export function TrashListItem({
   onDelete,
 }: TrashListItemProps) {
   const { icon: Icon, singularLabel } = trashTypeConfig[item.type];
-  const urgent = item.days_remaining <= 5;
+  const urgency =
+    item.days_remaining <= 5 ? "urgent" : item.days_remaining <= 10 ? "soon" : "normal";
 
   return (
     <article
-      className={!item.can_restore ? "bg-amber-500/5 p-5 sm:p-6" : "p-5 sm:p-6"}
+      className={
+        !item.can_restore
+          ? "bg-amber-500/5 p-5 transition-colors sm:px-6 sm:py-5"
+          : "p-5 transition-colors hover:bg-muted/40 sm:px-6 sm:py-5"
+      }
     >
       <div className="flex flex-col gap-4 @min-[36rem]/trash:flex-row @min-[36rem]/trash:items-center">
         <div className="flex min-w-0 flex-1 gap-3">
@@ -42,9 +47,11 @@ export function TrashListItem({
               Deleted {formatDate(item.deleted_at)} ·{" "}
               <span
                 className={
-                  urgent
+                  urgency === "urgent"
                     ? "font-semibold text-destructive"
-                    : "font-semibold text-amber-700 dark:text-amber-300"
+                    : urgency === "soon"
+                      ? "font-semibold text-amber-700 dark:text-amber-300"
+                      : "font-medium text-foreground/80"
                 }
               >
                 {item.days_remaining}{" "}

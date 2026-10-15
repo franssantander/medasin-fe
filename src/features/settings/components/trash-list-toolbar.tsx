@@ -1,11 +1,5 @@
-import { Search } from "lucide-react";
+import { Search, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import {
-  CardAction,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import {
   InputGroup,
   InputGroupAddon,
@@ -20,6 +14,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { TrashItemType } from "../types";
+import { SettingsPanelHeader } from "./settings-panel-header";
 import { trashTypeOptions } from "./trash-item-config";
 
 const trashFilterItems = [
@@ -44,24 +39,21 @@ export function TrashListToolbar({
 }: TrashListToolbarProps) {
   return (
     <>
-      <CardHeader className="shrink-0 border-b p-5 sm:p-6">
-        <CardTitle>
-          <h2>Trash</h2>
-        </CardTitle>
-        <CardDescription>
-          Deleted items stay here for 30 days. Restore them before they expire.
-        </CardDescription>
-        {total !== undefined && (
-          <CardAction>
+      <SettingsPanelHeader
+        icon={Trash2}
+        title="Trash"
+        description="Deleted items stay here for 30 days. Restore them before they expire."
+        action={
+          total !== undefined && (
             <Badge variant="secondary">
               <span className="tabular-nums">{total}</span>
               {total === 1 ? "item" : "items"}
             </Badge>
-          </CardAction>
-        )}
-      </CardHeader>
+          )
+        }
+      />
 
-      <div className="flex shrink-0 flex-col gap-3 border-b p-5 sm:p-6 @min-[30rem]/trash:flex-row">
+      <div className="flex shrink-0 flex-col gap-3 border-b bg-muted/30 px-5 py-4 sm:px-6 @min-[30rem]/trash:flex-row">
         <InputGroup className="min-w-0 flex-1">
           <InputGroupInput
             type="search"

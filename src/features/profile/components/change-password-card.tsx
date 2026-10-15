@@ -5,7 +5,7 @@ import { useForm } from "react-hook-form";
 import { useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { FieldGroup } from "@/components/ui/field";
 import { AuthFormError } from "@/features/auth/components/auth-form-error";
 import { AuthInputField } from "@/features/auth/components/auth-input-field";
@@ -43,17 +43,15 @@ export function ChangePasswordCard({ userId, busy }: { userId: number; busy: boo
 
   return (
     <Card>
-      <CardHeader className="gap-1.5">
-        <CardTitle><h2>Change password</h2></CardTitle>
-        <CardDescription>You will stay signed in here. Your other sessions will be signed out.</CardDescription>
-      </CardHeader>
       <CardContent>
         <form noValidate onSubmit={(event) => void form.handleSubmit(submit)(event)} className="flex w-full flex-col gap-5" aria-busy={disabled}>
           <AuthFormError message={errors.root?.server?.message} />
           <FieldGroup className="gap-4">
             <AuthInputField id="profile-current-password" label="Current password" type="password" autoComplete="current-password" registration={form.register("current_password")} error={errors.current_password} disabled={disabled} />
-            <AuthInputField id="profile-new-password" label="New password" type="password" autoComplete="new-password" registration={form.register("password")} error={errors.password} disabled={disabled} hint="Use at least 8 characters." />
-            <AuthInputField id="profile-password-confirmation" label="Confirm new password" type="password" autoComplete="new-password" registration={form.register("password_confirmation")} error={errors.password_confirmation} disabled={disabled} />
+            <div className="grid items-start gap-4 sm:grid-cols-2">
+              <AuthInputField id="profile-new-password" label="New password" type="password" autoComplete="new-password" registration={form.register("password")} error={errors.password} disabled={disabled} hint="Use at least 8 characters." />
+              <AuthInputField id="profile-password-confirmation" label="Confirm new password" type="password" autoComplete="new-password" registration={form.register("password_confirmation")} error={errors.password_confirmation} disabled={disabled} />
+            </div>
           </FieldGroup>
           {message ? <p role="status" className="text-sm text-muted-foreground">{message}</p> : null}
           <Button type="submit" disabled={disabled} className="h-11 w-full sm:w-auto sm:self-end md:h-9">

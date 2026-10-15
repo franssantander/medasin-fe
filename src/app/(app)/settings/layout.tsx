@@ -6,6 +6,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { SettingsAccountLink } from "@/features/settings/components/settings-account-link";
 import { SettingsNavigation } from "@/features/settings/components/settings-navigation";
 
 export default function SettingsLayout({ children }: { children: ReactNode }) {
@@ -17,13 +18,16 @@ export default function SettingsLayout({ children }: { children: ReactNode }) {
       >
         <Card className="min-h-0 gap-0 py-0 md:flex-1">
           <CardHeader className="shrink-0 border-b p-5 sm:p-6">
-            <CardTitle>
+            <CardTitle className="text-lg font-semibold">
               <h1>Settings</h1>
             </CardTitle>
             <CardDescription>Manage your workspace.</CardDescription>
           </CardHeader>
-          <CardContent className="min-h-0 p-2 sm:p-3 md:flex-1 md:overflow-y-auto">
+          <CardContent className="min-h-0 gap-4 p-2 sm:p-3 md:flex-1 md:overflow-y-auto">
             <SettingsNavigation />
+            <div className="mt-auto hidden md:block">
+              <SettingsAccountLink />
+            </div>
           </CardContent>
         </Card>
       </aside>

@@ -298,7 +298,7 @@ test("home shows backend totals, progress, links, and local streak timezone", as
   await expect(homeLink.locator("svg.lucide-house")).toBeVisible();
   await expect(page.getByText("Make room for what matters today.")).toBeVisible();
   const overview = page.getByRole("region", { name: "Overview" });
-  const metricCards = overview.locator('dl > [data-slot="card"]');
+  const metricCards = overview.locator("dl > div");
   await expect(metricCards).toHaveCount(4);
   await expectSharedHomeTheme(page);
   for (const [label, value, iconClass] of [
@@ -339,31 +339,12 @@ test("home shows backend totals, progress, links, and local streak timezone", as
       const { x, y, width, height } = card.getBoundingClientRect();
       return { x, y, width, height };
     }));
-    expect(new Set(cardBounds.map((card) => Math.round(card.y))).size).toBe(width < 1024 ? 2 : 1);
+    // Stats sit in a 2x2 grid in the side rail, or one row of four on tablet widths.
+    expect(new Set(cardBounds.map((card) => Math.round(card.y))).size).toBe(width === 768 ? 1 : 2);
     expect(cardBounds[1].x).toBeGreaterThan(cardBounds[0].x + cardBounds[0].width);
     for (const card of cardBounds) {
-      expect(card.height).toBeGreaterThanOrEqual(128);
       expect(Math.abs(card.height - cardBounds[0].height)).toBeLessThanOrEqual(1);
       expect(Math.abs(card.width - cardBounds[0].width)).toBeLessThanOrEqual(1);
-    }
-    const metricAlignment = await page.getByRole("region", { name: "Areas" })
-      .locator('[data-slot="card"] dl > div')
-      .evaluateAll((metrics) => metrics.map((metric) => {
-        const center = metric.getBoundingClientRect().left + metric.getBoundingClientRect().width / 2;
-        const textOffset = (selector: string) => {
-          const element = metric.querySelector(selector);
-          if (!element) return Number.POSITIVE_INFINITY;
-          const range = document.createRange();
-          range.selectNodeContents(element);
-          const text = range.getBoundingClientRect();
-          return Math.abs(text.left + text.width / 2 - center);
-        };
-        return { number: textOffset("dd"), label: textOffset("dt") };
-      }));
-    expect(metricAlignment).toHaveLength(populatedHome().areas.length * 3);
-    for (const metric of metricAlignment) {
-      expect(metric.number).toBeLessThanOrEqual(2);
-      expect(metric.label).toBeLessThanOrEqual(2);
     }
     const main = page.locator("#app-shell main");
     expect(await main.evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
@@ -389,10 +370,10 @@ test("home renders saved icons and fallback icons with accessible card navigatio
   const areas = page.getByRole("region", { name: "Areas" });
   const projectCard = (name: string) =>
     projects.getByRole("link", { name: `Open project ${name}` })
-      .locator('xpath=ancestor::*[@data-slot="card"][1]');
+      .locator("xpath=ancestor::*[@data-home-item][1]");
   const areaCard = (name: string) =>
     areas.getByRole("link", { name: `Open area ${name}` })
-      .locator('xpath=ancestor::*[@data-slot="card"][1]');
+      .locator("xpath=ancestor::*[@data-home-item][1]");
 
   await expect(projectCard("North star").locator('svg[data-icon-name="chart-no-axes-combined"]')).toBeVisible();
   await expect(projectCard("Completed roadmap").locator('svg[data-icon-name="axis-3d"]')).toBeVisible();
@@ -445,7 +426,7 @@ test("home keeps its welcome and everyday tools available while the overview loa
   try {
     const loading = page.getByRole("status", { name: "Loading home" });
     await expect(loading).toBeVisible();
-    await expect(loading.locator('[data-slot="card"]')).toHaveCount(4);
+    await expect(loading.locator('[data-slot="skeleton"]')).toHaveCount(11);
     await expect(loading.locator('[data-slot="skeleton"]').first()).toHaveCSS("animation-name", "none");
     await expect(page.getByRole("heading", { name: "Welcome, Test.", level: 1 })).toBeVisible();
     await expect(page.getByText("Friday, October 9", { exact: true })).toBeVisible();
@@ -506,9 +487,9 @@ test("home supports dark mode, keyboard focus, and reduced motion", async ({ pag
   await expect(page.locator("html")).toHaveClass(/dark/);
   await expect(page.getByText("North star", { exact: true })).toBeVisible();
   await expectSharedHomeTheme(page);
-  await expect(page.getByRole("region", { name: "Overview" }).locator('[data-slot="card"]')).toHaveCount(4);
+  await expect(page.getByRole("region", { name: "Overview" }).locator("dl > div")).toHaveCount(4);
   const project = page.getByRole("link", { name: "Open project North star" });
-  const card = project.locator('xpath=ancestor::*[@data-slot="card"][1]');
+  const card = project.locator("xpath=ancestor::*[@data-home-item][1]");
   await expect(card).toHaveCSS("transition-property", "none");
   await expect(card.locator('[data-slot="progress-indicator"]')).toHaveCSS("transition-property", "none");
   await page.keyboard.press("Tab");
@@ -546,7 +527,7 @@ test("empty home shows zero totals and helpful empty sections", async ({ page })
   await page.goto("/home");
 
   await expect(page.getByRole("heading", { name: "Welcome, Test.", level: 1 })).toBeVisible();
-  const metricCards = page.getByRole("region", { name: "Overview" }).locator('[data-slot="card"]');
+  const metricCards = page.getByRole("region", { name: "Overview" }).locator("dl > div");
   await expect(metricCards).toHaveCount(4);
   await expect(metricCards.locator("dd")).toHaveText(["0", "0", "0", /0\s*days/]);
   await expect(page.getByText("No projects yet")).toBeVisible();

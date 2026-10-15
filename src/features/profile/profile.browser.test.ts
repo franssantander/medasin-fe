@@ -204,15 +204,22 @@ test("the account menu opens Profile and falls back to initials for a missing or
   await expect(page.getByText("ada@example.com", { exact: true }).first()).toBeVisible();
   await expect(page.getByRole("button", { name: "Update password", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Delete account", exact: true })).toBeVisible();
-  for (const label of ["Current password", "New password", "Confirm new password"]) {
-    const availableWidth = await page.getByLabel(label, { exact: true }).evaluate((input) => {
-      const content = input.closest('[data-slot="card-content"]')!;
-      const style = getComputedStyle(content);
-      return content.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
-    });
+  const currentPasswordWidth = await page.getByLabel("Current password", { exact: true }).evaluate((input) => {
+    const content = input.closest('[data-slot="card-content"]')!;
+    const style = getComputedStyle(content);
+    return content.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+  });
+  const currentPasswordBounds = await page.getByLabel("Current password", { exact: true }).boundingBox();
+  expect(Math.abs(currentPasswordBounds!.width - currentPasswordWidth)).toBeLessThanOrEqual(2);
+  const pairedBounds = [];
+  for (const label of ["New password", "Confirm new password"]) {
+    const fieldWidth = await page.getByLabel(label, { exact: true }).evaluate((input) => input.closest('[data-slot="field"]')!.clientWidth);
     const inputBounds = await page.getByLabel(label, { exact: true }).boundingBox();
-    expect(Math.abs(inputBounds!.width - availableWidth)).toBeLessThanOrEqual(2);
+    expect(Math.abs(inputBounds!.width - fieldWidth)).toBeLessThanOrEqual(2);
+    pairedBounds.push(inputBounds!);
   }
+  expect(Math.abs(pairedBounds[0].y - pairedBounds[1].y)).toBeLessThanOrEqual(1);
+  expect(pairedBounds[0].x + pairedBounds[0].width).toBeLessThan(pairedBounds[1].x);
   await page.screenshot({ path: testInfo.outputPath("profile-desktop-light.png") });
 
   api.store.users[0].profile_image_url = "/storage/profiles/ada/broken.png";

@@ -1,10 +1,11 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import { CameraIcon, UploadIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import type { CurrentUser } from "@/features/auth/type";
@@ -12,7 +13,7 @@ import { getImageAspectRatio } from "@/lib/image/crop-image";
 import { parseApiError } from "@/lib/axios";
 import { useProfileImageMutation } from "../queries/profile-query";
 import { PROFILE_IMAGE_MAX_BYTES, PROFILE_IMAGE_TYPES } from "../types";
-import { UserAvatar } from "./user-avatar";
+import { getUserDisplayName, UserAvatar } from "./user-avatar";
 
 const ProfilePhotoCropDialog = dynamic(
   () => import("./profile-photo-crop-dialog").then((module) => module.ProfilePhotoCropDialog),
@@ -20,6 +21,12 @@ const ProfilePhotoCropDialog = dynamic(
 );
 
 type CropSource = { file: File; source: string };
+
+const HERO_BAND = [
+  "radial-gradient(circle at 15% 0%, color-mix(in oklch, var(--primary) 12%, transparent), transparent 55%)",
+  "radial-gradient(circle at 85% 100%, color-mix(in oklch, var(--primary) 8%, transparent), transparent 50%)",
+  "linear-gradient(to right, var(--muted), color-mix(in oklch, var(--muted) 60%, var(--card)))",
+].join(", ");
 
 export function ProfileImageCard({ user, busy }: { user: CurrentUser; busy: boolean }) {
   const mutation = useProfileImageMutation(user.id);
@@ -89,19 +96,33 @@ export function ProfileImageCard({ user, busy }: { user: CurrentUser; busy: bool
   };
 
   return (
-    <Card>
-      <CardHeader className="gap-1.5">
-        <CardTitle><h2>Profile photo</h2></CardTitle>
-        <CardDescription>Add a photo so your account is easy to recognize.</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:gap-5">
-          <UserAvatar user={user} className="size-20" />
-          <Field className="min-w-0 flex-1 gap-3" data-invalid={!!error} data-disabled={disabled}>
-            <div className="flex min-w-0 flex-col gap-1">
-              <p className="break-words font-medium">{user.full_name || [user.first_name, user.last_name].filter(Boolean).join(" ") || user.username}</p>
-              <p className="break-all text-sm text-muted-foreground">{user.email}</p>
-            </div>
+    <Card className="gap-0 py-0">
+      <div aria-hidden="true" className="h-20 sm:h-24" style={{ backgroundImage: HERO_BAND }} />
+      <CardContent className="flex flex-col items-center gap-4 px-6 pb-6 text-center sm:flex-row sm:items-start sm:gap-6 sm:text-left">
+        <div className="relative -mt-12 shrink-0">
+          <UserAvatar user={user} className="size-24 ring-4 ring-card" fallbackClassName="text-2xl font-medium" />
+          <Button
+            type="button"
+            variant="outline"
+            size="icon-sm"
+            className="absolute right-0 bottom-0 rounded-full bg-card shadow-sm"
+            aria-label="Edit profile photo"
+            disabled={disabled}
+            onClick={() => inputRef.current?.click()}
+          >
+            <CameraIcon />
+          </Button>
+        </div>
+        <div className="flex min-w-0 flex-1 flex-col gap-4 sm:pt-3">
+          <div className="flex min-w-0 flex-col gap-0.5">
+            <p className="break-words text-lg font-semibold">{getUserDisplayName(user)}</p>
+            <p className="text-sm text-muted-foreground">
+              <span className="break-all">@{user.username}</span>
+              <span aria-hidden="true" className="mx-1.5">·</span>
+              <span className="break-all">{user.email}</span>
+            </p>
+          </div>
+          <Field className="gap-2" data-invalid={!!error} data-disabled={disabled}>
             <div className="relative">
               <FieldLabel htmlFor="profile-photo" className="sr-only">Profile photo</FieldLabel>
               <Input
@@ -119,12 +140,13 @@ export function ProfileImageCard({ user, busy }: { user: CurrentUser; busy: bool
                   void selectImage(file);
                 }}
               />
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap justify-center gap-2 sm:justify-start">
                 <Button type="button" variant="outline" className="h-11 md:h-9" disabled={disabled} onClick={() => inputRef.current?.click()}>
+                  <UploadIcon data-icon="inline-start" />
                   {reading ? "Reading image…" : mutation.isPending ? "Saving photo…" : user.profile_image_url ? "Change photo" : "Upload photo"}
                 </Button>
                 {user.profile_image_url ? (
-                  <Button type="button" variant="ghost" className="h-11 md:h-9" disabled={disabled} onClick={() => void saveImage(null)}>
+                  <Button type="button" variant="ghost" className="h-11 text-muted-foreground md:h-9" disabled={disabled} onClick={() => void saveImage(null)}>
                     Remove photo
                   </Button>
                 ) : null}

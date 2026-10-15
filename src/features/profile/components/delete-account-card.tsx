@@ -5,7 +5,7 @@ import { useForm, useWatch } from "react-hook-form";
 import { useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { FieldGroup } from "@/components/ui/field";
 import { AuthFormError } from "@/features/auth/components/auth-form-error";
@@ -50,13 +50,12 @@ export function DeleteAccountCard({ userId, busy }: { userId: number; busy: bool
   };
 
   return (
-    <Card>
-      <CardHeader className="gap-1.5">
-        <CardTitle><h2>Delete account</h2></CardTitle>
-        <CardDescription>Delete your account and all your workspace data, including archived items and Trash.</CardDescription>
-      </CardHeader>
-      <CardContent className="gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <p className="text-sm text-muted-foreground">This action cannot be undone.</p>
+    <Card className="ring-destructive/30 dark:ring-destructive/40">
+      <CardContent className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex min-w-0 flex-col gap-1">
+          <p className="font-medium">Delete account</p>
+          <p className="text-sm text-muted-foreground">Delete your account and all your workspace data, including archived items and Trash. This action cannot be undone.</p>
+        </div>
         <Button type="button" variant="destructive" disabled={disabled} className="h-11 w-full sm:w-auto md:h-9" onClick={() => changeOpen(true)}>
           Delete account
         </Button>

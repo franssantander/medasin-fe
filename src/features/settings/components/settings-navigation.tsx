@@ -9,10 +9,21 @@ const settingsItems = [
   {
     href: "/settings/preferences",
     label: "Preferences",
+    description: "Theme and font",
     icon: SlidersHorizontal,
   },
-  { href: "/settings/plan", label: "Plan & usage", icon: ChartNoAxesCombined },
-  { href: "/settings/trash", label: "Trash", icon: Trash2 },
+  {
+    href: "/settings/plan",
+    label: "Plan & usage",
+    description: "Your plan and limits",
+    icon: ChartNoAxesCombined,
+  },
+  {
+    href: "/settings/trash",
+    label: "Trash",
+    description: "Restore deleted items",
+    icon: Trash2,
+  },
 ];
 
 export function SettingsNavigation() {
@@ -26,20 +37,37 @@ export function SettingsNavigation() {
       {settingsItems.map((item) => {
         const active = pathname === item.href;
         const Icon = item.icon;
+        const descriptionId = `settings-nav-${item.href.split("/").pop()}-description`;
 
         return (
           <Link
             key={item.href}
             href={item.href}
             aria-current={active ? "page" : undefined}
+            aria-describedby={descriptionId}
             className={cn(
-              "flex min-h-11 min-w-0 items-center justify-center gap-2 rounded-lg px-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 md:justify-start md:px-3",
-              active &&
-                "bg-muted font-semibold text-foreground hover:bg-muted",
+              "group/nav flex min-h-11 min-w-0 items-center justify-center gap-2 rounded-lg px-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 md:justify-start md:gap-3 md:py-2",
+              active && "bg-muted text-foreground hover:bg-muted",
             )}
           >
-            <Icon className="size-4 shrink-0" aria-hidden="true" />
-            <span className="truncate">{item.label}</span>
+            <span
+              aria-hidden="true"
+              className={cn(
+                "flex shrink-0 items-center justify-center max-sm:min-[380px]:hidden md:size-8 md:rounded-md md:border md:border-transparent md:transition-colors",
+                active && "md:border-border md:bg-background md:text-foreground md:shadow-xs",
+              )}
+            >
+              <Icon className="size-4" />
+            </span>
+            <span className="flex min-w-0 flex-col">
+              <span className={cn("truncate", active && "font-semibold")}>{item.label}</span>
+              <span
+                id={descriptionId}
+                className="hidden truncate text-xs font-normal text-muted-foreground md:block"
+              >
+                {item.description}
+              </span>
+            </span>
           </Link>
         );
       })}
