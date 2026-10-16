@@ -19,7 +19,7 @@ import { cn } from "@/lib/utils";
 function AppLoadingSkeleton() {
   return (
     <div id="app-shell" className="flex h-dvh overflow-hidden">
-      <div className="hidden h-full w-64 shrink-0 flex-col gap-4 border-r border-sidebar-border bg-sidebar p-4 md:flex">
+      <div className="hidden h-full w-60 shrink-0 flex-col gap-4 border-r border-sidebar-border bg-sidebar p-4 md:flex">
         <Skeleton className="h-8 w-32" />
         <div className="flex flex-col gap-2 pt-2">
           {appNavigationItems.map((item) => (

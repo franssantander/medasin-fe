@@ -56,7 +56,7 @@ function DropdownMenuItem({
       data-slot="dropdown-menu-item"
       data-destructive={destructive || undefined}
       className={cn(
-        "flex min-h-9 items-center gap-2 rounded-md px-2.5 py-2 text-sm outline-none select-none data-highlighted:bg-accent data-highlighted:text-accent-foreground data-disabled:pointer-events-none data-disabled:opacity-45 data-[destructive]:text-destructive data-[destructive]:data-highlighted:bg-destructive/10 [&_svg]:size-4 [&_svg]:shrink-0",
+        "flex min-h-9 cursor-pointer items-center gap-2 rounded-md px-2.5 py-2 text-sm outline-none select-none data-highlighted:bg-accent data-highlighted:text-accent-foreground data-disabled:pointer-events-none data-disabled:opacity-45 data-[destructive]:text-destructive data-[destructive]:data-highlighted:bg-destructive/10 [&_svg]:size-4 [&_svg]:shrink-0",
         className,
       )}
       {...props}

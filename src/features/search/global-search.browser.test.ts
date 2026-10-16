@@ -196,6 +196,13 @@ async function fixture(page: Page, initialGroups: SearchGroup[] = defaultGroups)
   };
 }
 
+async function openSearch(page: Page) {
+  await page.keyboard.press("Control+k");
+  const input = page.getByRole("dialog", { name: "Search" }).getByRole("combobox", { name: "Search everything" });
+  await expect(input).toBeFocused();
+  return input;
+}
+
 test("shortcut focuses search, short input stays local, and a filter scopes the request", async ({ page }) => {
   const state = await fixture(page);
   await page.keyboard.press("Control+k");
@@ -229,16 +236,18 @@ test("search stays at the left of the header and above Notes content", async ({ 
     await page.goto("/notes");
     await expect(page.getByRole("heading", { name: "Notes", exact: true }).first()).toBeVisible();
 
-    const input = page.getByRole("combobox", { name: "Search everything" });
+    const trigger = page.getByRole("button", { name: "Search everything" });
     const header = page.locator("#app-shell > div > header");
     const headerBounds = await header.boundingBox();
-    const inputBounds = await input.boundingBox();
+    const triggerBounds = await trigger.boundingBox();
     expect(headerBounds).not.toBeNull();
-    expect(inputBounds).not.toBeNull();
-    expect(inputBounds!.x - headerBounds!.x).toBeLessThan(80);
+    expect(triggerBounds).not.toBeNull();
+    expect(triggerBounds!.x - headerBounds!.x).toBeLessThan(80);
 
-    await input.click();
-    const placeholder = page.getByText("Find anything in your workspace");
+    await trigger.click();
+    const input = page.getByRole("dialog", { name: "Search" }).getByRole("combobox", { name: "Search everything" });
+    await expect(input).toBeFocused();
+    const placeholder = page.getByRole("group", { name: "Jump to" }).getByText("Jump to", { exact: true });
     await expect(placeholder).toBeVisible();
     expect(await placeholder.evaluate((element) => {
       const bounds = element.getBoundingClientRect();
@@ -266,11 +275,11 @@ test("search stays at the left of the header and above Notes content", async ({ 
 
 test("arrow keys move across groups and Enter opens the active record", async ({ page }) => {
   await fixture(page);
-  const input = page.getByRole("combobox", { name: "Search everything" });
+  const input = await openSearch(page);
   await input.fill("atlas");
   await expect(page.getByRole("option", { name: /Atlas research note/ })).toBeVisible();
 
-  await input.press("ArrowDown");
+  // The first result is active by default, like a command palette.
   await expect(input).toHaveAttribute("aria-activedescendant", await page.getByRole("option", { name: /Atlas project/ }).getAttribute("id") || "missing");
   await input.press("ArrowDown");
   await expect(input).toHaveAttribute("aria-activedescendant", await page.getByRole("option", { name: /Atlas research note/ }).getAttribute("id") || "missing");
@@ -280,45 +289,52 @@ test("arrow keys move across groups and Enter opens the active record", async ({
 
 test("Escape and outside click close search while preserving the query", async ({ page }) => {
   await fixture(page);
-  const input = page.getByRole("combobox", { name: "Search everything" });
+  const input = await openSearch(page);
+  const dialog = page.getByRole("dialog", { name: "Search" });
+  const trigger = page.getByRole("button", { name: "Search everything" });
   await input.fill("atlas");
   await expect(page.getByRole("option", { name: /Atlas project/ })).toBeVisible();
   await input.press("Escape");
-  await expect(input).toHaveAttribute("aria-expanded", "false");
-  await expect(input).toHaveValue("atlas");
+  await expect(dialog).toHaveCount(0);
+  await expect(trigger).toContainText("atlas");
 
-  await input.click();
-  await expect(input).toHaveAttribute("aria-expanded", "true");
+  await trigger.click();
+  await expect(input).toBeFocused();
+  await expect(input).toHaveValue("atlas");
   await page.mouse.click(1200, 900);
-  await expect(input).toHaveAttribute("aria-expanded", "false");
+  await expect(dialog).toHaveCount(0);
+  await trigger.click();
   await expect(input).toHaveValue("atlas");
 });
 
 test("opening a result saves the query in recent searches for that user", async ({ page }) => {
   const state = await fixture(page);
-  const input = page.getByRole("combobox", { name: "Search everything" });
+  let input = await openSearch(page);
   await input.fill("atlas");
   await page.getByRole("option", { name: /Atlas project/ }).click();
   await expect(page).toHaveURL(new RegExp(`/projects/${projectUuid}$`));
 
   await page.goto("/settings/preferences");
-  await input.click();
-  await expect(page.getByText("Recent searches")).toBeVisible();
-  await expect(page.getByRole("button", { name: "atlas", exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "atlas", exact: true }).click();
+  await expect(page.getByText("Appearance", { exact: true })).toBeVisible();
+  input = await openSearch(page);
+  await expect(page.getByText("Recent searches", { exact: true })).toBeVisible();
+  await expect(page.getByRole("option", { name: "atlas", exact: true })).toBeVisible();
+  await page.getByRole("option", { name: "atlas", exact: true }).click();
   await expect(input).toHaveValue("atlas");
   await expect(page.getByRole("option", { name: /Atlas project/ })).toBeVisible();
 
   state.setUserId(8);
   await page.reload();
-  await input.click();
-  await expect(page.getByRole("button", { name: "atlas", exact: true })).toHaveCount(0);
+  await expect(page.getByText("Appearance", { exact: true })).toBeVisible();
+  await openSearch(page);
+  await expect(page.getByRole("option", { name: "Go to Home", exact: true })).toBeVisible();
+  await expect(page.getByRole("option", { name: "atlas", exact: true })).toHaveCount(0);
 });
 
 test("malformed search data shows retry and recovers without crashing", async ({ page }) => {
   const state = await fixture(page);
   state.setMalformed(true);
-  const input = page.getByRole("combobox", { name: "Search everything" });
+  const input = await openSearch(page);
   await input.fill("atlas");
   await expect(page.getByRole("button", { name: "Try again" })).toBeVisible();
   state.setMalformed(false);
@@ -328,7 +344,7 @@ test("malformed search data shows retry and recovers without crashing", async ({
 
 test("empty results and a throttled request each show a useful state", async ({ page }) => {
   const state = await fixture(page, []);
-  const input = page.getByRole("combobox", { name: "Search everything" });
+  const input = await openSearch(page);
   await input.fill("atlas");
   await expect(page.getByText("No results for “atlas”")).toBeVisible();
 
@@ -347,7 +363,7 @@ test("HTML-like titles and snippets render as inert text", async ({ page }) => {
       snippet: '<svg onload="window.__searchInjected=true">Evil text</svg>',
     })]),
   ]);
-  const input = page.getByRole("combobox", { name: "Search everything" });
+  const input = await openSearch(page);
   await input.fill("evil");
   const option = page.getByRole("option");
   await expect(option).toContainText("<img src=x onerror=");
@@ -378,7 +394,7 @@ test("mobile search opens in a sheet and closes with Escape", async ({ page }) =
 
 test("habit results open their UUID deep link and edit dialog", async ({ page }) => {
   await fixture(page, [group("habit", "Habits", [item("habit", habitUuid, "Atlas habit")])]);
-  await page.getByRole("combobox", { name: "Search everything" }).fill("atlas");
+  await (await openSearch(page)).fill("atlas");
   await page.getByRole("option", { name: /Atlas habit/ }).click();
   await expect(page).toHaveURL(new RegExp(`/habits\\?habit=${habitUuid}$`));
   await expect(page.getByRole("dialog", { name: "Edit habit" })).toBeVisible();
@@ -388,7 +404,7 @@ test("habit results open their UUID deep link and edit dialog", async ({ page })
 
 test("goal results open their Area and fetch a goal beyond the list page", async ({ page }) => {
   await fixture(page, [group("goal", "Goals", [item("goal", goalUuid, "Atlas goal", { area_uuid: areaUuid })])]);
-  await page.getByRole("combobox", { name: "Search everything" }).fill("atlas");
+  await (await openSearch(page)).fill("atlas");
   await page.getByRole("option", { name: /Atlas goal/ }).click();
   await expect(page).toHaveURL(new RegExp(`/areas/${areaUuid}\\?tab=goals&goal=${goalUuid}$`));
   await expect(page.getByRole("dialog", { name: "Edit goal" })).toBeVisible();
