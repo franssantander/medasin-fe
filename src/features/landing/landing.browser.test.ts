@@ -58,6 +58,8 @@ test("Landing product preview switches screens from the sidebar", async ({ page 
     "Letters",
     "Plans",
   ]);
+  // Picking a screen stops autoplay, so the preview stays where the test puts it.
+  await preview.getByRole("tab", { name: "Projects" }).click();
   await expect(page.getByRole("tabpanel", { name: "Projects" })).toContainText("Spring newsletter");
   await expect(page.locator('[data-slot="product-preview"] [data-slot="avatar-image"]')).toHaveAttribute(
     "src",
@@ -142,6 +144,34 @@ test("Landing fits a phone screen without sideways scrolling", async ({ page }, 
   await page.locator('[data-slot="product-preview"]').screenshot({ path: testInfo.outputPath("preview-mobile-plans.png") });
   await page.getByRole("group", { name: "Preview a Medasin screen" }).getByRole("button", { name: "Habits" }).click();
   await expect(page.getByRole("tabpanel", { name: "Habits" })).toContainText("Morning pages");
+
+  // A swipe across the window steps to the next or previous screen, and the pill strip keeps the active pill in view.
+  const strip = page.getByRole("group", { name: "Preview a Medasin screen" });
+  const active = strip.locator('[aria-pressed="true"]');
+  const swipe = async (dx: number) => {
+    const box = (await page.locator('[data-slot="product-preview"]').boundingBox())!;
+    const x = box.x + box.width / 2;
+    const y = box.y + box.height / 2;
+    await page.mouse.move(x, y);
+    await page.mouse.down();
+    await page.mouse.move(x + dx, y, { steps: 10 });
+    await page.mouse.up();
+    await page.waitForTimeout(600);
+  };
+  await swipe(-150);
+  await expect(active).toHaveText("Notes");
+  await swipe(150);
+  await expect(active).toHaveText("Habits");
+  for (const label of ["Notes", "Journal", "Letters", "Plans"]) {
+    await swipe(-150);
+    await expect(active).toHaveText(label);
+  }
+  const stripBox = (await strip.boundingBox())!;
+  const pillBox = (await active.boundingBox())!;
+  expect(pillBox.x).toBeGreaterThanOrEqual(stripBox.x);
+  expect(pillBox.x + pillBox.width).toBeLessThanOrEqual(stripBox.x + stripBox.width);
+  await page.screenshot({ path: testInfo.outputPath("preview-mobile-swiped.png") });
+
   expect(await page.locator("body").evaluate((element) => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(1);
   await page.screenshot({ path: testInfo.outputPath("landing-mobile-390.png"), fullPage: true });
 
@@ -168,13 +198,96 @@ test("Landing preview settles flat as it scrolls into view, and the sidebar high
   await page.locator('[data-slot="product-preview"]').screenshot({ path: testInfo.outputPath("motion-settled.png") });
 
   const tabs = page.getByRole("tablist", { name: "Preview a Medasin screen" });
+  await tabs.getByRole("tab", { name: "Projects" }).click();
   const highlightY = () =>
-    page.locator('[data-slot="preview-nav-highlight"]').evaluate((element) => new DOMMatrix(getComputedStyle(element).transform).m42);
+    page.locator('[data-slot="product-preview"] [data-slot="preview-nav-highlight"]').evaluate((element) => new DOMMatrix(getComputedStyle(element).transform).m42);
   const tabTop = (name: string) => tabs.getByRole("tab", { name }).evaluate((element) => (element as HTMLElement).offsetTop);
 
   await expect.poll(highlightY).toBeCloseTo(await tabTop("Projects"), 0);
   await tabs.getByRole("tab", { name: "Focus" }).click();
   await expect.poll(highlightY).toBeCloseTo(await tabTop("Focus"), 0);
+});
+
+test("Landing preview carousel peeks at neighbours, steps with arrows, and autoplays", async ({ page }, testInfo) => {
+  await fixture(page);
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto("/");
+  await settlePreview(page);
+  const tabs = page.getByRole("tablist", { name: "Preview a Medasin screen" });
+  const selected = tabs.getByRole("tab", { selected: true });
+  const frame = (await page.locator('[data-slot="product-preview"]').boundingBox())!;
+  const peek = (side: "left" | "right") => page.locator(`[data-slot="product-preview-peek"][data-side="${side}"]`);
+
+  // The screens either side of Projects peek out past the window's edges.
+  await expect(peek("left")).toHaveCount(1);
+  await expect(peek("right")).toHaveCount(1);
+  await expect.poll(async () => (await peek("left").boundingBox())!.x).toBeLessThan(frame.x);
+  await expect.poll(async () => {
+    const box = (await peek("right").boundingBox())!;
+    return box.x + box.width;
+  }).toBeGreaterThan(frame.x + frame.width);
+  await expect(peek("right").getByText("Garden").first()).toBeAttached();
+
+  // Left alone, it moves on to the next screen by itself.
+  await expect(selected).toHaveText("Projects");
+  await expect(selected).toHaveText("Areas", { timeout: 8_000 });
+  await page.waitForTimeout(700);
+  await page.screenshot({ path: testInfo.outputPath("carousel.png") });
+
+  const next = page.getByRole("button", { name: "Next screen" });
+  const previous = page.getByRole("button", { name: "Previous screen" });
+  await next.click();
+  await expect(selected).toHaveText("Resources");
+  await expect(peek("left").last()).toContainText("Garden");
+  // Pressing an arrow leaves it where it is: it only dips in size, around its own centre.
+  const centre = async () => {
+    const box = (await next.boundingBox())!;
+    return box.y + box.height / 2;
+  };
+  await next.hover();
+  const resting = await centre();
+  await page.mouse.down();
+  await page.waitForTimeout(200);
+  expect(Math.abs((await centre()) - resting)).toBeLessThan(0.5);
+  await page.mouse.up();
+  await expect(selected).toHaveText("Archives");
+  await previous.click();
+  await previous.click();
+  await expect(selected).toHaveText("Areas");
+  // Under the window, only the screen's name.
+  await expect(page.locator('[data-slot="product-preview-caption"]')).toHaveText("Areas");
+
+  // Wraps around the ends, and a click on a peek opens that screen.
+  await tabs.getByRole("tab", { name: "Home" }).click();
+  await previous.click();
+  await expect(selected).toHaveText("Plans");
+  await page.waitForTimeout(700);
+  // Only the part past the window's edge is in view (and on top) to click. Measured again: picking a tab scrolls the page.
+  const box = (await page.locator('[data-slot="product-preview"]').boundingBox())!;
+  await page.mouse.click(box.x + box.width + 30, box.y + box.height * 0.25);
+  await expect(selected).toHaveText("Home");
+
+  // Dragging with the mouse pulls in the screen on the side it's dragged from; a nudge does nothing.
+  const drag = async (dx: number) => {
+    const y = box.y + box.height / 2;
+    const x = box.x + box.width / 2;
+    await page.mouse.move(x, y);
+    await page.mouse.down();
+    await page.mouse.move(x + dx, y, { steps: 12 });
+    await page.mouse.up();
+    await page.waitForTimeout(700);
+  };
+  await drag(-200);
+  await expect(selected).toHaveText("Projects");
+  await drag(200);
+  await expect(selected).toHaveText("Home");
+  await drag(2);
+  await expect(selected).toHaveText("Home");
+
+  // Once the visitor has picked a screen, autoplay stays stopped.
+  await page.mouse.move(0, 0);
+  await page.waitForTimeout(6_000);
+  await expect(selected).toHaveText("Home");
 });
 
 test("Landing shows everything at rest for viewers who prefer reduced motion", async ({ page }) => {
@@ -189,5 +302,11 @@ test("Landing shows everything at rest for viewers who prefer reduced motion", a
   // Below the fold and never scrolled to, yet already visible.
   expect(await opacity("#how-it-works li > div")).toBe("1");
   expect(await opacity("#product li")).toBe("1");
+  // The hero's color fields hold still, already at full strength.
+  for (const field of await page.locator('[data-slot="hero-glow"] > div').all()) {
+    await expect(field).toHaveCSS("animation-name", "none");
+    expect(Number(await field.evaluate((element) => getComputedStyle(element).opacity))).toBeGreaterThan(0);
+    await expect(field.locator("div")).toHaveCSS("animation-name", "none");
+  }
   await expect(page.locator('[data-slot="product-preview-settle"]')).toHaveCSS("transform", "none");
 });

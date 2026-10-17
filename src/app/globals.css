@@ -28,6 +28,29 @@
     from { transform: scaleX(1); }
     to { transform: scaleX(0); }
   }
+
+  /* Landing hero color glow: fields bloom in once, then drift slowly, each on its own rhythm. */
+  --animate-hero-glow-in: hero-glow-in 1.6s ease-out 0.2s both;
+  --animate-hero-drift-a: hero-drift-a 18s ease-in-out infinite alternate;
+  --animate-hero-drift-b: hero-drift-b 23s ease-in-out infinite alternate;
+  --animate-hero-drift-c: hero-drift-c 27s ease-in-out infinite alternate;
+  --animate-hero-drift-d: hero-drift-d 31s ease-in-out infinite alternate;
+
+  @keyframes hero-glow-in {
+    from { opacity: 0; }
+  }
+  @keyframes hero-drift-a {
+    to { transform: translate(6%, 5%) scale(1.06); }
+  }
+  @keyframes hero-drift-b {
+    to { transform: translate(-6%, 4%) scale(1.04); }
+  }
+  @keyframes hero-drift-c {
+    to { transform: translate(-5%, -6%) scale(1.08); }
+  }
+  @keyframes hero-drift-d {
+    to { transform: translate(5%, -4%) scale(1.05); }
+  }
 }
 
 @theme inline {

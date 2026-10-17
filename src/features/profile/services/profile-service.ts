@@ -1,6 +1,6 @@
 import { axiosClient } from "@/lib/axios";
 import type { AuthMessageResponse, CurrentUserResponse } from "@/features/auth/type";
-import type { ChangePasswordRequest, DeleteAccountRequest } from "../types";
+import type { ChangePasswordRequest, DeleteAccountRequest, DeletionCodeStatus } from "../types";
 
 export const profileService = {
   uploadImage(image: File) {
@@ -15,6 +15,9 @@ export const profileService = {
   },
   changePassword(data: ChangePasswordRequest) {
     return axiosClient.patch<AuthMessageResponse>("/profile/password", data).then((response) => response.data);
+  },
+  sendDeletionCode() {
+    return axiosClient.post<{ data: DeletionCodeStatus; message: string }>("/profile/deletion-code").then((response) => response.data);
   },
   deleteAccount(data: DeleteAccountRequest) {
     return axiosClient.delete<AuthMessageResponse>("/profile", { data }).then((response) => response.data);

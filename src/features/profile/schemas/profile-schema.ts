@@ -12,7 +12,17 @@ export const changePasswordSchema = z.object({
 });
 
 export const deleteAccountSchema = z.object({
+  method: z.enum(["password", "code"]),
   confirmation: z.string().refine((value): boolean => value === "DELETE", { error: "Type DELETE to confirm" }),
+  current_password: z.string(),
+  otp: z.string(),
+}).superRefine((values, context) => {
+  if (values.method === "password" && values.current_password === "") {
+    context.addIssue({ code: "custom", path: ["current_password"], message: "Enter your current password" });
+  }
+  if (values.method === "code" && !/^[0-9]{6}$/.test(values.otp)) {
+    context.addIssue({ code: "custom", path: ["otp"], message: "Enter the 6-digit code from your email" });
+  }
 });
 
 export type ChangePasswordFormValues = z.infer<typeof changePasswordSchema>;

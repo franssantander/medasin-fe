@@ -1,16 +1,20 @@
 "use client";
 
 import { Tabs } from "@base-ui/react/tabs";
-import { useReducedMotion, useScroll, useSpring, useTransform } from "motion/react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
+import { AnimatePresence, useInView, useReducedMotion, useScroll, useSpring, useTransform } from "motion/react";
 import * as m from "motion/react-m";
 import dynamic from "next/dynamic";
 import { useEffect, useRef, useState, useSyncExternalStore, type ComponentType, type CSSProperties } from "react";
 
+import { Button } from "@/components/ui/button";
 import { appNavigationItems } from "@/features/app-shell/components/app-navigation";
 import { cn } from "@/lib/utils";
 import { FocusScreen } from "./preview/focus-screen";
+import { PreviewPeek } from "./preview/preview-peek";
 import { PreviewHeader, PreviewSidebar } from "./preview/preview-shell";
 import { ProjectsScreen } from "./preview/projects-screen";
+import { usePreviewAutoplay } from "./preview/use-preview-autoplay";
 import { useSlidingHighlight } from "./preview/use-sliding-highlight";
 import { ease } from "./motion/tokens";
 
@@ -121,6 +125,17 @@ const subscribeDesktop = (onChange: () => void) => {
   query.addEventListener("change", onChange);
   return () => query.removeEventListener("change", onChange);
 };
+const useDesktop = () => useSyncExternalStore(subscribeDesktop, () => window.matchMedia(desktopQuery).matches, () => false);
+
+/** The neighbour `step` places away, wrapping around the ends. */
+const screenAt = (index: number, step: number) => screens[(index + step + screens.length) % screens.length];
+
+/** The shortest way round from one screen to another: 1 forward, -1 back. */
+function stepBetween(from: string, to: string) {
+  const delta = (screenLabels.indexOf(to) - screenLabels.indexOf(from) + screens.length) % screens.length;
+  if (delta === 0) return 0;
+  return delta <= screens.length / 2 ? 1 : -1;
+}
 
 /**
  * The window starts tilted back and settles flat as it scrolls into view, like the app being set down on the page.
@@ -129,7 +144,7 @@ const subscribeDesktop = (onChange: () => void) => {
 function useSettleOnScroll() {
   const ref = useRef<HTMLDivElement>(null);
   const reduce = useReducedMotion();
-  const desktop = useSyncExternalStore(subscribeDesktop, () => window.matchMedia(desktopQuery).matches, () => false);
+  const desktop = useDesktop();
   const { scrollYProgress } = useScroll({ target: ref, offset: ["start end", "start 0.3"] });
   const progress = useSpring(scrollYProgress, { stiffness: 140, damping: 30, mass: 0.4 });
   const rotateX = useTransform(progress, [0, 1], [16, 0]);
@@ -141,9 +156,48 @@ function useSettleOnScroll() {
 
 export function ProductPreview() {
   const [value, setValue] = useState(initialScreen);
+  const [direction, setDirection] = useState(0);
   const { ref, scale } = useCanvasScale();
   const { ref: settleRef, style: settleStyle } = useSettleOnScroll();
   const pills = useSlidingHighlight(value, "x");
+  const index = screenLabels.indexOf(value);
+  const previous = screenAt(index, -1);
+  const next = screenAt(index, 1);
+
+  // Autoplay walks through the screens until the visitor picks one, and waits while they look or tab around.
+  const desktop = useDesktop();
+  const reduce = useReducedMotion();
+  const stageRef = useRef<HTMLDivElement>(null);
+  const inView = useInView(stageRef, { amount: 0.4 });
+  const [userPicked, setUserPicked] = useState(false);
+  const [hovered, setHovered] = useState(false);
+  const [focusWithin, setFocusWithin] = useState(false);
+  const dragged = useRef(false);
+
+  // On phones, the pill strip keeps the active screen's pill in view as the visitor swipes. Never on the first render.
+  const stripRef = useRef<HTMLDivElement>(null);
+  const shownPill = useRef(value);
+  useEffect(() => {
+    if (shownPill.current === value) return;
+    shownPill.current = value;
+    const strip = stripRef.current;
+    const pill = strip?.querySelector<HTMLElement>('[aria-pressed="true"]');
+    if (!strip || !pill || strip.clientWidth === 0) return;
+    strip.scrollTo({ left: pill.offsetLeft - (strip.clientWidth - pill.offsetWidth) / 2, behavior: reduce ? "auto" : "smooth" });
+  }, [value, reduce]);
+
+  const go = (label: string, source: "user" | "auto") => {
+    if (source === "user") setUserPicked(true);
+    if (label === value) return;
+    setDirection(stepBetween(value, label));
+    setValue(label);
+  };
+
+  usePreviewAutoplay({
+    enabled: desktop && !reduce && !userPicked && !hovered && !focusWithin && inView,
+    value,
+    onAdvance: () => go(next.label, "auto"),
+  });
 
   // Warm the lazy screens once the page is idle, so switching to them is instant.
   useEffect(() => {
@@ -159,11 +213,16 @@ export function ProductPreview() {
   return (
     <Tabs.Root
       value={value}
-      onValueChange={(next) => setValue(next as string)}
+      onValueChange={(label) => go(label as string, "user")}
       orientation="vertical"
       className="flex flex-col gap-3"
+      onFocus={() => setFocusWithin(true)}
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) setFocusWithin(false);
+      }}
     >
       <div
+        ref={stripRef}
         className="relative -mx-4 flex gap-1.5 overflow-x-auto px-4 md:hidden"
         role="group"
         aria-label="Preview a Medasin screen"
@@ -185,7 +244,7 @@ export function ProductPreview() {
               ref={pills.register(label)}
               type="button"
               aria-pressed={value === label}
-              onClick={() => setValue(label)}
+              onClick={() => go(label, "user")}
               className="relative flex h-9 shrink-0 items-center gap-1.5 rounded-full border bg-transparent px-3 text-sm text-muted-foreground transition-colors duration-200 outline-none focus-visible:ring-3 focus-visible:ring-ring/50 aria-pressed:border-transparent aria-pressed:text-background"
             >
               {Icon && <Icon className="size-4" aria-hidden="true" />}
@@ -202,45 +261,126 @@ export function ProductPreview() {
           style={settleStyle}
           className="origin-[50%_0%] will-change-transform"
         >
+          {/* The stage holds the center window and, on wide screens, dimmed peeks of the screens either side. */}
           <div
-            ref={ref}
-            data-slot="product-preview"
+            ref={stageRef}
             style={{ "--preview-scale": scale ?? 0.85 } as CSSProperties}
-            className="relative h-[38rem] overflow-hidden rounded-xl border bg-background text-left shadow-[0_24px_60px_-24px_oklch(0_0_0/0.25)] md:aspect-[1280/800] md:h-auto"
+            className="group/stage relative isolate"
+            onPointerEnter={() => setHovered(true)}
+            onPointerLeave={() => setHovered(false)}
           >
-            <div
-              data-slot="product-preview-canvas"
-              className={cn(
-                "flex h-full w-full md:absolute md:top-0 md:left-0 md:h-[800px] md:w-[1280px] md:origin-top-left md:scale-(--preview-scale)",
-                scale === undefined && "md:opacity-0",
-              )}
+            {/* The track leans with a mouse drag or a swipe, then springs back as it steps to the screen it was pulled toward. */}
+            <m.div
+              data-slot="product-preview-track"
+              drag="x"
+              dragConstraints={{ left: 0, right: 0 }}
+              dragElastic={0.25}
+              dragMomentum={false}
+              onPointerDownCapture={() => (dragged.current = false)}
+              onDragStart={() => (dragged.current = true)}
+              onDragEnd={(_, { offset, velocity }) => {
+                const swipe = Math.abs(offset.x) > 60 || (Math.abs(velocity.x) > 500 && Math.abs(offset.x) > 10);
+                if (swipe) go((offset.x < 0 ? next : previous).label, "user");
+              }}
+              className="relative isolate perspective-[1600px] md:cursor-grab md:select-none md:active:cursor-grabbing"
             >
-              <PreviewSidebar previewLabels={screenLabels} value={value} />
-              <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-                <PreviewHeader />
-                <div className="relative min-h-0 flex-1 overflow-hidden bg-app-content p-4 sm:p-6">
-                  {screens.map(({ label, summary, Screen }) => (
-                    <Tabs.Panel key={label} value={label} className="h-full outline-none data-ending-style:hidden">
-                      <p className="sr-only">{summary}</p>
-                      {/* A picture of the app: visible, but not focusable or announced. */}
-                      <m.div
-                        aria-hidden="true"
-                        inert
-                        className="h-full"
-                        initial={{ opacity: 0, y: 8, filter: "blur(4px)" }}
-                        animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-                        transition={{ duration: 0.35, ease }}
-                      >
-                        <Screen />
-                      </m.div>
-                    </Tabs.Panel>
-                  ))}
+              {scale !== undefined &&
+                ([
+                  [-1, previous],
+                  [1, next],
+                ] as const).map(([side, screen]) => (
+                  <AnimatePresence key={side} initial={false} custom={{ side, direction }}>
+                    <PreviewPeek
+                      key={screen.label}
+                      label={screen.label}
+                      Screen={screen.Screen}
+                      side={side}
+                      direction={direction}
+                      previewLabels={screenLabels}
+                      // Letting go of a drag over a peek isn't a click on it.
+                      onPick={() => {
+                        if (!dragged.current) go(screen.label, "user");
+                      }}
+                    />
+                  </AnimatePresence>
+                ))}
+              <div
+                ref={ref}
+                data-slot="product-preview"
+                className="relative z-10 h-[38rem] overflow-hidden rounded-xl border bg-background text-left shadow-[0_24px_60px_-24px_oklch(0_0_0/0.25)] md:aspect-[1280/800] md:h-auto"
+              >
+                <div
+                  data-slot="product-preview-canvas"
+                  className={cn(
+                    "flex h-full w-full md:absolute md:top-0 md:left-0 md:h-[800px] md:w-[1280px] md:origin-top-left md:scale-(--preview-scale)",
+                    scale === undefined && "md:opacity-0",
+                  )}
+                >
+                  <PreviewSidebar previewLabels={screenLabels} value={value} />
+                  <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+                    <PreviewHeader />
+                    <div className="relative min-h-0 flex-1 overflow-hidden bg-app-content p-4 sm:p-6">
+                      {screens.map(({ label, summary, Screen }) => (
+                        <Tabs.Panel key={label} value={label} className="h-full outline-none data-ending-style:hidden">
+                          <p className="sr-only">{summary}</p>
+                          {/* A picture of the app: visible, but not focusable or announced. */}
+                          <m.div
+                            aria-hidden="true"
+                            inert
+                            className="h-full"
+                            initial={{ opacity: 0, x: 48 * direction, filter: "blur(4px)" }}
+                            animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
+                            transition={{ duration: 0.35, ease }}
+                          >
+                            <Screen />
+                          </m.div>
+                        </Tabs.Panel>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               </div>
-            </div>
+            </m.div>
+
+            {(
+              [
+                ["Previous screen", previous, ChevronLeft, "-left-5 lg:-left-16"],
+                ["Next screen", next, ChevronRight, "-right-5 lg:-right-16"],
+              ] as const
+            ).map(([name, screen, Icon, place]) => (
+              // The wrapper centres the button, so pressing it never moves it.
+              <div key={name} className={cn("pointer-events-none absolute inset-y-0 z-20 hidden items-center md:flex", place)}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon-lg"
+                  aria-label={name}
+                  onClick={() => go(screen.label, "user")}
+                  className="pointer-events-auto rounded-full border-border/60 bg-background/70 text-muted-foreground opacity-60 shadow-sm backdrop-blur-md transition-[opacity,color,background-color,scale] duration-150 ease-out group-hover/stage:opacity-100 hover:bg-background hover:text-foreground focus-visible:opacity-100 active:scale-95 active:not-aria-[haspopup]:translate-y-0 dark:bg-background/70 dark:hover:bg-background"
+                >
+                  <Icon className="size-4" />
+                </Button>
+              </div>
+            ))}
           </div>
         </m.div>
       </div>
+
+      <p
+        aria-live="polite"
+        data-slot="product-preview-caption"
+        className="mt-2 hidden text-center font-spectral text-xl font-semibold tracking-tight md:block sm:text-2xl"
+      >
+        <m.span
+          key={value}
+          className="inline-block"
+          initial={{ opacity: 0, y: 4 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, ease }}
+        >
+          {value}
+        </m.span>
+      </p>
     </Tabs.Root>
   );
 }

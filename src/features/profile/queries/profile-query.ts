@@ -15,6 +15,7 @@ export const profileMutationKeys = {
   image: (userId: number) => ["profile", userId, "image"] as const,
   password: (userId: number) => ["profile", userId, "password"] as const,
   delete: (userId: number) => ["profile", userId, "delete"] as const,
+  deletionCode: (userId: number) => ["profile", userId, "deletion-code"] as const,
 };
 
 export function useProfileBusy(userId: number) {
@@ -78,6 +79,18 @@ export function useChangePasswordMutation(userId: number) {
   });
 }
 
+export function useSendDeletionCodeMutation(userId: number) {
+  const { assertCurrentAccount } = useAccountGuard(userId);
+  return useMutation({
+    mutationKey: profileMutationKeys.deletionCode(userId),
+    gcTime: 0,
+    mutationFn: () => {
+      assertCurrentAccount();
+      return profileService.sendDeletionCode();
+    },
+  });
+}
+
 export function useDeleteAccountMutation(userId: number) {
   const router = useRouter();
   const { client, isCurrentAccount, assertCurrentAccount } = useAccountGuard(userId);
@@ -94,7 +107,7 @@ export function useDeleteAccountMutation(userId: number) {
       if (!isCurrentAccount()) return;
       client.removeQueries();
       setRememberedUsername(null);
-      toast.add({ type: "success", description: response.message || "Your account has been permanently deleted." });
+      toast.add({ type: "success", description: response.message || "Your account is scheduled for deletion. Sign in within 7 days to keep it." });
       router.replace("/login");
       router.refresh();
     },

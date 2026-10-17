@@ -101,9 +101,11 @@ async function mockProfile(page: Page, store = profileStore(), handlers: Record<
       reply = { data: user, message: "Your profile photo has been removed." };
     } else if (key === "PATCH /profile/password") {
       reply = { message: "Your password has been updated.", headers: { "set-cookie": sessionCookie("changed-password-session", rememberMe) } };
+    } else if (key === "POST /profile/deletion-code") {
+      reply = { data: { sent: true, otp_expires_in: 600, resend_after: 60 }, message: "We emailed you a code to confirm the deletion." };
     } else if (key === "DELETE /profile") {
       store.authenticated = false;
-      reply = { message: "Your account has been permanently deleted.", headers: { "set-cookie": `${sessionCookie("")}; Max-Age=0` } };
+      reply = { data: { deletion_scheduled_at: "2026-10-24T00:00:00Z" }, message: "Your account will be permanently deleted on Sat, Oct 24, 2026. Sign in before then to keep it.", headers: { "set-cookie": `${sessionCookie("")}; Max-Age=0` } };
     } else if (path === "/notifications") {
       reply = { data: { current_page: 1, data: [], last_page: 1, per_page: 15, total: 0 } };
     } else if (path === "/home") {
@@ -449,14 +451,15 @@ test("a pending password change prevents duplicate submissions and logout", asyn
   expect(api.forPath("/auth/logout")).toHaveLength(0);
 });
 
-test("account deletion requires only exact DELETE and cancellation clears the confirmation", async ({ page }) => {
+test("account deletion requires the current password and exact DELETE, and cancellation clears both", async ({ page }) => {
   const api = await mockProfile(page);
   await page.goto("/profile");
   let dialog = await openDeletion(page);
-  await expect(dialog.getByLabel("Current password", { exact: true })).toHaveCount(0);
   const confirm = dialog.getByLabel("Type DELETE to confirm", { exact: true });
   const submit = dialog.getByRole("button", { name: "Permanently delete account", exact: true });
+  await confirm.fill("DELETE");
   await expect(submit).toBeDisabled();
+  await dialog.getByLabel("Current password", { exact: true }).fill("current password");
   for (const value of ["delete", "DELETE ", " DELETE", "DELETE account"]) {
     await confirm.fill(value);
     await expect(submit).toBeDisabled();
@@ -468,23 +471,24 @@ test("account deletion requires only exact DELETE and cancellation clears the co
   await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
   await expect(dialog).toBeHidden();
   dialog = await openDeletion(page);
-  await expect(dialog.getByLabel("Current password", { exact: true })).toHaveCount(0);
+  await expect(dialog.getByLabel("Current password", { exact: true })).toHaveValue("");
   await expect(dialog.getByLabel("Type DELETE to confirm", { exact: true })).toHaveValue("");
   await expect(dialog.getByRole("button", { name: "Permanently delete account", exact: true })).toBeDisabled();
   expect(api.forPath("/profile", "DELETE")).toHaveLength(0);
 });
 
 test("failed account deletion keeps the account and permits correction", async ({ page }) => {
-  const message = "Please re-enter DELETE to confirm account deletion.";
+  const message = "The current password is incorrect.";
   const api = await mockProfile(page, profileStore(), {
-    "DELETE /profile": () => ({ status: 422, errors: { confirmation: [message] } }),
+    "DELETE /profile": () => ({ status: 422, errors: { current_password: [message] } }),
   });
   await page.goto("/profile");
   const dialog = await openDeletion(page);
+  await dialog.getByLabel("Current password", { exact: true }).fill("wrong password");
   await dialog.getByLabel("Type DELETE to confirm", { exact: true }).fill("DELETE");
   await dialog.getByRole("button", { name: "Permanently delete account", exact: true }).click();
   await expect(dialog.getByText(message, { exact: true })).toBeVisible();
-  await expect(dialog.getByLabel("Type DELETE to confirm", { exact: true })).toHaveAttribute("aria-invalid", "true");
+  await expect(dialog.getByLabel("Current password", { exact: true })).toHaveAttribute("aria-invalid", "true");
   await expect(page).toHaveURL(/\/profile$/);
   await expect(dialog.getByRole("button", { name: "Permanently delete account", exact: true })).toBeEnabled();
   expect(api.store.authenticated).toBe(true);
@@ -492,7 +496,7 @@ test("failed account deletion keeps the account and permits correction", async (
 
 test("deletion blocks dismissal and duplicates, then clears recall and private access", async ({ page }) => {
   const store = profileStore();
-  const pending = deferredReply({ message: "Your account has been permanently deleted.", headers: { "set-cookie": `${sessionCookie("")}; Max-Age=0` } });
+  const pending = deferredReply({ message: "Your account will be permanently deleted on Sat, Oct 24, 2026. Sign in before then to keep it.", headers: { "set-cookie": `${sessionCookie("")}; Max-Age=0` } });
   const api = await mockProfile(page, store, { "DELETE /profile": async () => {
     const reply = await pending.handler();
     store.authenticated = false;
@@ -501,6 +505,7 @@ test("deletion blocks dismissal and duplicates, then clears recall and private a
   await page.goto("/profile");
   await page.evaluate((key) => localStorage.setItem(key, "ada"), rememberedUsernameKey);
   const dialog = await openDeletion(page);
+  await dialog.getByLabel("Current password", { exact: true }).fill("current password");
   await dialog.getByLabel("Type DELETE to confirm", { exact: true }).fill("DELETE");
   await dialog.getByRole("button", { name: "Permanently delete account", exact: true }).click();
   await expect.poll(() => api.forPath("/profile", "DELETE").length).toBe(1);
@@ -511,7 +516,7 @@ test("deletion blocks dismissal and duplicates, then clears recall and private a
   await dialog.getByLabel("Type DELETE to confirm", { exact: true }).press("Enter");
   pending.release();
   await expect(page).toHaveURL(/\/login$/);
-  expect(api.forPath("/profile", "DELETE")[0].body).toEqual({ confirmation: "DELETE" });
+  expect(api.forPath("/profile", "DELETE")[0].body).toEqual({ confirmation: "DELETE", current_password: "current password" });
   expect(api.forPath("/profile", "DELETE")).toHaveLength(1);
   expect(await page.evaluate((key) => localStorage.getItem(key), rememberedUsernameKey)).toBeNull();
   await expect(page.getByLabel("Username", { exact: true })).toHaveValue("");
@@ -519,6 +524,24 @@ test("deletion blocks dismissal and duplicates, then clears recall and private a
   await page.goto("/profile");
   await expect(page).toHaveURL(/\/login$/);
   await expect(page.getByRole("heading", { name: "Profile", exact: true })).toHaveCount(0);
+});
+
+test("accounts without a known password confirm deletion with an emailed code", async ({ page }) => {
+  const api = await mockProfile(page);
+  await page.goto("/profile");
+  const dialog = await openDeletion(page);
+  await dialog.getByRole("button", { name: "Email me a code instead", exact: true }).click();
+  await expect.poll(() => api.forPath("/profile/deletion-code", "POST").length).toBe(1);
+  await expect(dialog.getByText("We emailed you a code to confirm the deletion.", { exact: true })).toBeVisible();
+  await expect(dialog.getByLabel("Current password", { exact: true })).toHaveCount(0);
+  const submit = dialog.getByRole("button", { name: "Permanently delete account", exact: true });
+  await dialog.getByLabel("Type DELETE to confirm", { exact: true }).fill("DELETE");
+  await dialog.getByLabel("Confirmation code", { exact: true }).fill("12345");
+  await expect(submit).toBeDisabled();
+  await dialog.getByLabel("Confirmation code", { exact: true }).fill("123456");
+  await submit.click();
+  await expect(page).toHaveURL(/\/login$/);
+  expect(api.forPath("/profile", "DELETE")[0].body).toEqual({ confirmation: "DELETE", otp: "123456" });
 });
 
 test("a late image response after logout cannot overwrite a different account's photo", async ({ page }) => {
@@ -561,6 +584,7 @@ test("Profile fits at 320px in dark mode and the deletion dialog remains usable"
   expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(1);
   await page.screenshot({ path: testInfo.outputPath("profile-mobile-dark.png"), fullPage: true });
   const dialog = await openDeletion(page);
+  await dialog.getByLabel("Current password", { exact: true }).fill("current password");
   await dialog.getByLabel("Type DELETE to confirm", { exact: true }).fill("DELETE");
   const cancel = dialog.getByRole("button", { name: "Cancel", exact: true });
   await cancel.scrollIntoViewIfNeeded();

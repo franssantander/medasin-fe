@@ -2,12 +2,14 @@ import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 
 import { buttonVariants } from "@/components/ui/button";
+import { HeroGlow } from "./hero-glow";
 import { Reveal, SplitWords } from "./motion/reveal";
 import { ProductPreview } from "./product-preview";
 
 export function HeroSection() {
   return (
-    <section id="hero" aria-labelledby="hero-title" className="relative overflow-hidden pt-16 sm:pt-24">
+    <section id="hero" aria-labelledby="hero-title" className="relative isolate overflow-hidden pt-16 sm:pt-24">
+      <HeroGlow />
       <div className="mx-auto flex max-w-3xl flex-col items-center px-4 text-center sm:px-6">
         <Reveal as="p" onMount className="text-sm text-muted-foreground">
           A connected system for a thoughtful life.

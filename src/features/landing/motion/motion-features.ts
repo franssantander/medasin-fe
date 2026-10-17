@@ -1,4 +1,5 @@
-import { domAnimation } from "motion/react";
+import { domMax } from "motion/react";
 
 // Loaded after the page is interactive, so animation features stay out of the first bundle.
-export default domAnimation;
+// domMax rather than domAnimation: the product preview can be dragged.
+export default domMax;
