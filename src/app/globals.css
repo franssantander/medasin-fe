@@ -632,7 +632,7 @@ html[data-app-font="inter"] {
 }
 
 /* Size BlockNote's document and auxiliary UI root to their content so the
-   drawer can own scrolling without an extra blank document below the editor. */
+   task panel can own scrolling without an extra blank document below the editor. */
 .task-description-editor .note-rich-text,
 .task-description-editor .note-rich-text > div,
 .task-description-editor .bn-root,

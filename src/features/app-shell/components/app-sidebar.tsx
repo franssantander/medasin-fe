@@ -48,7 +48,7 @@ function Brand({ onNavigate }: { onNavigate?: () => void }) {
       href="/home"
       onClick={onNavigate}
       aria-label="Medasin home"
-      className="flex h-9 min-w-0 items-center gap-2 overflow-hidden rounded-md px-1 outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
+      className="flex h-9 min-w-0 items-center gap-2 overflow-hidden rounded-md px-0.5 outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
     >
       <Image
         src="/images/medasin-logo.svg"
@@ -92,7 +92,7 @@ function AppNavigationLink({
         active
           ? "bg-sidebar-accent font-medium text-sidebar-foreground"
           : "text-sidebar-foreground/70 hover:bg-sidebar-accent/70 hover:text-sidebar-foreground",
-        collapsed && "mx-auto size-9 justify-center px-0",
+        collapsed && "w-8 justify-center px-0",
       )}
     >
       <Icon
@@ -134,12 +134,7 @@ function AppNavigation({
   const linkProps = { pathname, collapsed, touch, onNavigate };
   return (
     <nav id={id} aria-label="Main navigation" className="flex min-h-0 flex-1 flex-col">
-      <div
-        className={cn(
-          "workspace-list-scrollbar flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto overscroll-contain px-3 py-3",
-          collapsed && "items-center px-2",
-        )}
-      >
+      <div className="workspace-list-scrollbar flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto overflow-x-hidden overscroll-contain px-3 py-3">
         <ul className="w-full">
           <li>
             <AppNavigationLink item={homeNavigationItem} {...linkProps} />
@@ -149,15 +144,15 @@ function AppNavigation({
           const headingId = id + "-" + group.label.toLowerCase();
           return (
             <section key={group.label} aria-labelledby={headingId} className="flex w-full flex-col gap-1">
-              {collapsed && <div aria-hidden="true" className="mx-auto mb-2 h-px w-6 bg-sidebar-border" />}
               <h2
                 id={headingId}
                 className={cn(
-                  "px-2 pb-0.5 text-xs font-medium text-muted-foreground",
-                  collapsed && "sr-only",
+                  "flex h-5 items-center px-2 text-xs font-medium text-muted-foreground",
+                  collapsed && "w-8 justify-center px-0",
                 )}
               >
-                {group.label}
+                <span className={collapsed ? "sr-only" : "truncate"}>{group.label}</span>
+                {collapsed && <span aria-hidden="true" className="h-px w-5 bg-sidebar-border" />}
               </h2>
               <ul className="flex flex-col gap-0.5">
                 {group.items.map((item) => (
@@ -170,12 +165,7 @@ function AppNavigation({
           );
         })}
       </div>
-      <div
-        className={cn(
-          "shrink-0 border-t border-sidebar-border px-3 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]",
-          collapsed && "px-2",
-        )}
-      >
+      <div className="shrink-0 border-t border-sidebar-border px-3 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
         <AppNavigationLink item={settingsNavigationItem} {...linkProps} />
       </div>
     </nav>
@@ -211,12 +201,7 @@ export function AppSidebar({
           isCollapsed ? "w-14" : "w-60",
         )}
       >
-        <div
-          className={cn(
-            "flex h-14 shrink-0 items-center gap-2 border-b border-sidebar-border px-3",
-            isCollapsed && "justify-center px-2",
-          )}
-        >
+        <div className="flex h-14 shrink-0 items-center gap-2 border-b border-sidebar-border px-3">
           {!isCollapsed && <div className="min-w-0 flex-1"><Brand /></div>}
           <Tooltip>
             <TooltipTrigger
@@ -226,10 +211,7 @@ export function AppSidebar({
                   type="button"
                   variant="ghost"
                   size="icon"
-                  className={cn(
-                    "group/toggle shrink-0 text-muted-foreground hover:text-sidebar-foreground motion-reduce:transition-none",
-                    isCollapsed ? "size-9" : "size-8",
-                  )}
+                  className="group/toggle size-8 shrink-0 text-muted-foreground hover:text-sidebar-foreground motion-reduce:transition-none"
                   onClick={onToggle}
                   aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
                   aria-expanded={!isCollapsed}

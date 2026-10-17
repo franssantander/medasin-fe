@@ -62,7 +62,7 @@ export async function imageUrlToFile(source: string, name?: string) {
     response = await fetch(fetchSource);
   } catch {
     throw new Error(
-      fetchSource.startsWith("/storage/")
+      fetchSource.startsWith("/storage/") || fetchSource.startsWith("/api/v1/")
         ? "The image could not be downloaded from note storage."
         : "The image could not be downloaded for cropping. External images must allow cross-origin access.",
     );

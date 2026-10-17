@@ -7,6 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import type { ProjectView } from "../project-list-utils";
 import type { BoardStageKey } from "../type";
+import { projectKanbanRegionStyles } from "./project-kanban-layout";
 import {
   kanbanGridStyles,
   stageColumnStyles,
@@ -300,7 +301,9 @@ export function ProjectDetailSkeleton() {
 
       <div className="@container grid min-w-0 gap-4">
         <KanbanToolbarSkeleton />
-        <KanbanBoardSkeleton />
+        <div className={projectKanbanRegionStyles}>
+          <KanbanBoardSkeleton fill />
+        </div>
       </div>
     </LoadingRegion>
   );

@@ -31,6 +31,7 @@ export function useStandaloneKanban() {
   const [deleteBoardOpen, setDeleteBoardOpen] = useState(false);
   const [activeTask, setActiveTask] = useState<BoardTask>();
   const [selectedTaskUuid, setSelectedTaskUuid] = useState<string>();
+  const [taskExpanded, setTaskExpanded] = useState(false);
   const selectedTask = board?.stages
     .flatMap((stage) => stage.tasks)
     .find((task) => task.uuid === selectedTaskUuid);
@@ -51,13 +52,18 @@ export function useStandaloneKanban() {
     },
     onBoardDeleted: setRequestedBoardUuid,
     onTaskDeleted: (uuid) => {
-      if (selectedTaskUuid === uuid) setSelectedTaskUuid(undefined);
+      if (selectedTaskUuid === uuid) closeTask();
     },
   });
 
+  function closeTask() {
+    setSelectedTaskUuid(undefined);
+    setTaskExpanded(false);
+  }
+
   const selectBoard = (uuid: string) => {
     setTaskDraft(undefined);
-    setSelectedTaskUuid(undefined);
+    closeTask();
     setRequestedBoardUuid(uuid);
   };
 
@@ -127,12 +133,15 @@ export function useStandaloneKanban() {
     selectedTask,
     sensors,
     taskDraft,
+    taskExpanded,
     cancelDrag: () => setActiveTask(undefined),
+    closeTask,
     endDrag,
     selectBoard,
     setBoardDialog,
     setDeleteBoardOpen,
     setLabelsOpen,
+    setTaskExpanded,
     setSelectedTaskUuid,
     setTaskDraft,
     startDrag,

@@ -8,7 +8,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ProjectLabelDialog } from "@/features/projects/components/project-label-dialog";
-import { TaskDetailsSheet } from "@/features/projects/components/project-task-details-sheet";
 import { ProjectBoardDialog } from "@/features/projects/components/project-kanban-toolbar";
 import type { StandaloneKanbanController } from "../hooks/use-standalone-kanban";
 
@@ -19,11 +18,9 @@ type BoardDialogsProps = Pick<
   | "deleteBoardOpen"
   | "labelsOpen"
   | "mutations"
-  | "selectedTask"
   | "setBoardDialog"
   | "setDeleteBoardOpen"
   | "setLabelsOpen"
-  | "setSelectedTaskUuid"
 >;
 
 export function StandaloneKanbanDialogs({
@@ -32,34 +29,12 @@ export function StandaloneKanbanDialogs({
   deleteBoardOpen,
   labelsOpen,
   mutations,
-  selectedTask,
   setBoardDialog,
   setDeleteBoardOpen,
   setLabelsOpen,
-  setSelectedTaskUuid,
 }: BoardDialogsProps) {
   return (
     <>
-      <TaskDetailsSheet
-        key={selectedTask?.uuid ?? "closed"}
-        task={selectedTask}
-        stages={board?.stages ?? []}
-        labels={board?.labels ?? []}
-        archived={false}
-        isSaving={mutations.updateTask.isPending}
-        isDeleting={mutations.deleteTask.isPending}
-        onOpenChange={(open) => !open && setSelectedTaskUuid(undefined)}
-        onSave={(input) =>
-          selectedTask
-            ? mutations.updateTask
-                .mutateAsync({ taskUuid: selectedTask.uuid, input })
-                .then(() => undefined)
-            : Promise.resolve()
-        }
-        onDelete={() =>
-          selectedTask && mutations.deleteTask.mutate(selectedTask.uuid)
-        }
-      />
       {board && (
         <ProjectLabelDialog
           open={labelsOpen}

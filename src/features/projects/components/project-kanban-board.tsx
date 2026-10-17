@@ -36,6 +36,7 @@ export function KanbanColumn({
   onDraftCancel,
   onDraftSubmit,
   onOpen,
+  selectedTaskUuid,
 }: {
   stage: BoardStage;
   /** Tasks to display; differs from `stage.tasks` while a search is active. */
@@ -49,6 +50,8 @@ export function KanbanColumn({
   onDraftCancel: () => void;
   onDraftSubmit: () => void;
   onOpen: (task: BoardTask) => void;
+  /** The task open in the details panel, if any. */
+  selectedTaskUuid?: string;
 }) {
   const stageDroppableId = `stage:${stage.key}`;
   const dragDisabled = archived || searching;
@@ -73,7 +76,7 @@ export function KanbanColumn({
       ref={setNodeRef}
       aria-label={stage.name}
       className={cn(
-        "flex max-h-[40rem] min-h-64 min-w-0 flex-col overflow-hidden rounded-xl border transition-[background-color,box-shadow] motion-reduce:transition-none",
+        "flex h-full min-h-64 min-w-0 flex-col overflow-hidden rounded-xl border transition-[background-color,box-shadow] motion-reduce:transition-none",
         stageColumnStyles[stage.key].column,
         isDragOverStage && "bg-primary/5 ring-2 ring-primary/30",
       )}
@@ -123,6 +126,7 @@ export function KanbanColumn({
               key={task.uuid}
               task={task}
               disabled={dragDisabled}
+              selected={task.uuid === selectedTaskUuid}
               onOpen={() => onOpen(task)}
             />
           ))}
@@ -225,10 +229,12 @@ function TaskDraft({
 function SortableTask({
   task,
   disabled,
+  selected,
   onOpen,
 }: {
   task: BoardTask;
   disabled: boolean;
+  selected: boolean;
   onOpen: () => void;
 }) {
   const {
@@ -250,6 +256,7 @@ function SortableTask({
         task={task}
         disabled={disabled}
         isDragging={isDragging}
+        selected={selected}
         dragProps={disabled ? undefined : { ...attributes, ...listeners }}
         onOpen={onOpen}
       />
@@ -262,6 +269,7 @@ export function TaskCard({
   disabled,
   overlay,
   isDragging,
+  selected,
   dragProps,
   onOpen,
 }: {
@@ -269,6 +277,7 @@ export function TaskCard({
   disabled?: boolean;
   overlay?: boolean;
   isDragging?: boolean;
+  selected?: boolean;
   dragProps?: React.HTMLAttributes<HTMLDivElement>;
   onOpen?: () => void;
 }) {
@@ -280,12 +289,15 @@ export function TaskCard({
     <div
       {...cardDragProps}
       data-slot="task-card"
+      data-task-uuid={overlay ? undefined : task.uuid}
+      aria-current={selected ? "true" : undefined}
       className={cn(
         "relative grid gap-2 rounded-lg border bg-card p-3 text-card-foreground shadow-xs outline-none",
         overlay
           ? "w-[18rem] rotate-2 shadow-xl"
           : "transition-[border-color,box-shadow] hover:border-foreground/15 hover:shadow-sm focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none",
         !overlay && (disabled ? "cursor-pointer" : "cursor-grab active:cursor-grabbing"),
+        selected && "border-foreground/25 ring-2 ring-ring/60",
       )}
       role={overlay ? undefined : "button"}
       tabIndex={overlay ? undefined : 0}

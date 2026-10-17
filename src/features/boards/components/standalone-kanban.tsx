@@ -54,9 +54,7 @@ export function StandaloneKanban() {
         onOpenBoardDialog={kanban.setBoardDialog}
         onDeleteBoard={() => kanban.setDeleteBoardOpen(true)}
       />
-      <div className="min-h-0 flex-1">
-        <StandaloneKanbanBoard {...kanban} />
-      </div>
+      <StandaloneKanbanBoard {...kanban} className="min-h-[36rem] flex-1" />
       <StandaloneKanbanDialogs {...kanban} />
     </div>
   );

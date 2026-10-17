@@ -128,15 +128,63 @@ test("board search filters cards and the column Add task button opens a draft", 
   await expect(page.getByRole("textbox", { name: "Task title", exact: true })).toBeFocused();
 });
 
-test("opening a card shows the task drawer with property rows", async ({ page }) => {
+test("opening a card docks the task panel beside the board", async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await fixture(page);
+  await page.goto(`/projects/${projectUuid}`);
+
+  const card = page.getByRole("button", { name: /Rewrite profile summary/ });
+  await card.click();
+  const panel = page.getByRole("region", { name: "Rewrite profile summary", exact: true });
+  await expect(panel).toBeVisible();
+  await expect(panel.getByText("Status", { exact: true })).toBeVisible();
+  await expect(panel.getByText("Priority", { exact: true })).toBeVisible();
+  await expect(panel.getByText("Label", { exact: true })).toBeVisible();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(page.getByRole("region", { name: "Todos", exact: true })).toBeVisible();
+  await expect(card).toHaveAttribute("aria-current", "true");
+
+  const boardBox = await page.getByRole("region", { name: "Todos", exact: true }).boundingBox();
+  const panelBox = await panel.boundingBox();
+  expect(boardBox && panelBox && boardBox.x + boardBox.width <= panelBox.x).toBe(true);
+  await page.screenshot({ path: testInfo.outputPath("task-panel-desktop.png") });
+
+  await panel.focus();
+  await page.keyboard.press("Escape");
+  await expect(panel).toHaveCount(0);
+  await expect(card).toBeFocused();
+});
+
+test("the task panel expands over the board and collapses back", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await fixture(page);
+  await page.goto(`/projects/${projectUuid}`);
+
+  await page.getByRole("button", { name: /Draft release case study/ }).click();
+  const panel = page.getByRole("region", { name: "Draft release case study", exact: true });
+  await panel.getByRole("button", { name: "Expand task details", exact: true }).click();
+  await expect(page.getByRole("region", { name: "Todos", exact: true })).toBeHidden();
+  await panel.getByRole("button", { name: "Show board", exact: true }).click();
+  await expect(page.getByRole("region", { name: "Todos", exact: true })).toBeVisible();
+  await panel.getByRole("button", { name: "Close task details", exact: true }).click();
+  await expect(panel).toHaveCount(0);
+});
+
+test("on phones the task panel replaces the board until you go back", async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 390, height: 844 });
   await fixture(page);
   await page.goto(`/projects/${projectUuid}`);
 
   await page.getByRole("button", { name: /Rewrite profile summary/ }).click();
-  await expect(page.getByRole("button", { name: "Close task details", exact: true })).toBeVisible();
-  await expect(page.getByText("Status", { exact: true })).toBeVisible();
-  await expect(page.getByText("Priority", { exact: true })).toBeVisible();
-  await expect(page.getByText("Label", { exact: true })).toBeVisible();
+  const panel = page.getByRole("region", { name: "Rewrite profile summary", exact: true });
+  await expect(panel).toBeVisible();
+  await expect(page.getByRole("region", { name: "Todos", exact: true })).toBeHidden();
+  expect(await page.locator("body").evaluate((body) => body.scrollWidth - body.clientWidth)).toBeLessThanOrEqual(1);
+  await page.screenshot({ path: testInfo.outputPath("task-panel-mobile.png") });
+
+  await panel.getByRole("button", { name: "Back to board", exact: true }).click();
+  await expect(panel).toHaveCount(0);
+  await expect(page.getByRole("region", { name: "Todos", exact: true })).toBeVisible();
 });
 
 test("link resources dialog searches and counts the selection", async ({ page }) => {

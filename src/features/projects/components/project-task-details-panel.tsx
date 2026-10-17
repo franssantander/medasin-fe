@@ -9,6 +9,7 @@ import {
 import {
   AlignLeft,
   Archive,
+  ArrowLeft,
   ArrowUpRight,
   CalendarDays,
   Check,
@@ -25,6 +26,8 @@ import {
   LayoutDashboard,
   Link2,
   LoaderCircle,
+  Maximize2,
+  Minimize2,
   Plus,
   Search,
   Tag,
@@ -82,15 +85,6 @@ import {
   SelectItem,
   SelectTrigger,
 } from "@/components/ui/select";
-import {
-  Drawer,
-  DrawerClose,
-  DrawerContent,
-  DrawerDescription,
-  DrawerFooter,
-  DrawerHeader,
-  DrawerTitle,
-} from "@/components/ui/drawer";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { areaKeys } from "@/features/areas/queries/area-query";
@@ -160,7 +154,8 @@ function taskDraftsMatch(left: BoardTaskInput, right: BoardTaskInput) {
   return JSON.stringify(left) === JSON.stringify(right);
 }
 
-export function TaskDetailsSheet({
+/** Task details, docked beside the board. Mount it keyed by task UUID so each task gets fresh draft state. */
+export function TaskDetailsPanel({
   task,
   boardName,
   stages,
@@ -168,7 +163,10 @@ export function TaskDetailsSheet({
   archived,
   isSaving,
   isDeleting,
-  onOpenChange,
+  expanded,
+  className,
+  onClose,
+  onExpandedChange,
   onSave,
   onDelete,
 }: {
@@ -179,7 +177,10 @@ export function TaskDetailsSheet({
   archived: boolean;
   isSaving: boolean;
   isDeleting: boolean;
-  onOpenChange: (open: boolean) => void;
+  expanded: boolean;
+  className?: string;
+  onClose: () => void;
+  onExpandedChange: (expanded: boolean) => void;
   onSave: (input: BoardTaskInput) => Promise<void>;
   onDelete: () => void;
 }) {
@@ -188,13 +189,13 @@ export function TaskDetailsSheet({
   const fieldId = useId();
   const taskUuid = task?.uuid;
   const initialDraft = createTaskDraft(task);
-  const [drawerOpen, setDrawerOpen] = useState(false);
   const [draft, setDraft] = useState(initialDraft);
   const [saveState, setSaveState] = useState<TaskSaveState>("idle");
   const [linkPicker, setLinkPicker] = useState<"resources" | "notes">();
   const [pickerSearch, setPickerSearch] = useState("");
   const [deleteConfirmationOpen, setDeleteConfirmationOpen] = useState(false);
   const [selectedResourceUuid, setSelectedResourceUuid] = useState<string>();
+  const panelRef = useRef<HTMLElement>(null);
   const draftRef = useRef(initialDraft);
   const savedDraftRef = useRef(normalizeTaskDraft(initialDraft));
   const deletedResourceUuidsRef = useRef(new Set<string>());
@@ -374,15 +375,29 @@ export function TaskDetailsSheet({
     };
   }, []);
 
+  // Move focus into the panel when it opens, without popping a mobile keyboard,
+  // and keep the opened card visible now that the panel has narrowed the board.
   useEffect(() => {
     if (!taskUuid) return;
-
-    const animationFrame = window.requestAnimationFrame(() => {
-      setDrawerOpen(true);
-    });
-
+    panelRef.current?.focus({ preventScroll: true });
+    const animationFrame = window.requestAnimationFrame(() =>
+      document
+        .querySelector(`[data-task-uuid="${taskUuid}"]`)
+        ?.scrollIntoView({ block: "nearest", inline: "nearest" }),
+    );
     return () => window.cancelAnimationFrame(animationFrame);
   }, [taskUuid]);
+
+  const closePanel = () => {
+    void flushDraftRef.current();
+    onClose();
+    if (!taskUuid) return;
+    window.requestAnimationFrame(() =>
+      document
+        .querySelector<HTMLElement>(`[data-task-uuid="${taskUuid}"]`)
+        ?.focus({ preventScroll: true }),
+    );
+  };
 
   const updateDraft = (values: Partial<BoardTaskInput>) => {
     if (archived) return;
@@ -501,688 +516,717 @@ export function TaskDetailsSheet({
           ? "Saved"
           : "Changes save automatically";
 
+  if (!task) return null;
+
   return (
-    <Drawer
-      open={drawerOpen}
-      showSwipeHandle
-      swipeDirection="right"
-      onOpenChange={(open) => {
-        if (!open) void flushDraftRef.current();
-        setDrawerOpen(open);
-      }}
-      onOpenChangeComplete={(open) => {
-        if (!open) onOpenChange(false);
+    <section
+      ref={panelRef}
+      tabIndex={-1}
+      aria-labelledby={`${fieldId}-heading`}
+      aria-describedby={`${fieldId}-description`}
+      data-slot="task-details-panel"
+      className={cn(
+        "flex h-full min-h-0 min-w-0 animate-in flex-col overflow-hidden rounded-xl border bg-card text-card-foreground shadow-xs outline-none duration-200 fade-in slide-in-from-right-4 motion-reduce:animate-none",
+        className,
+      )}
+      onKeyDown={(event) => {
+        // Popups render in portals; only handle Escape pressed in the panel itself, outside the editor.
+        const target = event.target as HTMLElement;
+        if (
+          event.key !== "Escape" ||
+          event.defaultPrevented ||
+          !event.currentTarget.contains(target) ||
+          target.closest(".task-description-editor")
+        ) {
+          return;
+        }
+        event.preventDefault();
+        closePanel();
       }}
     >
-      <DrawerContent className="w-full max-w-full md:w-[46rem]">
-        {task && (
+      <header className="flex shrink-0 flex-col gap-3 border-b p-4 sm:px-5">
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="-ml-2 h-11 w-fit sm:h-8 lg:hidden"
+          onClick={closePanel}
+        >
+          <ArrowLeft aria-hidden="true" data-icon="inline-start" />
+          Back to board
+        </Button>
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
+            {boardName && (
+              <>
+                <span className="flex min-w-0 items-center gap-1.5">
+                  <LayoutDashboard aria-hidden="true" className="size-3.5 shrink-0" />
+                  <span className="max-w-40 truncate">{boardName}</span>
+                </span>
+                <ChevronRight aria-hidden="true" className="size-3.5 shrink-0 opacity-60" />
+              </>
+            )}
+            <span className="flex items-center gap-1.5 font-medium text-foreground">
+              <StatusDot color={stageDotColors[draft.stage]} />
+              {stages.find((item) => item.key === draft.stage)?.name ??
+                draft.stage.replace("_", " ")}
+            </span>
+            {archived && (
+              <Badge variant="secondary">
+                <Archive aria-hidden="true" data-icon="inline-start" />
+                Read only
+              </Badge>
+            )}
+          </div>
+          <div className="hidden shrink-0 items-center gap-0.5 lg:flex">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              className="text-muted-foreground"
+              aria-label={expanded ? "Show board" : "Expand task details"}
+              aria-pressed={expanded}
+              onClick={() => onExpandedChange(!expanded)}
+            >
+              {expanded ? <Minimize2 aria-hidden="true" /> : <Maximize2 aria-hidden="true" />}
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              className="text-muted-foreground"
+              aria-label="Close task details"
+              onClick={closePanel}
+            >
+              <XIcon aria-hidden="true" />
+            </Button>
+          </div>
+        </div>
+        {archived ? (
+          <h2 id={`${fieldId}-heading`} className="project-task-title font-medium [overflow-wrap:anywhere]">
+            {task.title}
+          </h2>
+        ) : (
           <>
-            <DrawerHeader className="gap-3 border-b p-4 sm:p-6">
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
-                  {boardName && (
-                    <>
-                      <span className="flex min-w-0 items-center gap-1.5">
-                        <LayoutDashboard aria-hidden="true" className="size-3.5 shrink-0" />
-                        <span className="max-w-40 truncate">{boardName}</span>
-                      </span>
-                      <ChevronRight aria-hidden="true" className="size-3.5 shrink-0 opacity-60" />
-                    </>
-                  )}
-                  <span className="flex items-center gap-1.5 font-medium text-foreground">
-                    <StatusDot color={stageDotColors[draft.stage]} />
-                    {stages.find((item) => item.key === draft.stage)?.name ??
-                      draft.stage.replace("_", " ")}
-                  </span>
-                  {archived && (
-                    <Badge variant="secondary">
-                      <Archive aria-hidden="true" data-icon="inline-start" />
-                      Read only
-                    </Badge>
-                  )}
-                </div>
-                <DrawerClose
+            <h2 id={`${fieldId}-heading`} className="sr-only">
+              {draft.title || task.title}
+            </h2>
+            <Field className="gap-0">
+              <FieldLabel htmlFor={`${fieldId}-title`} className="sr-only">
+                Task title
+              </FieldLabel>
+              <Textarea
+                id={`${fieldId}-title`}
+                rows={1}
+                value={draft.title}
+                onChange={(event) =>
+                  updateDraft({
+                    title: event.target.value.replace(/[\r\n]+/g, " "),
+                  })
+                }
+                onBlur={() => {
+                  const nextTitle = draftRef.current.title.trim();
+                  updateDraft({
+                    title: nextTitle || savedDraftRef.current.title,
+                  });
+                  void flushDraftRef.current();
+                }}
+                onKeyDown={(event) => {
+                  if (
+                    event.key === "Enter" &&
+                    !event.nativeEvent.isComposing
+                  ) {
+                    event.preventDefault();
+                    event.currentTarget.blur();
+                  }
+                }}
+                maxLength={120}
+                className="project-task-title -mx-2 min-h-0 w-[calc(100%+1rem)] resize-none border-transparent px-2 py-1 shadow-none"
+              />
+            </Field>
+          </>
+        )}
+        <p id={`${fieldId}-description`} className="sr-only">
+          {archived
+            ? "View this archived task. Task details are read only."
+            : "Update task details. Changes save automatically."}
+        </p>
+      </header>
+
+      <div className="workspace-list-scrollbar flex min-h-0 min-w-0 flex-1 flex-col gap-6 overflow-y-auto overscroll-contain p-4 sm:p-5">
+        <FieldGroup className="gap-0.5 rounded-xl border p-1.5">
+          <Field orientation="horizontal" className={propertyRowClassName}>
+            {archived ? (
+              <FieldTitle className={propertyLabelClassName}>
+                <CircleDot aria-hidden="true" />
+                Status
+              </FieldTitle>
+            ) : (
+              <FieldLabel
+                htmlFor={`${fieldId}-status`}
+                className={propertyLabelClassName}
+              >
+                <CircleDot aria-hidden="true" />
+                Status
+              </FieldLabel>
+            )}
+            {archived ? (
+              <Badge
+                variant="secondary"
+                className="w-fit gap-1.5 capitalize"
+              >
+                <StatusDot color={stageDotColors[task.stage]} />
+                {stages.find((item) => item.key === task.stage)?.name ??
+                  task.stage.replace("_", " ")}
+              </Badge>
+            ) : (
+              <Select
+                value={draft.stage}
+                onValueChange={(value) => {
+                  const nextStage = value as BoardStageKey;
+                  updateDraft({ stage: nextStage });
+                }}
+              >
+                <SelectTrigger
+                  id={`${fieldId}-status`}
+                  className={propertyTriggerClassName}
+                >
+                  <StatusValue
+                    color={stageDotColors[draft.stage]}
+                    label={
+                      stages.find((item) => item.key === draft.stage)
+                        ?.name ?? draft.stage.replace("_", " ")
+                    }
+                  />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    {stages.map((item) => (
+                      <SelectItem key={item.key} value={item.key}>
+                        <StatusValue
+                          color={stageDotColors[item.key]}
+                          label={item.name}
+                        />
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            )}
+          </Field>
+
+          <Field orientation="horizontal" className={propertyRowClassName}>
+            {archived ? (
+              <FieldTitle className={propertyLabelClassName}>
+                <Flag aria-hidden="true" />
+                Priority
+              </FieldTitle>
+            ) : (
+              <FieldLabel
+                htmlFor={`${fieldId}-priority`}
+                className={propertyLabelClassName}
+              >
+                <Flag aria-hidden="true" />
+                Priority
+              </FieldLabel>
+            )}
+            {archived ? (
+              <Badge
+                className={cn(
+                  "w-fit gap-1.5 capitalize",
+                  priorityStyles[task.priority],
+                )}
+              >
+                <StatusDot color={priorityDotColors[task.priority]} />
+                {task.priority}
+              </Badge>
+            ) : (
+              <Select
+                value={draft.priority}
+                onValueChange={(value) => {
+                  const nextPriority = value as BoardTask["priority"];
+                  updateDraft({ priority: nextPriority });
+                }}
+              >
+                <SelectTrigger
+                  id={`${fieldId}-priority`}
+                  className={propertyTriggerClassName}
+                >
+                  <StatusValue
+                    color={priorityDotColors[draft.priority]}
+                    label={
+                      draft.priority.charAt(0).toUpperCase() +
+                      draft.priority.slice(1)
+                    }
+                  />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    <SelectItem value="low">
+                      <StatusValue
+                        color={priorityDotColors.low}
+                        label="Low"
+                      />
+                    </SelectItem>
+                    <SelectItem value="medium">
+                      <StatusValue
+                        color={priorityDotColors.medium}
+                        label="Medium"
+                      />
+                    </SelectItem>
+                    <SelectItem value="high">
+                      <StatusValue
+                        color={priorityDotColors.high}
+                        label="High"
+                      />
+                    </SelectItem>
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            )}
+          </Field>
+
+          <Field orientation="horizontal" className={propertyRowClassName}>
+            {archived ? (
+              <FieldTitle className={propertyLabelClassName}>
+                <Tag aria-hidden="true" />
+                Label
+              </FieldTitle>
+            ) : (
+              <FieldLabel
+                htmlFor={`${fieldId}-label`}
+                className={propertyLabelClassName}
+              >
+                <Tag aria-hidden="true" />
+                Label
+              </FieldLabel>
+            )}
+            {archived ? (
+              task.labels[0] ? (
+                <span className="min-w-0 [&_[data-slot=badge]]:block [&_[data-slot=badge]]:max-w-full [&_[data-slot=badge]]:truncate">
+                  <LabelBadge label={task.labels[0]} />
+                </span>
+              ) : (
+                <span className="text-sm text-muted-foreground">
+                  No label
+                </span>
+              )
+            ) : (
+              <DropdownMenu>
+                <DropdownMenuTrigger
                   render={
                     <Button
                       type="button"
                       variant="ghost"
-                      size="icon"
-                      className="size-11 sm:size-9"
-                      aria-label="Close task details"
+                      id={`${fieldId}-label`}
+                      className={cn(propertyTriggerClassName, "h-auto font-normal")}
+                      disabled={labels.length === 0 && !selectedLabel}
+                      aria-label={
+                        selectedLabel ? "Update label" : "Add label"
+                      }
                     />
                   }
                 >
-                  <XIcon aria-hidden="true" />
-                </DrawerClose>
-              </div>
-              {archived ? (
-                <DrawerTitle className="project-task-title [overflow-wrap:anywhere]">
-                  {task.title}
-                </DrawerTitle>
-              ) : (
-                <>
-                  <DrawerTitle className="sr-only">
-                    {draft.title || task.title}
-                  </DrawerTitle>
-                  <Field className="gap-0">
-                    <FieldLabel htmlFor={`${fieldId}-title`} className="sr-only">
-                      Task title
-                    </FieldLabel>
-                    <Textarea
-                      id={`${fieldId}-title`}
-                      rows={1}
-                      value={draft.title}
-                      onChange={(event) =>
-                        updateDraft({
-                          title: event.target.value.replace(/[\r\n]+/g, " "),
-                        })
-                      }
-                      onBlur={() => {
-                        const nextTitle = draftRef.current.title.trim();
-                        updateDraft({
-                          title: nextTitle || savedDraftRef.current.title,
-                        });
-                        void flushDraftRef.current();
-                      }}
-                      onKeyDown={(event) => {
-                        if (
-                          event.key === "Enter" &&
-                          !event.nativeEvent.isComposing
-                        ) {
-                          event.preventDefault();
-                          event.currentTarget.blur();
-                        }
-                      }}
-                      maxLength={120}
-                      className="project-task-title -mx-2 min-h-0 w-[calc(100%+1rem)] resize-none border-transparent px-2 py-1 shadow-none"
-                    />
-                  </Field>
-                </>
+                  {selectedLabel ? (
+                    <span className="min-w-0 [&_[data-slot=badge]]:block [&_[data-slot=badge]]:max-w-full [&_[data-slot=badge]]:truncate">
+                      <LabelBadge label={selectedLabel} />
+                    </span>
+                  ) : (
+                    <span className="text-muted-foreground">No label</span>
+                  )}
+                  <ChevronDown
+                    aria-hidden="true"
+                    data-icon="inline-end"
+                  />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent
+                  side="bottom"
+                  align="start"
+                  className="max-w-[calc(100vw-2rem)]"
+                >
+                  <MenuPrimitive.Group>
+                    {labels.map((label) => (
+                      <DropdownMenuItem
+                        key={label.uuid}
+                        onClick={() => updateLabel(label.uuid)}
+                      >
+                        <span className="min-w-0 flex-1 [&_[data-slot=badge]]:block [&_[data-slot=badge]]:max-w-full [&_[data-slot=badge]]:truncate">
+                          <LabelBadge label={label} />
+                        </span>
+                        {label.uuid === draft.label_uuids[0] && (
+                          <Check aria-hidden="true" />
+                        )}
+                      </DropdownMenuItem>
+                    ))}
+                  </MenuPrimitive.Group>
+                  {selectedLabel && (
+                    <>
+                      <DropdownMenuSeparator />
+                      <MenuPrimitive.Group>
+                        <DropdownMenuItem
+                          destructive
+                          onClick={() => updateLabel()}
+                        >
+                          <Trash2 aria-hidden="true" />
+                          Remove label
+                        </DropdownMenuItem>
+                      </MenuPrimitive.Group>
+                    </>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+            {!archived && labels.length === 0 && !selectedLabel && (
+              <FieldDescription className="col-start-2 px-2 text-xs">
+                No labels yet — add some from Labels on the board.
+              </FieldDescription>
+            )}
+          </Field>
+        </FieldGroup>
+
+        <TaskDetailSection title="Description" icon={<AlignLeft />}>
+          <div className="task-description-editor rounded-xl">
+            <NoteRichTextEditor
+              mode="task"
+              theme={resolvedTheme === "dark" ? "dark" : "light"}
+              documentId={`task-description-${task.uuid}`}
+              content={draft.description ?? ""}
+              editable={!archived}
+              noteOptions={editorNoteOptions}
+              onChange={(content) =>
+                updateDraft({ description: content })
+              }
+              onBlur={() => void flushDraftRef.current()}
+              onOpenNote={openEditorNote}
+              onUploadFile={() =>
+                Promise.reject(
+                  new Error("Media uploads are unavailable for tasks."),
+                )
+              }
+              onCreateChild={() =>
+                Promise.reject(
+                  new Error("Page creation is unavailable for tasks."),
+                )
+              }
+              onEditorReady={() => undefined}
+              onHistoryStateChange={() => undefined}
+            />
+          </div>
+        </TaskDetailSection>
+
+        <TaskDetailSection
+          title="Resources"
+          count={task.resources.length}
+          icon={<Link2 />}
+          action={
+            !archived ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                className="h-11 sm:h-8"
+                onClick={() => setLinkPicker("resources")}
+              >
+                <Plus aria-hidden="true" data-icon="inline-start" />
+                Link resources
+              </Button>
+            ) : undefined
+          }
+        >
+          {task.resources.length > 0 ? (
+            <TaskResourceList
+              items={task.resources}
+              selectedUuid={selectedResourceUuid}
+              isLoading={selectedResourceQuery.isLoading}
+              isError={selectedResourceQuery.isError}
+              onSelect={handleOpenResource}
+            />
+          ) : (
+            <EmptyTaskDetail icon={<Link2 />}>
+              No resources linked yet.
+            </EmptyTaskDetail>
+          )}
+        </TaskDetailSection>
+
+        <TaskDetailSection
+          title="Notes"
+          count={task.notes.length}
+          icon={<FileText />}
+          action={
+            !archived ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                className="h-11 sm:h-8"
+                onClick={() => setLinkPicker("notes")}
+              >
+                <Plus aria-hidden="true" data-icon="inline-start" />
+                Link notes
+              </Button>
+            ) : undefined
+          }
+        >
+          {task.notes.length > 0 ? (
+            <TaskNoteList items={task.notes} />
+          ) : (
+            <EmptyTaskDetail icon={<FileText />}>
+              No notes linked yet.
+            </EmptyTaskDetail>
+          )}
+        </TaskDetailSection>
+
+        {(task.created_at || task.updated_at) && (
+          <div className="flex flex-col gap-4">
+            <Separator />
+            <dl className="grid gap-3 text-xs text-muted-foreground sm:grid-cols-2">
+              {task.created_at && (
+                <div className="flex flex-col gap-1.5">
+                  <dt className="flex items-center gap-1.5">
+                    <Clock3 aria-hidden="true" className="size-3.5" />
+                    Created
+                  </dt>
+                  <dd>
+                    <time dateTime={task.created_at}>
+                      {formatTaskTimestamp(task.created_at)}
+                    </time>
+                  </dd>
+                </div>
               )}
-              <DrawerDescription className="sr-only">
-                {archived
-                  ? "View this archived task. Task details are read only."
-                  : "Update task details. Changes save automatically."}
-              </DrawerDescription>
-            </DrawerHeader>
-
-            <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-6 overflow-y-auto overscroll-contain p-4 sm:p-6">
-              <FieldGroup className="gap-0.5 rounded-xl border p-1.5">
-                <Field orientation="horizontal" className={propertyRowClassName}>
-                  {archived ? (
-                    <FieldTitle className={propertyLabelClassName}>
-                      <CircleDot aria-hidden="true" />
-                      Status
-                    </FieldTitle>
-                  ) : (
-                    <FieldLabel
-                      htmlFor={`${fieldId}-status`}
-                      className={propertyLabelClassName}
-                    >
-                      <CircleDot aria-hidden="true" />
-                      Status
-                    </FieldLabel>
-                  )}
-                  {archived ? (
-                    <Badge
-                      variant="secondary"
-                      className="w-fit gap-1.5 capitalize"
-                    >
-                      <StatusDot color={stageDotColors[task.stage]} />
-                      {stages.find((item) => item.key === task.stage)?.name ??
-                        task.stage.replace("_", " ")}
-                    </Badge>
-                  ) : (
-                    <Select
-                      value={draft.stage}
-                      onValueChange={(value) => {
-                        const nextStage = value as BoardStageKey;
-                        updateDraft({ stage: nextStage });
-                      }}
-                    >
-                      <SelectTrigger
-                        id={`${fieldId}-status`}
-                        className={propertyTriggerClassName}
-                      >
-                        <StatusValue
-                          color={stageDotColors[draft.stage]}
-                          label={
-                            stages.find((item) => item.key === draft.stage)
-                              ?.name ?? draft.stage.replace("_", " ")
-                          }
-                        />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectGroup>
-                          {stages.map((item) => (
-                            <SelectItem key={item.key} value={item.key}>
-                              <StatusValue
-                                color={stageDotColors[item.key]}
-                                label={item.name}
-                              />
-                            </SelectItem>
-                          ))}
-                        </SelectGroup>
-                      </SelectContent>
-                    </Select>
-                  )}
-                </Field>
-
-                <Field orientation="horizontal" className={propertyRowClassName}>
-                  {archived ? (
-                    <FieldTitle className={propertyLabelClassName}>
-                      <Flag aria-hidden="true" />
-                      Priority
-                    </FieldTitle>
-                  ) : (
-                    <FieldLabel
-                      htmlFor={`${fieldId}-priority`}
-                      className={propertyLabelClassName}
-                    >
-                      <Flag aria-hidden="true" />
-                      Priority
-                    </FieldLabel>
-                  )}
-                  {archived ? (
-                    <Badge
-                      className={cn(
-                        "w-fit gap-1.5 capitalize",
-                        priorityStyles[task.priority],
-                      )}
-                    >
-                      <StatusDot color={priorityDotColors[task.priority]} />
-                      {task.priority}
-                    </Badge>
-                  ) : (
-                    <Select
-                      value={draft.priority}
-                      onValueChange={(value) => {
-                        const nextPriority = value as BoardTask["priority"];
-                        updateDraft({ priority: nextPriority });
-                      }}
-                    >
-                      <SelectTrigger
-                        id={`${fieldId}-priority`}
-                        className={propertyTriggerClassName}
-                      >
-                        <StatusValue
-                          color={priorityDotColors[draft.priority]}
-                          label={
-                            draft.priority.charAt(0).toUpperCase() +
-                            draft.priority.slice(1)
-                          }
-                        />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectGroup>
-                          <SelectItem value="low">
-                            <StatusValue
-                              color={priorityDotColors.low}
-                              label="Low"
-                            />
-                          </SelectItem>
-                          <SelectItem value="medium">
-                            <StatusValue
-                              color={priorityDotColors.medium}
-                              label="Medium"
-                            />
-                          </SelectItem>
-                          <SelectItem value="high">
-                            <StatusValue
-                              color={priorityDotColors.high}
-                              label="High"
-                            />
-                          </SelectItem>
-                        </SelectGroup>
-                      </SelectContent>
-                    </Select>
-                  )}
-                </Field>
-
-                <Field orientation="horizontal" className={propertyRowClassName}>
-                  {archived ? (
-                    <FieldTitle className={propertyLabelClassName}>
-                      <Tag aria-hidden="true" />
-                      Label
-                    </FieldTitle>
-                  ) : (
-                    <FieldLabel
-                      htmlFor={`${fieldId}-label`}
-                      className={propertyLabelClassName}
-                    >
-                      <Tag aria-hidden="true" />
-                      Label
-                    </FieldLabel>
-                  )}
-                  {archived ? (
-                    task.labels[0] ? (
-                      <span className="min-w-0 [&_[data-slot=badge]]:block [&_[data-slot=badge]]:max-w-full [&_[data-slot=badge]]:truncate">
-                        <LabelBadge label={task.labels[0]} />
-                      </span>
-                    ) : (
-                      <span className="text-sm text-muted-foreground">
-                        No label
-                      </span>
-                    )
-                  ) : (
-                    <DropdownMenu>
-                      <DropdownMenuTrigger
-                        render={
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            id={`${fieldId}-label`}
-                            className={cn(propertyTriggerClassName, "h-auto font-normal")}
-                            disabled={labels.length === 0 && !selectedLabel}
-                            aria-label={
-                              selectedLabel ? "Update label" : "Add label"
-                            }
-                          />
-                        }
-                      >
-                        {selectedLabel ? (
-                          <span className="min-w-0 [&_[data-slot=badge]]:block [&_[data-slot=badge]]:max-w-full [&_[data-slot=badge]]:truncate">
-                            <LabelBadge label={selectedLabel} />
-                          </span>
-                        ) : (
-                          <span className="text-muted-foreground">No label</span>
-                        )}
-                        <ChevronDown
-                          aria-hidden="true"
-                          data-icon="inline-end"
-                        />
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent
-                        side="bottom"
-                        align="start"
-                        className="max-w-[calc(100vw-2rem)]"
-                      >
-                        <MenuPrimitive.Group>
-                          {labels.map((label) => (
-                            <DropdownMenuItem
-                              key={label.uuid}
-                              onClick={() => updateLabel(label.uuid)}
-                            >
-                              <span className="min-w-0 flex-1 [&_[data-slot=badge]]:block [&_[data-slot=badge]]:max-w-full [&_[data-slot=badge]]:truncate">
-                                <LabelBadge label={label} />
-                              </span>
-                              {label.uuid === draft.label_uuids[0] && (
-                                <Check aria-hidden="true" />
-                              )}
-                            </DropdownMenuItem>
-                          ))}
-                        </MenuPrimitive.Group>
-                        {selectedLabel && (
-                          <>
-                            <DropdownMenuSeparator />
-                            <MenuPrimitive.Group>
-                              <DropdownMenuItem
-                                destructive
-                                onClick={() => updateLabel()}
-                              >
-                                <Trash2 aria-hidden="true" />
-                                Remove label
-                              </DropdownMenuItem>
-                            </MenuPrimitive.Group>
-                          </>
-                        )}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  )}
-                  {!archived && labels.length === 0 && !selectedLabel && (
-                    <FieldDescription className="col-start-2 px-2 text-xs">
-                      No labels yet — add some from Labels on the board.
-                    </FieldDescription>
-                  )}
-                </Field>
-              </FieldGroup>
-
-              <TaskDetailSection title="Description" icon={<AlignLeft />}>
-                <div className="task-description-editor rounded-xl">
-                  <NoteRichTextEditor
-                    mode="task"
-                    theme={resolvedTheme === "dark" ? "dark" : "light"}
-                    documentId={`task-description-${task.uuid}`}
-                    content={draft.description ?? ""}
-                    editable={!archived}
-                    noteOptions={editorNoteOptions}
-                    onChange={(content) =>
-                      updateDraft({ description: content })
-                    }
-                    onBlur={() => void flushDraftRef.current()}
-                    onOpenNote={openEditorNote}
-                    onUploadFile={() =>
-                      Promise.reject(
-                        new Error("Media uploads are unavailable for tasks."),
-                      )
-                    }
-                    onCreateChild={() =>
-                      Promise.reject(
-                        new Error("Page creation is unavailable for tasks."),
-                      )
-                    }
-                    onEditorReady={() => undefined}
-                    onHistoryStateChange={() => undefined}
-                  />
+              {task.updated_at && (
+                <div className="flex flex-col gap-1.5">
+                  <dt className="flex items-center gap-1.5">
+                    <Clock3 aria-hidden="true" className="size-3.5" />
+                    Updated
+                  </dt>
+                  <dd>
+                    <time dateTime={task.updated_at}>
+                      {formatTaskTimestamp(task.updated_at)}
+                    </time>
+                  </dd>
                 </div>
-              </TaskDetailSection>
+              )}
+            </dl>
+          </div>
+        )}
+      </div>
 
-              <TaskDetailSection
-                title="Resources"
-                count={task.resources.length}
-                icon={<Link2 />}
-                action={
-                  !archived ? (
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="ghost"
-                      className="h-11 sm:h-8"
-                      onClick={() => setLinkPicker("resources")}
-                    >
-                      <Plus aria-hidden="true" data-icon="inline-start" />
-                      Link resources
-                    </Button>
-                  ) : undefined
-                }
+      {!archived && (
+        <footer className="flex shrink-0 flex-row items-center justify-between gap-3 border-t px-4 py-3 sm:px-5">
+          <div className="flex min-w-0 flex-1 flex-col items-start gap-1">
+            <p
+              role="status"
+              aria-live="polite"
+              className={cn(
+                "flex items-center gap-2 text-sm text-muted-foreground",
+                saveError && "text-destructive",
+              )}
+            >
+              <SaveIcon
+                aria-hidden="true"
+                className={cn(
+                  "size-4 shrink-0",
+                  saving && "animate-spin motion-reduce:animate-none",
+                )}
+              />
+              <span>{saveMessage}</span>
+            </p>
+            {saveError && (
+              <Button
+                type="button"
+                variant="link"
+                size="sm"
+                className="-ml-2.5 h-11 sm:h-8"
+                onClick={() => void flushDraftRef.current()}
               >
-                {task.resources.length > 0 ? (
-                  <TaskResourceList
-                    items={task.resources}
-                    selectedUuid={selectedResourceUuid}
-                    isLoading={selectedResourceQuery.isLoading}
-                    isError={selectedResourceQuery.isError}
-                    onSelect={handleOpenResource}
+                Retry save
+              </Button>
+            )}
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            className="h-11 sm:h-9"
+            disabled={isDeleting || isSaving}
+            onClick={() => setDeleteConfirmationOpen(true)}
+          >
+            <Trash2 aria-hidden="true" data-icon="inline-start" />
+            {isDeleting ? "Deleting…" : "Delete task"}
+          </Button>
+        </footer>
+      )}
+
+      {!archived && (
+        <Dialog
+          open={Boolean(linkPicker)}
+          onOpenChange={(open) => {
+            if (!open) closeLinkPicker();
+          }}
+        >
+          <DialogContent className="max-h-[min(90dvh,44rem)] max-w-lg gap-0 overflow-hidden p-0">
+            <DialogHeader className="shrink-0 gap-1 px-5 pb-3 pt-5 pr-12">
+              <DialogTitle>
+                Link {linkPicker === "notes" ? "notes" : "resources"}
+              </DialogTitle>
+              <DialogDescription>
+                Select one or more items to link to this task.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="shrink-0 px-5 pb-3">
+              <InputGroup>
+                <InputGroupAddon>
+                  <Search aria-hidden="true" />
+                </InputGroupAddon>
+                <InputGroupInput
+                  autoFocus
+                  aria-label={`Search ${linkPicker === "notes" ? "notes" : "resources"}`}
+                  placeholder={`Search ${linkPicker === "notes" ? "notes" : "resources"}…`}
+                  value={pickerSearch}
+                  onChange={(event) => setPickerSearch(event.target.value)}
+                />
+              </InputGroup>
+            </div>
+            <Separator />
+            <div className="workspace-list-scrollbar grid min-h-0 flex-1 content-start gap-3 overflow-y-auto overscroll-contain p-3">
+              {linkPicker === "resources" ? (
+                resourcesQuery.isLoading ? (
+                  <LinkPickerSkeleton label="Loading resources" />
+                ) : visibleResources.length ? (
+                  <ResourcePickerItems
+                    resources={visibleResources}
+                    selectedUuids={draft.resource_uuids}
+                    onToggle={handleToggleResource}
                   />
                 ) : (
-                  <EmptyTaskDetail icon={<Link2 />}>
-                    No resources linked yet.
+                  <EmptyTaskDetail>
+                    {pickerQuery
+                      ? "No resources match your search."
+                      : "No resources available."}
                   </EmptyTaskDetail>
-                )}
-              </TaskDetailSection>
-
-              <TaskDetailSection
-                title="Notes"
-                count={task.notes.length}
-                icon={<FileText />}
-                action={
-                  !archived ? (
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="ghost"
-                      className="h-11 sm:h-8"
-                      onClick={() => setLinkPicker("notes")}
-                    >
-                      <Plus aria-hidden="true" data-icon="inline-start" />
-                      Link notes
-                    </Button>
-                  ) : undefined
-                }
-              >
-                {task.notes.length > 0 ? (
-                  <TaskNoteList items={task.notes} />
-                ) : (
-                  <EmptyTaskDetail icon={<FileText />}>
-                    No notes linked yet.
-                  </EmptyTaskDetail>
-                )}
-              </TaskDetailSection>
-
-              {(task.created_at || task.updated_at) && (
-                <div className="flex flex-col gap-4">
-                  <Separator />
-                  <dl className="grid gap-3 text-xs text-muted-foreground sm:grid-cols-2">
-                    {task.created_at && (
-                      <div className="flex flex-col gap-1.5">
-                        <dt className="flex items-center gap-1.5">
-                          <Clock3 aria-hidden="true" className="size-3.5" />
-                          Created
-                        </dt>
-                        <dd>
-                          <time dateTime={task.created_at}>
-                            {formatTaskTimestamp(task.created_at)}
-                          </time>
-                        </dd>
-                      </div>
-                    )}
-                    {task.updated_at && (
-                      <div className="flex flex-col gap-1.5">
-                        <dt className="flex items-center gap-1.5">
-                          <Clock3 aria-hidden="true" className="size-3.5" />
-                          Updated
-                        </dt>
-                        <dd>
-                          <time dateTime={task.updated_at}>
-                            {formatTaskTimestamp(task.updated_at)}
-                          </time>
-                        </dd>
-                      </div>
-                    )}
-                  </dl>
-                </div>
+                )
+              ) : notesLoading ? (
+                <LinkPickerSkeleton label="Loading notes" />
+              ) : visibleNoteGroups.length ? (
+                visibleNoteGroups.map(({ key, label, notes }) => (
+                  <div key={key} className="grid gap-2">
+                    <p className="px-1 text-xs font-medium text-muted-foreground">
+                      {label}
+                    </p>
+                    <NotePickerItems
+                      notes={notes}
+                      selectedUuids={draft.note_uuids}
+                      onToggle={handleToggleNote}
+                    />
+                  </div>
+                ))
+              ) : (
+                <EmptyTaskDetail>
+                  {pickerQuery
+                    ? "No notes match your search."
+                    : "No notes available."}
+                </EmptyTaskDetail>
+              )}
+              {linkPicker === "resources" && resourcesQuery.isError && (
+                <Button
+                  variant="outline"
+                  onClick={() =>
+                    resourcesQuery.isFetchNextPageError
+                      ? resourcesQuery.fetchNextPage()
+                      : resourcesQuery.refetch()
+                  }
+                >
+                  Retry loading resources
+                </Button>
+              )}
+              {linkPicker === "resources" && resourcesQuery.hasNextPage && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={resourcesQuery.isFetchingNextPage}
+                  onClick={() => resourcesQuery.fetchNextPage()}
+                >
+                  {resourcesQuery.isFetchingNextPage
+                    ? "Loading…"
+                    : "Load more resources"}
+                </Button>
+              )}
+              {linkPicker === "notes" && notesError && (
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    if (areasQuery.isError) void areasQuery.refetch();
+                    if (areaNotesQuery.isError)
+                      void areaNotesQuery.refetch();
+                    if (standaloneNotesQuery.isError)
+                      void standaloneNotesQuery.refetch();
+                  }}
+                >
+                  Retry loading notes
+                </Button>
               )}
             </div>
-
-            {!archived && (
-              <DrawerFooter className="flex-row items-center justify-between gap-3 border-t px-4 py-3 sm:px-6 sm:py-4">
-                <div className="flex min-w-0 flex-1 flex-col items-start gap-1">
-                  <p
-                    role="status"
-                    aria-live="polite"
-                    className={cn(
-                      "flex items-center gap-2 text-sm text-muted-foreground",
-                      saveError && "text-destructive",
-                    )}
-                  >
-                    <SaveIcon
-                      aria-hidden="true"
-                      className={cn(
-                        "size-4 shrink-0",
-                        saving && "animate-spin motion-reduce:animate-none",
-                      )}
-                    />
-                    <span>{saveMessage}</span>
-                  </p>
-                  {saveError && (
-                    <Button
-                      type="button"
-                      variant="link"
-                      size="sm"
-                      className="-ml-2.5 h-11 sm:h-8"
-                      onClick={() => void flushDraftRef.current()}
-                    >
-                      Retry save
-                    </Button>
-                  )}
-                </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="h-11 sm:h-9"
-                  disabled={isDeleting || isSaving}
-                  onClick={() => setDeleteConfirmationOpen(true)}
-                >
-                  <Trash2 aria-hidden="true" data-icon="inline-start" />
-                  {isDeleting ? "Deleting…" : "Delete task"}
-                </Button>
-              </DrawerFooter>
-            )}
-
-            {!archived && (
-              <Dialog
-                open={Boolean(linkPicker)}
-                onOpenChange={(open) => {
-                  if (!open) closeLinkPicker();
+            <Separator />
+            <DialogFooter className="shrink-0 flex-row items-center justify-between px-5 py-3">
+              <p className="text-xs text-muted-foreground" aria-live="polite">
+                {selectedLinkCount} linked
+              </p>
+              <Button type="button" onClick={closeLinkPicker}>
+                Done
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+      {!archived && (
+        <AlertDialog
+          open={deleteConfirmationOpen}
+          onOpenChange={(open) => {
+            if (!isDeleting) setDeleteConfirmationOpen(open);
+          }}
+        >
+          <AlertDialogContent className="max-w-md">
+            <AlertDialogHeader>
+              <span className="flex size-10 items-center justify-center rounded-full bg-destructive/10 text-destructive">
+                <Trash2 aria-hidden="true" className="size-5" />
+              </span>
+              <AlertDialogTitle>Delete task?</AlertDialogTitle>
+              <AlertDialogDescription>
+                “{task.title}” will move to Trash for 30 days. You can
+                restore it from Settings before it is permanently deleted.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={isDeleting}>
+                Cancel
+              </AlertDialogCancel>
+              <Button
+                type="button"
+                variant="destructive"
+                disabled={isDeleting}
+                onClick={() => {
+                  cancelPendingAutosave();
+                  onDelete();
                 }}
               >
-                <DialogContent className="max-h-[min(90dvh,44rem)] max-w-lg gap-0 overflow-hidden p-0">
-                  <DialogHeader className="shrink-0 gap-1 px-5 pb-3 pt-5 pr-12">
-                    <DialogTitle>
-                      Link {linkPicker === "notes" ? "notes" : "resources"}
-                    </DialogTitle>
-                    <DialogDescription>
-                      Select one or more items to link to this task.
-                    </DialogDescription>
-                  </DialogHeader>
-                  <div className="shrink-0 px-5 pb-3">
-                    <InputGroup>
-                      <InputGroupAddon>
-                        <Search aria-hidden="true" />
-                      </InputGroupAddon>
-                      <InputGroupInput
-                        autoFocus
-                        aria-label={`Search ${linkPicker === "notes" ? "notes" : "resources"}`}
-                        placeholder={`Search ${linkPicker === "notes" ? "notes" : "resources"}…`}
-                        value={pickerSearch}
-                        onChange={(event) => setPickerSearch(event.target.value)}
-                      />
-                    </InputGroup>
-                  </div>
-                  <Separator />
-                  <div className="workspace-list-scrollbar grid min-h-0 flex-1 content-start gap-3 overflow-y-auto overscroll-contain p-3">
-                    {linkPicker === "resources" ? (
-                      resourcesQuery.isLoading ? (
-                        <LinkPickerSkeleton label="Loading resources" />
-                      ) : visibleResources.length ? (
-                        <ResourcePickerItems
-                          resources={visibleResources}
-                          selectedUuids={draft.resource_uuids}
-                          onToggle={handleToggleResource}
-                        />
-                      ) : (
-                        <EmptyTaskDetail>
-                          {pickerQuery
-                            ? "No resources match your search."
-                            : "No resources available."}
-                        </EmptyTaskDetail>
-                      )
-                    ) : notesLoading ? (
-                      <LinkPickerSkeleton label="Loading notes" />
-                    ) : visibleNoteGroups.length ? (
-                      visibleNoteGroups.map(({ key, label, notes }) => (
-                        <div key={key} className="grid gap-2">
-                          <p className="px-1 text-xs font-medium text-muted-foreground">
-                            {label}
-                          </p>
-                          <NotePickerItems
-                            notes={notes}
-                            selectedUuids={draft.note_uuids}
-                            onToggle={handleToggleNote}
-                          />
-                        </div>
-                      ))
-                    ) : (
-                      <EmptyTaskDetail>
-                        {pickerQuery
-                          ? "No notes match your search."
-                          : "No notes available."}
-                      </EmptyTaskDetail>
-                    )}
-                    {linkPicker === "resources" && resourcesQuery.isError && (
-                      <Button
-                        variant="outline"
-                        onClick={() =>
-                          resourcesQuery.isFetchNextPageError
-                            ? resourcesQuery.fetchNextPage()
-                            : resourcesQuery.refetch()
-                        }
-                      >
-                        Retry loading resources
-                      </Button>
-                    )}
-                    {linkPicker === "resources" && resourcesQuery.hasNextPage && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        disabled={resourcesQuery.isFetchingNextPage}
-                        onClick={() => resourcesQuery.fetchNextPage()}
-                      >
-                        {resourcesQuery.isFetchingNextPage
-                          ? "Loading…"
-                          : "Load more resources"}
-                      </Button>
-                    )}
-                    {linkPicker === "notes" && notesError && (
-                      <Button
-                        variant="outline"
-                        onClick={() => {
-                          if (areasQuery.isError) void areasQuery.refetch();
-                          if (areaNotesQuery.isError)
-                            void areaNotesQuery.refetch();
-                          if (standaloneNotesQuery.isError)
-                            void standaloneNotesQuery.refetch();
-                        }}
-                      >
-                        Retry loading notes
-                      </Button>
-                    )}
-                  </div>
-                  <Separator />
-                  <DialogFooter className="shrink-0 flex-row items-center justify-between px-5 py-3">
-                    <p className="text-xs text-muted-foreground" aria-live="polite">
-                      {selectedLinkCount} linked
-                    </p>
-                    <Button type="button" onClick={closeLinkPicker}>
-                      Done
-                    </Button>
-                  </DialogFooter>
-                </DialogContent>
-              </Dialog>
-            )}
-            {!archived && (
-              <AlertDialog
-                open={deleteConfirmationOpen}
-                onOpenChange={(open) => {
-                  if (!isDeleting) setDeleteConfirmationOpen(open);
-                }}
-              >
-                <AlertDialogContent className="max-w-md">
-                  <AlertDialogHeader>
-                    <span className="flex size-10 items-center justify-center rounded-full bg-destructive/10 text-destructive">
-                      <Trash2 aria-hidden="true" className="size-5" />
-                    </span>
-                    <AlertDialogTitle>Delete task?</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      “{task.title}” will move to Trash for 30 days. You can
-                      restore it from Settings before it is permanently deleted.
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel disabled={isDeleting}>
-                      Cancel
-                    </AlertDialogCancel>
-                    <Button
-                      type="button"
-                      variant="destructive"
-                      disabled={isDeleting}
-                      onClick={() => {
-                        cancelPendingAutosave();
-                        onDelete();
-                      }}
-                    >
-                      {isDeleting ? (
-                        <LoaderCircle aria-hidden="true" className="animate-spin" />
-                      ) : (
-                        <Trash2 aria-hidden="true" />
-                      )}
-                      {isDeleting ? "Deleting…" : "Delete task"}
-                    </Button>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
-            )}
-            {selectedResourceQuery.data?.data && (
-              <ResourceDetailDialog
-                resource={selectedResourceQuery.data.data}
-                onClose={() => setSelectedResourceUuid(undefined)}
-                onDeleted={handleResourceDeleted}
-              />
-            )}
-          </>
-        )}
-      </DrawerContent>
-    </Drawer>
+                {isDeleting ? (
+                  <LoaderCircle aria-hidden="true" className="animate-spin" />
+                ) : (
+                  <Trash2 aria-hidden="true" />
+                )}
+                {isDeleting ? "Deleting…" : "Delete task"}
+              </Button>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      )}
+      {selectedResourceQuery.data?.data && (
+        <ResourceDetailDialog
+          resource={selectedResourceQuery.data.data}
+          onClose={() => setSelectedResourceUuid(undefined)}
+          onDeleted={handleResourceDeleted}
+        />
+      )}
+    </section>
   );
 }
 

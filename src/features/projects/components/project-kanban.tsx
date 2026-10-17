@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardTitle } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
 import { useProjectKanbanMutations } from "../hooks/use-project-kanban-mutations";
 import { useProjectBoardQuery } from "../queries/project-query";
 import type { BoardStageKey, BoardSummary, BoardTask } from "../type";
@@ -38,9 +39,10 @@ import {
   ProjectKanbanToolbar,
   type BoardDialogValue,
 } from "./project-kanban-toolbar";
+import { KanbanTaskLayout, projectKanbanRegionStyles } from "./project-kanban-layout";
 import { filterBoardTasks, kanbanGridStyles } from "./project-kanban-utils";
 import { ProjectLabelDialog } from "./project-label-dialog";
-import { TaskDetailsSheet } from "./project-task-details-sheet";
+import { TaskDetailsPanel } from "./project-task-details-panel";
 import { KanbanBoardSkeleton } from "./project-skeletons";
 
 export function ProjectKanban({
@@ -61,6 +63,7 @@ export function ProjectKanban({
   const [deleteBoardOpen, setDeleteBoardOpen] = useState(false);
   const [activeTask, setActiveTask] = useState<BoardTask>();
   const [selectedTaskUuid, setSelectedTaskUuid] = useState<string>();
+  const [taskExpanded, setTaskExpanded] = useState(false);
   const [taskSearch, setTaskSearch] = useState("");
   const searching = taskSearch.trim() !== "";
   const boardQuery = useProjectBoardQuery(projectUuid, selectedBoardUuid);
@@ -85,13 +88,18 @@ export function ProjectKanban({
     },
     onBoardDeleted: (boardUuid) => setSelectedBoardUuid(boardUuid),
     onTaskDeleted: (taskUuid) => {
-      if (selectedTaskUuid === taskUuid) setSelectedTaskUuid(undefined);
+      if (selectedTaskUuid === taskUuid) closeTask();
     },
   });
 
+  function closeTask() {
+    setSelectedTaskUuid(undefined);
+    setTaskExpanded(false);
+  }
+
   const handleSelectBoard = (boardUuid: string) => {
     setTaskDraft(undefined);
-    setSelectedTaskUuid(undefined);
+    closeTask();
     setTaskSearch("");
     setSelectedBoardUuid(boardUuid);
   };
@@ -174,9 +182,7 @@ export function ProjectKanban({
         </p>
       )}
 
-      {boardQuery.isLoading ? (
-        <KanbanBoardSkeleton />
-      ) : boardQuery.isError || !board ? (
+      {!boardQuery.isLoading && (boardQuery.isError || !board) ? (
         <Card className="items-center py-12">
           <CardTitle>Board could not be loaded</CardTitle>
           <Button variant="outline" onClick={() => boardQuery.refetch()}>
@@ -184,71 +190,81 @@ export function ProjectKanban({
           </Button>
         </Card>
       ) : (
-        <DndContext
-          sensors={sensors}
-          collisionDetection={closestCorners}
-          onDragStart={(event: DragStartEvent) =>
-            setActiveTask(
-              board.stages
-                .flatMap((stage) => stage.tasks)
-                .find((task) => task.uuid === event.active.id),
-            )
-          }
-          onDragEnd={handleDragEnd}
-          onDragCancel={() => setActiveTask(undefined)}
-        >
-          <div className={kanbanGridStyles}>
-            {board.stages.map((stage) => (
-              <KanbanColumn
-                key={stage.uuid}
-                stage={stage}
-                tasks={filterBoardTasks(stage.tasks, taskSearch)}
-                archived={archived}
-                searching={searching}
-                draft={taskDraft?.stage === stage.key ? taskDraft : undefined}
-                isCreating={mutations.createTask.isPending}
-                onAdd={() => setTaskDraft({ stage: stage.key, title: "" })}
-                onDraftChange={(title) =>
-                  setTaskDraft((draft) =>
-                    draft?.stage === stage.key ? { ...draft, title } : draft,
+        <KanbanTaskLayout
+          className={projectKanbanRegionStyles}
+          expanded={taskExpanded}
+          board={
+            !board ? (
+              <KanbanBoardSkeleton fill />
+            ) : (
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCorners}
+                onDragStart={(event: DragStartEvent) =>
+                  setActiveTask(
+                    board.stages
+                      .flatMap((stage) => stage.tasks)
+                      .find((task) => task.uuid === event.active.id),
                   )
                 }
-                onDraftCancel={() => setTaskDraft(undefined)}
-                onDraftSubmit={() => submitTaskDraft(stage.key)}
-                onOpen={(task) => setSelectedTaskUuid(task.uuid)}
-              />
-            ))}
-          </div>
-          <DragOverlay>
-            {activeTask ? <TaskCard task={activeTask} overlay /> : null}
-          </DragOverlay>
-        </DndContext>
-      )}
-
-      <TaskDetailsSheet
-        key={selectedTask?.uuid ?? "closed"}
-        task={selectedTask}
-        boardName={board?.name}
-        stages={board?.stages ?? []}
-        labels={board?.labels ?? []}
-        archived={archived}
-        isSaving={mutations.updateTask.isPending}
-        isDeleting={mutations.deleteTask.isPending}
-        onOpenChange={(open) => {
-          if (!open) setSelectedTaskUuid(undefined);
-        }}
-        onSave={(input) => {
-          if (!selectedTask) return Promise.resolve();
-          return mutations.updateTask
-            .mutateAsync({ taskUuid: selectedTask.uuid, input })
-            .then(() => undefined);
-        }}
-        onDelete={() => {
-          if (selectedTask) {
-            mutations.deleteTask.mutate(selectedTask.uuid);
+                onDragEnd={handleDragEnd}
+                onDragCancel={() => setActiveTask(undefined)}
+              >
+                <div className={cn(kanbanGridStyles, "h-full min-h-0")}>
+                  {board.stages.map((stage) => (
+                    <KanbanColumn
+                      key={stage.uuid}
+                      stage={stage}
+                      tasks={filterBoardTasks(stage.tasks, taskSearch)}
+                      archived={archived}
+                      searching={searching}
+                      draft={taskDraft?.stage === stage.key ? taskDraft : undefined}
+                      isCreating={mutations.createTask.isPending}
+                      selectedTaskUuid={selectedTask?.uuid}
+                      onAdd={() => setTaskDraft({ stage: stage.key, title: "" })}
+                      onDraftChange={(title) =>
+                        setTaskDraft((draft) =>
+                          draft?.stage === stage.key ? { ...draft, title } : draft,
+                        )
+                      }
+                      onDraftCancel={() => setTaskDraft(undefined)}
+                      onDraftSubmit={() => submitTaskDraft(stage.key)}
+                      onOpen={(task) => setSelectedTaskUuid(task.uuid)}
+                    />
+                  ))}
+                </div>
+                <DragOverlay>
+                  {activeTask ? <TaskCard task={activeTask} overlay /> : null}
+                </DragOverlay>
+              </DndContext>
+            )
           }
-        }}
-      />
+          panel={
+            board &&
+            selectedTask && (
+              <TaskDetailsPanel
+                key={selectedTask.uuid}
+                task={selectedTask}
+                boardName={board.name}
+                stages={board.stages}
+                labels={board.labels}
+                archived={archived}
+                isSaving={mutations.updateTask.isPending}
+                isDeleting={mutations.deleteTask.isPending}
+                expanded={taskExpanded}
+                onExpandedChange={setTaskExpanded}
+                onClose={closeTask}
+                onSave={(input) =>
+                  mutations.updateTask
+                    .mutateAsync({ taskUuid: selectedTask.uuid, input })
+                    .then(() => undefined)
+                }
+                onDelete={() => mutations.deleteTask.mutate(selectedTask.uuid)}
+              />
+            )
+          }
+        />
+      )}
 
       {board && (
         <ProjectLabelDialog
