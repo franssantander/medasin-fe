@@ -89,7 +89,7 @@ export function SplitWords({
   delay = 0,
   onMount,
   ...props
-}: { as?: "h1" | "h2"; text: string; delay?: number; onMount?: boolean } & Omit<
+}: { as?: "h1" | "h2" | "p"; text: string; delay?: number; onMount?: boolean } & Omit<
   ComponentPropsWithoutRef<"h2">,
   "children" | "onAnimationStart" | "onDrag" | "onDragStart" | "onDragEnd"
 >) {

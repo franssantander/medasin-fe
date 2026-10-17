@@ -20,10 +20,10 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { areaCoverStyle, getAreaCoverVariant } from "../area-cover";
 import { formatAreaUpdatedAt } from "../area-list-utils";
 import type { Area } from "../type";
 import type { AreaConfirmationAction } from "./area-action-dialog";
-import { DEFAULT_AREA_BACKGROUND } from "./area-form-dialog";
 import { AreaIcon, areaBadgeStyle } from "./area-icons";
 
 function plural(count: number, unit: string) {
@@ -53,9 +53,10 @@ export function AreaDetailHeader({
       <div className="relative h-32 overflow-hidden bg-muted sm:h-40">
         <div
           className="absolute inset-0 bg-cover bg-center"
-          style={{
-            backgroundImage: `url('${area.background_image_url || DEFAULT_AREA_BACKGROUND}')`,
-          }}
+          style={areaCoverStyle(
+            area.background_image_url,
+            getAreaCoverVariant(area.uuid),
+          )}
           role="img"
           aria-label={`${area.name} cover image`}
         />

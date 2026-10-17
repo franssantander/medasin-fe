@@ -5,29 +5,21 @@ import {
   ChevronDown,
   ChevronRight,
   Ellipsis,
-  LayoutDashboard,
   Newspaper,
   PenLine,
   Pencil,
   Plus,
-  Search,
   StarCheck,
-  Tags,
 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { TaskCard } from "@/features/projects/components/project-kanban-board";
-import {
-  kanbanGridStyles,
-  stageColumnStyles,
-  stageCountStyles,
-  stageDotColors,
-} from "@/features/projects/components/project-kanban-utils";
+import { stageDotColors } from "@/features/projects/components/project-kanban-utils";
 import { projectStatusBadgeClassNames } from "@/features/projects/project-status";
 import { cn } from "@/lib/utils";
+import { PreviewBoard } from "./preview-board";
 import { previewProject, previewStages } from "./preview-fixtures";
 
 // Mirrors the project detail page: header card (project-detail-header.tsx), resources, and the board.
@@ -147,75 +139,8 @@ export function ProjectsScreen() {
         </CardContent>
       </Card>
 
-      <section className="@container grid min-w-0 gap-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="-ml-2 flex h-9 items-center gap-2 px-2 text-base font-semibold">
-            <LayoutDashboard className="size-4 shrink-0 text-muted-foreground" />
-            Board 1
-            <span className="text-sm font-normal text-muted-foreground tabular-nums">{total}</span>
-            <ChevronDown className="size-4 text-muted-foreground" />
-          </span>
-          <div className="ml-auto hidden items-center gap-2 sm:flex">
-            <span className="flex h-8 w-56 items-center gap-2 rounded-lg border border-input px-2.5 text-sm text-muted-foreground">
-              <Search className="size-4" />
-              Search tasks…
-            </span>
-            <Button variant="outline" size="sm">
-              <Tags />
-              Labels
-              <Badge variant="secondary">3</Badge>
-            </Button>
-            <Button variant="outline" size="icon-sm">
-              <Ellipsis />
-            </Button>
-          </div>
-        </div>
-        <div className={kanbanGridStyles}>
-          {previewStages.map((stage) => (
-            <section
-              key={stage.key}
-              className={cn(
-                "flex max-h-[40rem] min-h-64 min-w-0 flex-col overflow-hidden rounded-xl border",
-                stageColumnStyles[stage.key].column,
-              )}
-            >
-              <div
-                className={cn(
-                  "flex shrink-0 items-center justify-between gap-2 border-t-2 border-b px-3 py-2",
-                  stageColumnStyles[stage.key].header,
-                )}
-              >
-                <p className="flex min-w-0 items-center gap-2 text-sm font-semibold">
-                  <span className="size-2 shrink-0 rounded-full" style={{ backgroundColor: stageDotColors[stage.key] }} />
-                  <span className="truncate">{stage.name}</span>
-                  <span
-                    className={cn(
-                      "inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[11px] font-semibold tabular-nums",
-                      stageCountStyles[stage.key],
-                    )}
-                  >
-                    {stage.tasks.length}
-                  </span>
-                </p>
-                <Button variant="ghost" size="icon-sm" className="text-muted-foreground">
-                  <Plus />
-                </Button>
-              </div>
-              <div className="grid min-h-0 flex-1 content-start gap-2 p-2">
-                {stage.tasks.map((task) => (
-                  <TaskCard key={task.uuid} task={task} disabled />
-                ))}
-              </div>
-              <div className={cn("shrink-0 border-t p-1.5", stageColumnStyles[stage.key].footer)}>
-                <Button variant="ghost" size="sm" className="w-full justify-start text-muted-foreground">
-                  <Plus data-icon="inline-start" />
-                  Add task
-                </Button>
-              </div>
-            </section>
-          ))}
-        </div>
-      </section>
+      {/* A tall board region, like projectKanbanRegionStyles in the app. */}
+      <PreviewBoard name="Board 1" stages={previewStages} fill className="md:h-[30rem]" />
     </div>
   );
 }

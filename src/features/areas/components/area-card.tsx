@@ -9,10 +9,10 @@ import {
   CardFooter,
   CardTitle,
 } from "@/components/ui/card";
+import { areaCoverStyle, getAreaCoverVariant } from "../area-cover";
 import { formatAreaUpdatedAt } from "../area-list-utils";
 import type { Area } from "../type";
 import { AreaActionsMenu } from "./area-actions-menu";
-import { DEFAULT_AREA_BACKGROUND } from "./area-form-dialog";
 import { AreaIcon, areaBadgeStyle } from "./area-icons";
 
 export function AreaCard({ area, onEdit }: { area: Area; onEdit: () => void }) {
@@ -27,9 +27,10 @@ export function AreaCard({ area, onEdit }: { area: Area; onEdit: () => void }) {
       <div className="relative aspect-16/7 overflow-hidden bg-muted">
         <div
           className="absolute inset-0 bg-cover bg-center transition-transform duration-500 group-hover/area:scale-105 motion-reduce:group-hover/area:scale-100"
-          style={{
-            backgroundImage: `url('${area.background_image_url || DEFAULT_AREA_BACKGROUND}')`,
-          }}
+          style={areaCoverStyle(
+            area.background_image_url,
+            getAreaCoverVariant(area.uuid),
+          )}
         />
         <div className="absolute inset-0 bg-linear-to-t from-black/30 via-black/0 to-black/10" />
       </div>

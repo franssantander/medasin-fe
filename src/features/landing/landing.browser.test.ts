@@ -44,8 +44,25 @@ test("Landing product preview switches screens from the sidebar", async ({ page 
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto("/");
   const preview = page.getByRole("tablist", { name: "Preview a Medasin screen" });
-  await expect(preview.getByRole("tab")).toHaveText(["Projects", "Focus", "Habits", "Notes", "Journal"]);
+  await expect(preview.getByRole("tab")).toHaveText([
+    "Home",
+    "Projects",
+    "Areas",
+    "Resources",
+    "Archives",
+    "Board",
+    "Focus",
+    "Habits",
+    "Notes",
+    "Journal",
+    "Letters",
+    "Plans",
+  ]);
   await expect(page.getByRole("tabpanel", { name: "Projects" })).toContainText("Spring newsletter");
+  await expect(page.locator('[data-slot="product-preview"] [data-slot="avatar-image"]')).toHaveAttribute(
+    "src",
+    "/images/preview-avatar.svg",
+  );
 
   // The 1280px app canvas is scaled down to fit the frame (measured once the window has settled flat).
   await settlePreview(page);
@@ -53,6 +70,9 @@ test("Landing product preview switches screens from the sidebar", async ({ page 
   const canvas = await page.locator('[data-slot="product-preview-canvas"]').boundingBox();
   expect(Math.abs(frame!.width - canvas!.width)).toBeLessThanOrEqual(3);
   expect(Math.abs(frame!.height - canvas!.height)).toBeLessThanOrEqual(3);
+  // The project's board fits the frame's width, Done column included, with no sideways scrolling.
+  const outlineTask = (await page.getByRole("tabpanel", { name: "Projects" }).getByText("Outline the issue").boundingBox())!;
+  expect(outlineTask.x + outlineTask.width).toBeLessThanOrEqual(frame!.x + frame!.width);
   await page.locator('[data-slot="product-preview"]').screenshot({ path: testInfo.outputPath("preview-projects.png") });
 
   await preview.getByRole("tab", { name: "Focus" }).click();
@@ -78,9 +98,35 @@ test("Landing product preview switches screens from the sidebar", async ({ page 
   await page.waitForTimeout(400);
   await page.locator('[data-slot="product-preview"]').screenshot({ path: testInfo.outputPath("preview-journal.png") });
 
+  const lazyScreens = [
+    { label: "Home", text: "Welcome, Sofia." },
+    { label: "Areas", text: "Garden" },
+    { label: "Resources", text: "Raised bed guide" },
+    { label: "Archives", text: "Winter newsletter" },
+    { label: "Board", text: "Give your ideas somewhere to move" },
+    { label: "Letters", text: "What the frost taught me" },
+    { label: "Plans", text: "Upcoming" },
+  ];
+  for (const { label, text } of lazyScreens) {
+    await preview.getByRole("tab", { name: label }).click();
+    await expect(preview.getByRole("tab", { name: label })).toHaveAttribute("aria-selected", "true");
+    await expect(page.getByRole("tabpanel", { name: label })).toContainText(text);
+    await page.waitForTimeout(400);
+    await page.locator('[data-slot="product-preview"]').screenshot({ path: testInfo.outputPath(`preview-${label.toLowerCase()}.png`) });
+  }
+
+  // Like the real Board page, all four columns fit across the frame and stretch to its bottom.
+  await preview.getByRole("tab", { name: "Board" }).click();
+  const boardPanel = page.getByRole("tabpanel", { name: "Board" });
+  const frameBox = (await page.locator('[data-slot="product-preview"]').boundingBox())!;
+  const doneTask = (await boardPanel.getByText("Order compost").boundingBox())!;
+  expect(doneTask.x + doneTask.width).toBeLessThanOrEqual(frameBox.x + frameBox.width);
+  const addTask = (await boardPanel.getByText("Add task").last().boundingBox())!;
+  expect(frameBox.y + frameBox.height - (addTask.y + addTask.height)).toBeLessThan(frameBox.height * 0.08);
+
   // Scaled screens stay readable on a small laptop too.
   await page.setViewportSize({ width: 1024, height: 768 });
-  await page.locator('[data-slot="product-preview"]').screenshot({ path: testInfo.outputPath("preview-journal-1024.png") });
+  await page.locator('[data-slot="product-preview"]').screenshot({ path: testInfo.outputPath("preview-plans-1024.png") });
 });
 
 test("Landing fits a phone screen without sideways scrolling", async ({ page }, testInfo) => {
@@ -91,6 +137,9 @@ test("Landing fits a phone screen without sideways scrolling", async ({ page }, 
   await page.getByRole("group", { name: "Preview a Medasin screen" }).getByRole("button", { name: "Journal" }).click();
   await expect(page.getByRole("tabpanel", { name: "Journal" })).toContainText("Focus reflection");
   await page.locator('[data-slot="product-preview"]').screenshot({ path: testInfo.outputPath("preview-mobile-journal.png") });
+  await page.getByRole("group", { name: "Preview a Medasin screen" }).getByRole("button", { name: "Plans" }).click();
+  await expect(page.getByRole("tabpanel", { name: "Plans" })).toContainText("Upcoming");
+  await page.locator('[data-slot="product-preview"]').screenshot({ path: testInfo.outputPath("preview-mobile-plans.png") });
   await page.getByRole("group", { name: "Preview a Medasin screen" }).getByRole("button", { name: "Habits" }).click();
   await expect(page.getByRole("tabpanel", { name: "Habits" })).toContainText("Morning pages");
   expect(await page.locator("body").evaluate((element) => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(1);

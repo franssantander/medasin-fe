@@ -6,7 +6,7 @@ import * as m from "motion/react-m";
 import Image from "next/image";
 import { useSyncExternalStore } from "react";
 
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Kbd } from "@/components/ui/kbd";
 import {
@@ -48,6 +48,24 @@ function StaticItem({ item }: { item: AppNavigationItem }) {
 
 export function PreviewSidebar({ previewLabels, value }: { previewLabels: string[]; value: string }) {
   const { register, box } = useSlidingHighlight(value, "y");
+  const navItem = (item: AppNavigationItem) =>
+    previewLabels.includes(item.label) ? (
+      <Tabs.Tab
+        key={item.label}
+        ref={register(item.label)}
+        value={item.label}
+        className={cn(
+          itemClass,
+          idleItemClass,
+          activeItemClass,
+          "relative hover:text-sidebar-foreground not-data-active:hover:bg-sidebar-accent/70",
+        )}
+      >
+        <ItemContent item={item} />
+      </Tabs.Tab>
+    ) : (
+      <StaticItem key={item.label} item={item} />
+    );
 
   return (
     <aside className="hidden h-full w-60 shrink-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground md:flex">
@@ -72,32 +90,14 @@ export function PreviewSidebar({ previewLabels, value }: { previewLabels: string
               transition={{ type: "spring", stiffness: 400, damping: 35 }}
             />
           )}
-          <StaticItem item={homeNavigationItem} />
+          {navItem(homeNavigationItem)}
           {appNavigationGroups.map((group) => (
             <div key={group.label} className="flex w-full flex-col gap-1">
               <span aria-hidden="true" className="flex h-5 items-center px-2 text-xs font-medium text-muted-foreground">
                 {group.label}
               </span>
               <div className="flex flex-col gap-0.5">
-                {group.items.map((item) =>
-                  previewLabels.includes(item.label) ? (
-                    <Tabs.Tab
-                      key={item.label}
-                      ref={register(item.label)}
-                      value={item.label}
-                      className={cn(
-                        itemClass,
-                        idleItemClass,
-                        activeItemClass,
-                        "relative hover:text-sidebar-foreground not-data-active:hover:bg-sidebar-accent/70",
-                      )}
-                    >
-                      <ItemContent item={item} />
-                    </Tabs.Tab>
-                  ) : (
-                    <StaticItem key={item.label} item={item} />
-                  ),
-                )}
+                {group.items.map(navItem)}
               </div>
             </div>
           ))}
@@ -157,10 +157,11 @@ export function PreviewHeader() {
             {date}
           </span>
         )}
-        <Button size="icon-sm" variant="outline" tabIndex={-1} className="relative min-h-11 min-w-11 md:min-h-8 md:min-w-8">
+        <Button size="icon-sm" variant="outline" tabIndex={-1}>
           <Bell />
         </Button>
         <Avatar className="size-8">
+          <AvatarImage src="/images/preview-avatar.svg" alt="" />
           <AvatarFallback className="bg-neutral-950 font-semibold text-white ring-1 ring-white/10 ring-inset">SR</AvatarFallback>
         </Avatar>
       </div>

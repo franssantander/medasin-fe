@@ -1,4 +1,9 @@
+"use client";
+
+import * as m from "motion/react-m";
 import type { ReactNode } from "react";
+
+import { authCard, authSection } from "./auth-motion";
 
 type AuthCardProps = {
   eyebrow?: ReactNode;
@@ -9,6 +14,7 @@ type AuthCardProps = {
 };
 
 // The auth layout carries the brand, so the form reads as a plain section.
+// Its parts rise in one after another; keying the card replays this for a new step.
 export function AuthCard({
   eyebrow,
   title,
@@ -17,16 +23,23 @@ export function AuthCard({
   footer,
 }: AuthCardProps) {
   return (
-    <section className="grid gap-7 h-short:gap-6 h-shorter:gap-5">
-      <header className="grid gap-1.5">
+    <m.section
+      initial="hidden"
+      animate="visible"
+      variants={authCard}
+      className="grid gap-7 h-short:gap-6 h-shorter:gap-5"
+    >
+      <m.header variants={authSection} className="grid gap-2">
         {eyebrow ? <p className="text-xs font-medium text-muted-foreground">{eyebrow}</p> : null}
-        <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
+        <h1 className="font-spectral text-3xl font-medium tracking-tight">{title}</h1>
         <p className="break-words text-sm text-muted-foreground">{description}</p>
-      </header>
-      {children}
+      </m.header>
+      <m.div variants={authSection}>{children}</m.div>
       {footer ? (
-        <div className="border-t pt-5 text-sm text-muted-foreground">{footer}</div>
+        <m.div variants={authSection} className="border-t pt-5 text-sm text-muted-foreground">
+          {footer}
+        </m.div>
       ) : null}
-    </section>
+    </m.section>
   );
 }

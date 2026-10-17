@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" fill="none">
+  <rect width="64" height="64" fill="#DDE5D5"/>
+  <circle cx="50" cy="14" r="10" fill="#EBD3B3" fill-opacity="0.8"/>
+  <!-- Hair, behind the head -->
+  <path d="M17 30C17 18 23.5 11 32.5 11C41.5 11 47.5 18 47.5 29V45H17V30Z" fill="#3D2B22"/>
+  <!-- Sweater -->
+  <path d="M9 64C9 52.5 18.5 45 32 45C45.5 45 55 52.5 55 64H9Z" fill="#56664F"/>
+  <path d="M25.5 45.6C27.3 49 29.5 50.5 32 50.5C34.5 50.5 36.7 49 38.5 45.6C36.6 45.2 34.4 45 32 45C29.6 45 27.4 45.2 25.5 45.6Z" fill="#E7EBE2"/>
+  <!-- Neck and face -->
+  <path d="M27.5 38H36.5V46.5C35.2 48 33.7 48.6 32 48.6C30.3 48.6 28.8 48 27.5 46.5V38Z" fill="#D9A27C"/>
+  <ellipse cx="32" cy="29.5" rx="10.5" ry="12" fill="#EDBE98"/>
+  <!-- Fringe -->
+  <path d="M21 28C21 19.5 25.8 15 32.5 15C38.5 15 43.2 19 43.6 26.5C39.8 26.3 35.8 24.6 33.2 21.4C30.8 25 26.4 27.4 21 28Z" fill="#3D2B22"/>
+  <!-- Face details -->
+  <circle cx="28.2" cy="30.6" r="1.1" fill="#3D2B22"/>
+  <circle cx="35.8" cy="30.6" r="1.1" fill="#3D2B22"/>
+  <path d="M29.6 35.6C31.1 36.8 32.9 36.8 34.4 35.6" stroke="#B36F52" stroke-width="1.2" stroke-linecap="round"/>
+  <circle cx="25.8" cy="34" r="1.8" fill="#E79C84" fill-opacity="0.45"/>
+  <circle cx="38.2" cy="34" r="1.8" fill="#E79C84" fill-opacity="0.45"/>
+</svg>

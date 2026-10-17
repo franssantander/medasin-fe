@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { Menu } from "lucide-react";
 import { useMotionValueEvent, useScroll } from "motion/react";
-import { useState } from "react";
+import { useState, type MouseEvent } from "react";
 
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -18,6 +18,20 @@ import {
 } from "@/components/ui/sheet";
 import { landingNavLinks } from "./landing-nav";
 
+function scrollToTop(event: MouseEvent<HTMLAnchorElement>) {
+  // Let modified clicks (new tab/window) behave like a normal link.
+  if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+
+  event.preventDefault();
+  const reduceMotion = window.matchMedia(
+    "(prefers-reduced-motion: reduce)",
+  ).matches;
+  window.scrollTo({ top: 0, behavior: reduceMotion ? "auto" : "smooth" });
+  // Drop any section hash (e.g. #pricing) so the URL matches the view.
+  if (window.location.hash) {
+    window.history.replaceState(window.history.state, "", "/");
+  }
+}
 
 export function SiteNavbar() {
   // At the top the bar blends into the page; the edge appears once content scrolls under it.
@@ -33,6 +47,7 @@ export function SiteNavbar() {
       <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4 sm:px-6 lg:px-8">
         <Link
           href="/"
+          onClick={scrollToTop}
           className="flex items-center gap-1 font-bold font-garamond text-xl"
         >
           <Image
@@ -85,6 +100,7 @@ export function SiteNavbar() {
               {landingNavLinks.map((link) => (
                 <SheetClose
                   key={link.href}
+                  nativeButton={false}
                   render={
                     <Link
                       href={link.href}
@@ -99,6 +115,7 @@ export function SiteNavbar() {
             <Separator className="my-2" />
             <div className="flex flex-col gap-2 px-4">
               <SheetClose
+                nativeButton={false}
                 render={
                   <Link
                     href="/login"
@@ -112,6 +129,7 @@ export function SiteNavbar() {
                 Log in
               </SheetClose>
               <SheetClose
+                nativeButton={false}
                 render={
                   <Link
                     href="/register"

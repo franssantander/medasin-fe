@@ -34,6 +34,11 @@ import { isPlanLimitError } from "@/features/subscription/plan-limit-error";
 import { ApiError } from "@/lib/axios";
 import { cn } from "@/lib/utils";
 import {
+  areaCoverStyle,
+  getAreaCoverVariant,
+  randomAreaCoverVariant,
+} from "../area-cover";
+import {
   AREA_IMAGE_MAX_SIZE,
   AREA_IMAGE_TYPES,
   areaSchema,
@@ -42,9 +47,6 @@ import {
 import type { Area, AreaInput } from "../type";
 import { AreaIconPicker } from "./area-icon-picker";
 import { AreaIcon, areaBadgeStyle } from "./area-icons";
-
-export const DEFAULT_AREA_BACKGROUND =
-  "https://images.unsplash.com/photo-1763936783251-4a3eb135f07f?auto=format&fit=crop&w=1200&q=80&sat=-100";
 
 const NAME_MAX_LENGTH = 120;
 const DEFAULT_BADGE_COLOR = "#000000";
@@ -83,6 +85,9 @@ export function AreaFormDialog({
   const id = useId();
   const [quotaError, setQuotaError] = useState<ApiError | null>(null);
   const [isDraggingFile, setIsDraggingFile] = useState(false);
+  const [createCoverVariant, setCreateCoverVariant] = useState(
+    randomAreaCoverVariant,
+  );
   const quotaAlertRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const initializedAreaRef = useRef<string | null>(null);
@@ -125,8 +130,9 @@ export function AreaFormDialog({
   const presetColor = AREA_BADGE_COLORS.find(
     (color) => color.value.toLowerCase() === badgeColor?.toLowerCase(),
   );
-  const coverImage =
-    uploadPreview || area?.background_image_url || DEFAULT_AREA_BACKGROUND;
+  const coverVariant = area
+    ? getAreaCoverVariant(area.uuid)
+    : createCoverVariant;
 
   useEffect(
     () => () => {
@@ -164,6 +170,7 @@ export function AreaFormDialog({
     setCropSource(null);
     setQuotaError(null);
     setIsDraggingFile(false);
+    if (!area) setCreateCoverVariant(randomAreaCoverVariant());
     onOpenChange(false);
   };
 
@@ -266,7 +273,10 @@ export function AreaFormDialog({
                 <div className="relative aspect-16/7 overflow-hidden bg-muted">
                   <div
                     className="absolute inset-0 bg-cover bg-center"
-                    style={{ backgroundImage: `url('${coverImage}')` }}
+                    style={areaCoverStyle(
+                      uploadPreview || area?.background_image_url,
+                      coverVariant,
+                    )}
                   />
                   <div className="absolute inset-0 bg-linear-to-t from-black/40 via-black/0 to-black/10" />
                   {isDraggingFile && (
@@ -348,7 +358,7 @@ export function AreaFormDialog({
               ) : (
                 <FieldDescription>
                   JPG, PNG, or WebP up to 5 MB. Drag an image onto the preview
-                  or upload one. A calm monochrome image is used by default.
+                  or upload one. A calm illustrated cover is used by default.
                 </FieldDescription>
               )}
             </Field>
