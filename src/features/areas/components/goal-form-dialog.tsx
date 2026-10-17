@@ -236,7 +236,7 @@ export function GoalFormDialog({
               </div>
             </Field>
 
-            <div className="grid gap-6 sm:grid-cols-[minmax(0,12rem)_minmax(0,1fr)]">
+            <div className="grid gap-6 sm:grid-cols-[minmax(0,10rem)_minmax(0,1fr)]">
               <Field data-invalid={Boolean(errors.icon)}>
                 <FieldLabel htmlFor={`${id}-icon`}>Icon</FieldLabel>
                 <AreaIconPicker
@@ -270,7 +270,7 @@ export function GoalFormDialog({
                         const next = values[0];
                         if (next) field.onChange(next);
                       }}
-                      className="w-full flex-wrap"
+                      className="grid w-full grid-cols-2 gap-1.5 md:flex md:gap-1"
                     >
                       {goalStatusOptions.map((option) => {
                         const Icon = goalStatusIcons[option.value];
@@ -278,7 +278,7 @@ export function GoalFormDialog({
                           <ToggleGroupItem
                             key={option.value}
                             value={option.value}
-                            className="flex-1 gap-1.5 px-2.5 font-normal text-muted-foreground aria-pressed:font-medium aria-pressed:text-foreground"
+                            className="w-full gap-1.5 px-2.5 font-normal md:w-auto md:flex-auto md:px-2 text-muted-foreground aria-pressed:font-medium aria-pressed:text-foreground"
                           >
                             <Icon aria-hidden="true" />
                             {option.label}
