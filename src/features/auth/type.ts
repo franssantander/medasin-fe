@@ -43,7 +43,8 @@ export type EmailVerificationChallenge = {
 };
 export type RegisterResponse = AuthResponse<EmailVerificationChallenge>;
 export type VerificationRequest = { email: string; otp: string };
-export type EmailVerificationRequest = VerificationRequest & { remember_me?: boolean };
+// sign_in: false verifies without starting a session (signup and Finish verifying).
+export type EmailVerificationRequest = VerificationRequest & { remember_me?: boolean; sign_in?: boolean };
 export type PasswordResetVerificationResponse = AuthResponse<{
   reset_token: string;
   expires_in: number;

@@ -1,15 +1,16 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { useForm } from "react-hook-form";
+import { Fragment, useEffect, useRef, useState } from "react";
+import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { REGEXP_ONLY_DIGITS } from "input-otp";
 
 import { Button } from "@/components/ui/button";
-import { FieldGroup } from "@/components/ui/field";
+import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { InputOTP, InputOTPGroup, InputOTPSeparator, InputOTPSlot } from "@/components/ui/input-otp";
 import { otpFormSchema, type OtpFormValues } from "../schemas/auth-schema";
 import { applyAuthFormErrors } from "../utils/form-errors";
 import { AuthFormError } from "./auth-form-error";
-import { AuthInputField } from "./auth-input-field";
 
 type OtpFormProps = {
   onVerify: (otp: string) => Promise<void>;
@@ -112,18 +113,47 @@ export function OtpForm({
       {description ? <p role="status" className="break-words text-sm text-muted-foreground">{description}</p> : null}
       <AuthFormError message={expired ? "Your verification code has expired. Resend a code to continue." : form.formState.errors.root?.server?.message || error} />
       <FieldGroup className="gap-4">
-        <AuthInputField
-          id="verification-code"
-          label="Verification code"
-          registration={form.register("otp")}
-          error={form.formState.errors.otp}
-          type="text"
-          inputMode="numeric"
-          autoComplete="one-time-code"
-          className="text-center tracking-[0.3em] tabular-nums"
-          maxLength={6}
-          disabled={busy}
-          hint={`Six digits. Expires after ${codeLifetimeMinutes} minutes.`}
+        <Controller
+          control={form.control}
+          name="otp"
+          render={({ field, fieldState }) => {
+            const invalid = !!fieldState.error;
+            return (
+              <Field className="gap-2" data-invalid={invalid} data-disabled={busy}>
+                <FieldLabel htmlFor="verification-code">Verification code</FieldLabel>
+                <InputOTP
+                  id="verification-code"
+                  ref={field.ref}
+                  name={field.name}
+                  value={field.value}
+                  onChange={field.onChange}
+                  onBlur={field.onBlur}
+                  maxLength={6}
+                  pattern={REGEXP_ONLY_DIGITS}
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  disabled={busy}
+                  required
+                  aria-invalid={invalid}
+                  aria-describedby={["verification-code-hint", invalid ? "verification-code-error" : ""].filter(Boolean).join(" ")}
+                  containerClassName="w-full gap-2 sm:gap-3"
+                >
+                  {[[0, 1, 2], [3, 4, 5]].map((slots, group) => (
+                    <Fragment key={group}>
+                      {group ? <InputOTPSeparator className="text-muted-foreground" /> : null}
+                      <InputOTPGroup className="flex-1">
+                        {slots.map((index) => (
+                          <InputOTPSlot key={index} index={index} aria-invalid={invalid} className="h-12 flex-1 text-lg font-medium tabular-nums" />
+                        ))}
+                      </InputOTPGroup>
+                    </Fragment>
+                  ))}
+                </InputOTP>
+                <FieldDescription id="verification-code-hint">Six digits. Expires after {codeLifetimeMinutes} minutes.</FieldDescription>
+                <FieldError id="verification-code-error" errors={[fieldState.error]} />
+              </Field>
+            );
+          }}
         />
       </FieldGroup>
       <FieldGroup className="gap-3">

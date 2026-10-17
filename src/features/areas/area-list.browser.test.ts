@@ -32,7 +32,7 @@ async function mockAreas(page: Page, initial: Area[] = seed) {
     }
     if (path === "/auth/me") data = { id: 1, uuid: "10000000-0000-4000-8000-000000000001", first_name: "Ada", last_name: "Lovelace", email: "ada@example.com", username: "ada", status: "active", font_family: "manrope" };
     else if (path === "/notifications") data = { current_page: 1, data: [], last_page: 1, per_page: 15, total: 0 };
-    else if (path === "/subscription") data = { plan: { slug: "free", name: "Free" }, grant_type: "free", expires_at: null, enforcement_enabled: true, limits: { projects: 10, areas: 5, resources: 100 }, usage: { projects: 0, areas: areas.length, resources: 0 } };
+    else if (path === "/subscription") data = { plan: { slug: "free", name: "Free" }, grant_type: "free", expires_at: null, enforcement_enabled: true, limits: { projects: 10, areas: 5, resources: 100, storage_bytes: 1073741824 }, usage: { projects: 0, areas: areas.length, resources: 0, storage_bytes: 0 } };
     else if (path === "/area" && method === "POST") {
       const field = (key: string) => new RegExp(`name="${key}"\\r\\n\\r\\n([^\\r\\n]*)`).exec(request.postData() ?? "")?.[1] ?? null;
       const created = { ...area(areas.length + 10, field("name") ?? "", field("description") || null, "2026-10-10T10:00:00Z"), icon: field("icon"), background: field("background") };

@@ -51,8 +51,8 @@ async function mockResourceTrash(
     };
     else if (path === "/subscription") data = {
       plan: { slug: "free", name: "Free" }, grant_type: "free", expires_at: null,
-      enforcement_enabled: true, limits: { projects: 10, areas: 5, resources: 100 },
-      usage: { projects: 0, areas: 0, resources: usage },
+      enforcement_enabled: true, limits: { projects: 10, areas: 5, resources: 100, storage_bytes: 1073741824 },
+      usage: { projects: 0, areas: 0, resources: usage, storage_bytes: 0 },
     };
     else if (["/resource/tags", "/area", "/project"].includes(path)) data = [];
     else if (path === "/notifications") data = paginate([]);

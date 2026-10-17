@@ -88,7 +88,10 @@ async function mockApi(page: Page, handlers: Record<string, ApiHandler> = {}) {
     } else if (path === "/auth/refresh") {
       reply = { status: 401, message: "Unauthenticated." };
     } else if (path === "/auth/verify-email") {
-      reply = authenticatedReply(request, true);
+      // Signup and Finish verifying send sign_in: false and get no session.
+      reply = (request.body as { sign_in?: boolean } | null)?.sign_in === false
+        ? { data: currentUser }
+        : authenticatedReply(request, true);
     } else if (path === "/auth/me") {
       const authenticated = (await page.context().cookies()).some((cookie) => cookie.name === "auth_token");
       reply = authenticated ? { data: currentUser } : { status: 401, message: "Unauthenticated." };
@@ -666,7 +669,7 @@ test("opening the login page does not automatically restore a remembered session
   await expect(page).toHaveURL(/\/login$/);
 });
 
-test("signup sends the backend contract and verifies a leading-zero code before signing in", async ({ page }, testInfo) => {
+test("signup sends the backend contract, verifies a leading-zero code, and sends the user to sign in", async ({ page }, testInfo) => {
   const api = await mockApi(page);
   await page.addInitScript(() => localStorage.setItem("theme", "light"));
   await page.goto("/login");
@@ -686,13 +689,15 @@ test("signup sends the backend contract and verifies a leading-zero code before 
 
   await page.getByLabel("Verification code", { exact: true }).fill("012345");
   await page.getByRole("button", { name: "Verify email", exact: true }).click();
-  await expect(page).toHaveURL(/\/home$/);
-  expect(api.forPath("/auth/verify-email")[0].body).toEqual({ email: registration.email, otp: "012345" });
-  expect((await page.context().cookies()).find((cookie) => cookie.name === "auth_token")?.httpOnly).toBe(true);
-  expect((await page.context().cookies()).find((cookie) => cookie.name === "auth_token")?.expires).toBeGreaterThan(Date.now() / 1000);
-  expect(await page.evaluate(() => document.cookie)).not.toContain("auth_token");
-  await expect(page.getByRole("main")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Open account menu for Ada Lovelace", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Email verified", exact: true })).toBeVisible();
+  await expect(page.getByRole("status").filter({ hasText: "Your email is verified." })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Go to sign in", exact: true })).toBeFocused();
+  expect(api.forPath("/auth/verify-email")[0].body).toEqual({ email: registration.email, otp: "012345", sign_in: false });
+  expect((await page.context().cookies()).some((cookie) => cookie.name === "auth_token")).toBe(false);
+  await page.screenshot({ path: testInfo.outputPath("verify-email-success-desktop-light.png"), caret: "initial" });
+  await expect(page).toHaveURL(/\/login$/, { timeout: 10_000 });
+  await expect(page.getByRole("heading", { name: "Welcome back", exact: true })).toBeVisible();
+  expect(api.forPath("/auth/me")).toHaveLength(0);
 });
 
 test("duplicate signup fields show inline server errors and preserve entered values", async ({ page }) => {
@@ -758,6 +763,54 @@ test("signup requires matching confirmation and maps backend confirmation errors
   expect(api.forPath("/auth/register")).toHaveLength(1);
 });
 
+test("signup offers Google sign-up without sending the registration form", async ({ page }) => {
+  const api = await mockApi(page, {
+    "/auth/google/redirect": () => {
+      const reply = authenticatedReply({ path: "/auth/google/redirect", method: "GET", body: null }, false);
+      return { ...reply, status: 302, headers: { ...reply.headers, location: "/login?google=success" } };
+    },
+  });
+  await page.goto("/register");
+  await expect(page.getByText("Step 1 of 2 · Your details", { exact: true })).toBeVisible();
+
+  const navigation = page.waitForRequest((request) => new URL(request.url()).pathname.endsWith("/auth/google/redirect"));
+  await page.getByRole("button", { name: "Continue with Google", exact: true }).click();
+  const request = await navigation;
+  expect(request.isNavigationRequest()).toBe(true);
+  expect(new URL(request.url()).searchParams.get("remember_me")).toBe("0");
+  await expect(page).toHaveURL(/\/home$/);
+  expect(api.forPath("/auth/register")).toHaveLength(0);
+});
+
+test("signup passwords can be revealed and show live requirement checks", async ({ page }) => {
+  await mockApi(page);
+  await page.goto("/register");
+  const password = page.getByLabel("Password", { exact: true });
+  const confirmation = page.getByLabel("Confirm password", { exact: true });
+  const checks = page.locator("#signup-password-checks");
+  await expect(password).toHaveAttribute("aria-describedby", /signup-password-checks/);
+  await expect(confirmation).toHaveAttribute("aria-describedby", /signup-password-checks/);
+
+  const reveal = page.getByRole("button", { name: "Show password", exact: true });
+  await expect(reveal).toHaveAttribute("aria-pressed", "false");
+  await reveal.click();
+  await expect(password).toHaveAttribute("type", "text");
+  await expect(reveal).toHaveAttribute("aria-pressed", "true");
+  await expect(confirmation).toHaveAttribute("type", "password");
+  await reveal.click();
+  await expect(password).toHaveAttribute("type", "password");
+
+  await expect(checks).toHaveText("At least 8 characters(not yet)");
+  await password.fill("1234567");
+  await expect(checks).toContainText("At least 8 characters(not yet)");
+  await password.fill("12345678");
+  await expect(checks).toContainText("At least 8 characters(done)");
+  await confirmation.fill("1234");
+  await expect(checks).toContainText("Passwords match(not yet)");
+  await confirmation.fill("12345678");
+  await expect(checks).toContainText("Passwords match(done)");
+});
+
 test("verification can resume by email and invalid codes respect the resend cooldown", async ({ page }) => {
   await page.clock.install();
   const api = await mockApi(page, {
@@ -777,7 +830,7 @@ test("verification can resume by email and invalid codes respect the resend cool
   await page.getByLabel("Verification code", { exact: true }).fill("000001");
   await page.getByRole("button", { name: "Verify email", exact: true }).click();
   await expect(page.getByText("The verification code is invalid or has expired.", { exact: true })).toBeVisible();
-  expect(api.forPath("/auth/verify-email")[0].body).toEqual({ email: registration.email, otp: "000001" });
+  expect(api.forPath("/auth/verify-email")[0].body).toEqual({ email: registration.email, otp: "000001", sign_in: false });
   await page.clock.runFor(61_000);
   await expect(resend).toBeEnabled();
   await resend.click();
@@ -789,20 +842,22 @@ test("verification can resume by email and invalid codes respect the resend cool
   await expect(page.getByLabel("Email", { exact: true })).toBeFocused();
 });
 
-test("standalone email verification omits remember_me and preserves persistent authentication", async ({ page }) => {
+test("standalone email verification omits remember_me, starts no session, and leads to sign in", async ({ page }) => {
   const api = await mockApi(page);
   await page.goto("/verify-email");
   await page.getByLabel("Email", { exact: true }).fill(registration.email);
   await page.getByRole("button", { name: "Send verification code", exact: true }).click();
   await page.getByLabel("Verification code", { exact: true }).fill("012345");
   await page.getByRole("button", { name: "Verify email", exact: true }).click();
-  await expect(page).toHaveURL(/\/home$/);
+  await expect(page.getByRole("heading", { name: "Email verified", exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Back to sign in", exact: true })).toHaveCount(0);
   expect(api.forPath("/auth/verify-email")).toEqual([{
-    path: "/auth/verify-email", method: "POST", body: { email: registration.email, otp: "012345" },
+    path: "/auth/verify-email", method: "POST", body: { email: registration.email, otp: "012345", sign_in: false },
   }]);
-  const cookie = (await page.context().cookies()).find((item) => item.name === "auth_token");
-  expect(cookie?.httpOnly).toBe(true);
-  expect(cookie?.expires).toBeGreaterThan(Date.now() / 1000);
+  expect((await page.context().cookies()).some((item) => item.name === "auth_token")).toBe(false);
+  await page.getByRole("link", { name: "Go to sign in", exact: true }).click();
+  await expect(page).toHaveURL(/\/login$/);
+  await expect(page.getByLabel("Username", { exact: true })).toBeVisible();
 });
 
 test("password recovery uses the verified grant and succeeds without automatically signing in", async ({ page }) => {

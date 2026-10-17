@@ -6,9 +6,9 @@ import { useForm, type SubmitHandler } from "react-hook-form";
 import { loginSchema, type LoginFormValues } from "../schemas/login-schema";
 import { ApiError } from "@/lib/axios";
 import type { EmailVerificationChallenge, GoogleAuthResult } from "../type";
-import { authService } from "../services/auth-service";
 import { applyAuthFormErrors } from "../utils/form-errors";
 import { getGoogleAuthErrorMessage } from "../utils/google-auth";
+import { getGoogleRedirectHref } from "../utils/google-redirect";
 import { getRememberedUsername, setRememberedUsername } from "../utils/remembered-username";
 
 type LoginPreference = Pick<LoginFormValues, "username" | "remember_me">;
@@ -193,13 +193,9 @@ export function useLogin(googleResult?: GoogleAuthResult) {
     setGoogleError(undefined);
 
     try {
-      const redirectUrl = new URL(authService.getGoogleRedirectUrl(getValues("remember_me")), window.location.origin);
-      if (!["http:", "https:"].includes(redirectUrl.protocol) || redirectUrl.username || redirectUrl.password) {
-        throw new Error("The API URL is invalid.");
-      }
-
+      const redirectHref = getGoogleRedirectHref(getValues("remember_me"));
       setGoogleStage("redirecting");
-      window.location.assign(redirectUrl.href);
+      window.location.assign(redirectHref);
     } catch {
       submissionInFlight.current = false;
       setGoogleStage("idle");

@@ -17,6 +17,7 @@ export default defineConfig({
       NEXT_PUBLIC_REVERB_HOST: "127.0.0.1",
       NEXT_PUBLIC_REVERB_PORT: "3107",
       NEXT_PUBLIC_REVERB_SCHEME: "http",
+      NEXT_PUBLIC_UPGRADE_CONTACT_EMAIL: "",
     },
     timeout: 120_000,
   },

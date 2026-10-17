@@ -48,7 +48,7 @@ async function fixture(page: Page) {
     if (path === "/auth/me") data = { id: 1, uuid: "10000000-0000-4000-8000-000000000001", first_name: "Ada", last_name: "Lovelace", username: "ada", email: "ada@example.com", font_family: "manrope" };
     else if (path === "/notifications") data = { current_page: 1, data: [], last_page: 1, per_page: 15, total: 0 };
     else if (path === "/focus") data = idleFocusDashboard();
-    else if (path === "/subscription") data = { plan: { slug: "free", name: "Free" }, grant_type: "free", expires_at: null, enforcement_enabled: true, limits: { projects: 10, areas: 5, resources: 100 }, usage: { projects: 4, areas: 2, resources: 0 } };
+    else if (path === "/subscription") data = { plan: { slug: "free", name: "Free" }, grant_type: "free", expires_at: null, enforcement_enabled: true, limits: { projects: 10, areas: 5, resources: 100, storage_bytes: 1073741824 }, usage: { projects: 4, areas: 2, resources: 0, storage_bytes: 0 } };
     else if (path === "/project" && request.method() === "GET") {
       if (hold) await hold;
       if (projectReply) {

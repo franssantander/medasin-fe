@@ -1,58 +1,32 @@
 import type { ReactNode } from "react";
-import Image from "next/image";
-import Link from "next/link";
-
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 
 type AuthCardProps = {
+  eyebrow?: ReactNode;
   title: string;
   description: string;
   children: ReactNode;
   footer?: ReactNode;
 };
 
+// The auth layout carries the brand, so the form reads as a plain section.
 export function AuthCard({
+  eyebrow,
   title,
   description,
   children,
   footer,
 }: AuthCardProps) {
   return (
-    <Card>
-      <CardHeader className="gap-2">
-        <Link
-          href="/"
-          aria-label="Medasin home"
-          className="mx-auto mb-1 rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        >
-          <Image
-            src="/images/medasin-logo.svg"
-            alt=""
-            width={40}
-            height={40}
-            priority
-          />
-        </Link>
-        <CardTitle className="text-center">
-          <h1 className="text-lg font-semibold">{title}</h1>
-        </CardTitle>
-        <CardDescription className="break-words text-center">
-          {description}
-        </CardDescription>
-      </CardHeader>
-      <CardContent>{children}</CardContent>
+    <section className="grid gap-7 h-short:gap-6 h-shorter:gap-5">
+      <header className="grid gap-1.5">
+        {eyebrow ? <p className="text-xs font-medium text-muted-foreground">{eyebrow}</p> : null}
+        <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
+        <p className="break-words text-sm text-muted-foreground">{description}</p>
+      </header>
+      {children}
       {footer ? (
-        <CardFooter className="justify-center">
-          <div className="text-center text-sm text-muted-foreground">{footer}</div>
-        </CardFooter>
+        <div className="border-t pt-5 text-sm text-muted-foreground">{footer}</div>
       ) : null}
-    </Card>
+    </section>
   );
 }

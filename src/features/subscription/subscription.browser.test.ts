@@ -2,6 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { ApiError } from "@/lib/axios/errors";
 import { getPlanLimitMeta, isPlanLimitError } from "./plan-limit-error";
 import { subscriptionSchema, type Subscription } from "./types";
+import { formatBytes, formatPlanPrice, upgradeContactHref } from "./utils/plan-format";
 
 function subscription(overrides: Partial<Subscription> = {}): Subscription {
   return {
@@ -9,11 +10,32 @@ function subscription(overrides: Partial<Subscription> = {}): Subscription {
     grant_type: "free",
     expires_at: null,
     enforcement_enabled: true,
-    limits: { projects: 10, areas: 5, resources: 100 },
-    usage: { projects: 3, areas: 2, resources: 30 },
+    limits: { projects: 10, areas: 5, resources: 100, storage_bytes: 1073741824 },
+    usage: { projects: 3, areas: 2, resources: 30, storage_bytes: 268435456 },
     ...overrides,
   };
 }
+
+const catalog = [
+  {
+    uuid: "plan-free", slug: "free", name: "Free", description: "Every Medasin tool, with room to set up your system.",
+    price_minor: 0, currency: "PHP", billing_interval: null,
+    limits: { projects: 10, areas: 5, resources: 100, storage_mb: 1024 },
+    features: ["Up to 10 projects", "Up to 5 areas", "Up to 100 resources", "1 GB storage", "Every tool: Boards, Focus, Habits, Notes, Journal, Letters, and Calendar"],
+  },
+  {
+    uuid: "plan-focus", slug: "focus", name: "Focus", description: "Every tool, with more room for projects, areas, resources, and files.",
+    price_minor: 9900, currency: "PHP", billing_interval: "month",
+    limits: { projects: 50, areas: 20, resources: 1000, storage_mb: 10240 },
+    features: ["Up to 50 projects", "Up to 20 areas", "Up to 1,000 resources", "10 GB storage", "Every tool: Boards, Focus, Habits, Notes, Journal, Letters, and Calendar"],
+  },
+  {
+    uuid: "plan-clarity", slug: "clarity", name: "Clarity", description: "Every tool, with unlimited projects, areas, and resources and the most storage.",
+    price_minor: 14900, currency: "PHP", billing_interval: "month",
+    limits: { projects: null, areas: null, resources: null, storage_mb: 102400 },
+    features: ["Unlimited projects", "Unlimited areas", "Unlimited resources", "100 GB storage", "Every tool: Boards, Focus, Habits, Notes, Journal, Letters, and Calendar"],
+  },
+];
 
 async function fixture(page: Page, initial: unknown = subscription(), defer = false) {
   let value = initial;
@@ -45,6 +67,8 @@ async function fixture(page: Page, initial: unknown = subscription(), defer = fa
       data = { stats: { active_projects: 0, areas: 0, resources_saved: 0, habit_streak: 0 }, projects: [], areas: [], recent_resources: [], archives: { projects: 0, areas: 0, resources: 0 } };
     } else if (path === "/notifications") {
       data = { current_page: 1, data: [], last_page: 1, per_page: 15, total: 0 };
+    } else if (path === "/plan") {
+      data = catalog;
     } else if (path === "/subscription") {
       calls++;
       await ready;
@@ -69,9 +93,9 @@ async function fixture(page: Page, initial: unknown = subscription(), defer = fa
 }
 
 for (const [name, limits] of [
-  ["Free", { projects: 10, areas: 5, resources: 100 }],
-  ["Focus", { projects: 50, areas: 20, resources: 1000 }],
-  ["Clarity", { projects: null, areas: null, resources: null }],
+  ["Free", { projects: 10, areas: 5, resources: 100, storage_bytes: 1073741824 }],
+  ["Focus", { projects: 50, areas: 20, resources: 1000, storage_bytes: 10737418240 }],
+  ["Clarity", { projects: null, areas: null, resources: null, storage_bytes: 107374182400 }],
 ] as const) {
   test(`Plan and usage renders effective ${name} limits`, async ({ page }) => {
     await fixture(page, subscription({
@@ -87,15 +111,18 @@ for (const [name, limits] of [
       const limit = limits[key] === null ? "Unlimited" : limits[key].toLocaleString();
       await expect(content.getByText(`${usage} of ${limit}`, { exact: true })).toBeVisible();
     }
-    await expect(content.getByText("Board, Focus, Habits, Notes, Journal, Letters, and Calendar Plans have no plan limits.")).toBeVisible();
+    const storageLimit = { Free: "1 GB", Focus: "10 GB", Clarity: "100 GB" }[name];
+    await expect(content.getByText(`256 MB of ${storageLimit}`, { exact: true })).toBeVisible();
+    await expect(content.getByText("Board, Focus, Habits, Notes, Journal, Letters, and Calendar Plans are included on every plan.")).toBeVisible();
+    await expect(content.getByRole("listitem", { name, exact: true })).toHaveAttribute("aria-current", "true");
     await expect(content.getByRole("button", { name: /upgrade|checkout/i })).toHaveCount(0);
   });
 }
 
 test("Plan usage preserves zero and over-limit states without a client gate", async ({ page }) => {
   await fixture(page, subscription({
-    limits: { projects: 0, areas: 1, resources: 100 },
-    usage: { projects: 0, areas: 2, resources: 100 },
+    limits: { projects: 0, areas: 1, resources: 100, storage_bytes: 1073741824 },
+    usage: { projects: 0, areas: 2, resources: 100, storage_bytes: 0 },
   }));
   await page.goto("/settings/plan");
   await expect(page.getByText("0 of 0", { exact: true })).toBeVisible();
@@ -106,7 +133,7 @@ test("Plan usage preserves zero and over-limit states without a client gate", as
 });
 
 test("Plan usage shows effective unlimited access with enforcement disabled", async ({ page }) => {
-  await fixture(page, subscription({ enforcement_enabled: false, limits: { projects: null, areas: null, resources: null } }));
+  await fixture(page, subscription({ enforcement_enabled: false, limits: { projects: null, areas: null, resources: null, storage_bytes: null } }));
   await page.goto("/settings/plan");
   await expect(page.getByText("Plan enforcement is disabled", { exact: true })).toBeVisible();
   await expect(page.getByText("3 of Unlimited", { exact: true })).toBeVisible();
@@ -115,7 +142,7 @@ test("Plan usage shows effective unlimited access with enforcement disabled", as
 test("Recurring access displays the server expiry without renewal promises", async ({ page }, testInfo) => {
   await fixture(page, subscription({
     plan: { slug: "focus", name: "Focus" }, grant_type: "recurring",
-    expires_at: "2027-01-15T12:00:00.000000Z", limits: { projects: 50, areas: 20, resources: 1000 },
+    expires_at: "2027-01-15T12:00:00.000000Z", limits: { projects: 50, areas: 20, resources: 1000, storage_bytes: 1073741824 },
   }));
   await page.goto("/settings/plan");
   await expect(page.getByText("Access until Jan 15, 2027", { exact: true })).toBeVisible();
@@ -123,20 +150,67 @@ test("Recurring access displays the server expiry without renewal promises", asy
   await page.screenshot({ path: testInfo.outputPath("plan-usage-desktop.png"), fullPage: true });
 });
 
-test("Lifetime access displays unlimited usage without an expiry", async ({ page }) => {
+test("Plan usage rejects a lifetime grant, which the server no longer returns", async ({ page }) => {
+  await fixture(page, { ...subscription(), grant_type: "lifetime", expires_at: null });
+  await page.goto("/settings/plan");
+  await expect(page.getByText("The server returned incomplete plan information. Please try again.", { exact: true })).toBeVisible();
+  await expect(page.getByText("Lifetime access", { exact: true })).toHaveCount(0);
+});
+
+test("Plan usage shows storage states", async ({ page }) => {
   await fixture(page, subscription({
-    plan: { slug: "clarity", name: "Clarity" }, grant_type: "lifetime",
-    expires_at: null, limits: { projects: null, areas: null, resources: null },
+    limits: { projects: 10, areas: 5, resources: 100, storage_bytes: 1073741824 },
+    usage: { projects: 3, areas: 2, resources: 30, storage_bytes: 1610612736 },
   }));
   await page.goto("/settings/plan");
-  await expect(page.getByText("Lifetime access", { exact: true })).toBeVisible();
-  await expect(page.getByText("3 of Unlimited", { exact: true })).toBeVisible();
-  await expect(page.getByText(/Access until/)).toHaveCount(0);
+  const content = page.getByRole("region", { name: "Settings content" });
+  await expect(content.getByText("1.5 GB of 1 GB", { exact: true })).toBeVisible();
+  await expect(content.getByText("512 MB above your plan", { exact: true })).toBeVisible();
+  await expect(content.getByText(/Files in Trash still count until they are permanently deleted/)).toBeVisible();
+});
+
+test("Compare plans lists the catalog with prices and hides the contact link when unconfigured", async ({ page }) => {
+  await fixture(page, subscription({ plan: { slug: "focus", name: "Focus" }, grant_type: "recurring", expires_at: "2027-01-15T12:00:00.000000Z" }));
+  await page.goto("/settings/plan");
+  const compare = page.getByRole("region", { name: "Compare plans" });
+  await expect(compare.getByRole("heading", { name: "Free", exact: true })).toBeVisible();
+  await expect(compare.getByText("₱99 / month", { exact: true })).toBeVisible();
+  await expect(compare.getByText("₱149 / month", { exact: true })).toBeVisible();
+  await expect(compare.getByText("10 GB storage", { exact: true })).toBeVisible();
+  await expect(compare.getByRole("listitem", { name: "Focus", exact: true })).toHaveAttribute("aria-current", "true");
+  await expect(compare.getByText("Current plan", { exact: true })).toHaveCount(1);
+  await expect(page.getByRole("link", { name: "Contact us to upgrade" })).toHaveCount(0);
+});
+
+test("Upgrade contact links appear only when an address is configured", () => {
+  const previous = process.env.NEXT_PUBLIC_UPGRADE_CONTACT_EMAIL;
+  try {
+    process.env.NEXT_PUBLIC_UPGRADE_CONTACT_EMAIL = "";
+    expect(upgradeContactHref("Focus")).toBeNull();
+    process.env.NEXT_PUBLIC_UPGRADE_CONTACT_EMAIL = " hello@example.com ";
+    expect(upgradeContactHref("Focus")).toBe("mailto:hello@example.com?subject=Upgrade%20to%20Focus");
+  } finally {
+    process.env.NEXT_PUBLIC_UPGRADE_CONTACT_EMAIL = previous;
+  }
+});
+
+test("Prices and byte sizes format for display", () => {
+  expect(formatPlanPrice({ price_minor: 0, currency: "PHP", billing_interval: null })).toBe("Free");
+  expect(formatPlanPrice({ price_minor: 9900, currency: "PHP", billing_interval: "month" })).toBe("₱99 / month");
+  expect(formatPlanPrice({ price_minor: 9950, currency: "PHP", billing_interval: "month" })).toBe("₱99.50 / month");
+  expect(formatBytes(0)).toBe("0 B");
+  expect(formatBytes(268435456)).toBe("256 MB");
+  expect(formatBytes(1610612736)).toBe("1.5 GB");
+});
+
+test("Storage quota metadata is accepted in bytes", () => {
+  const storage = new ApiError("Storage full", 403, { code: "PLAN_LIMIT_EXCEEDED", data: { meta: { feature: "storage", usage: 1073741824, limit: 1073741824 } } });
+  expect(getPlanLimitMeta(storage)).toEqual({ feature: "storage", usage: 1073741824, limit: 1073741824 });
 });
 
 test("Logging out and signing into another account clears previous plan usage", async ({ page }) => {
   const controls = await fixture(page, subscription({
-    plan: { slug: "clarity", name: "Clarity" }, limits: { projects: null, areas: null, resources: null },
+    plan: { slug: "clarity", name: "Clarity" }, limits: { projects: null, areas: null, resources: null, storage_bytes: null },
   }));
   await page.goto("/settings/plan");
   await expect(page.getByText("3 of Unlimited", { exact: true })).toBeVisible();
@@ -144,7 +218,7 @@ test("Logging out and signing into another account clears previous plan usage", 
   await page.getByRole("menuitem", { name: "Log out", exact: true }).click();
   await expect(page).toHaveURL(/\/login$/);
   controls.setUser(8);
-  controls.setValue(subscription({ usage: { projects: 1, areas: 0, resources: 0 } }));
+  controls.setValue(subscription({ usage: { projects: 1, areas: 0, resources: 0, storage_bytes: 0 } }));
   controls.deferNext();
   await page.getByLabel("Username", { exact: true }).fill("second_account");
   await page.getByLabel("Password", { exact: true }).fill("a secure password");
@@ -174,7 +248,7 @@ test("Plan usage loads, retries failures and keeps previous usage after refresh 
   await expect(page.getByText("Usage may be out of date", { exact: true })).toBeVisible();
   await expect(page.getByText("3 of 10", { exact: true })).toBeVisible();
   controls.recover();
-  controls.setValue(subscription({ usage: { projects: 4, areas: 2, resources: 30 } }));
+  controls.setValue(subscription({ usage: { projects: 4, areas: 2, resources: 30, storage_bytes: 0 } }));
   await page.getByRole("button", { name: "Refresh usage" }).click();
   await expect(page.getByText("4 of 10", { exact: true })).toBeVisible();
   await expect(page.getByText("Usage may be out of date", { exact: true })).toHaveCount(0);
@@ -196,13 +270,13 @@ test("Plan reads only while mounted and refreshes on focus and revisiting", asyn
   await navigation.getByRole("link", { name: "Plan & usage" }).click();
   await expect(page.getByText("3 of 10", { exact: true })).toBeVisible();
   const beforeFocus = controls.calls();
-  controls.setValue(subscription({ usage: { projects: 4, areas: 2, resources: 30 } }));
+  controls.setValue(subscription({ usage: { projects: 4, areas: 2, resources: 30, storage_bytes: 0 } }));
   await page.evaluate(() => window.dispatchEvent(new Event("visibilitychange")));
   await expect.poll(controls.calls).toBeGreaterThan(beforeFocus);
   await expect(page.getByText("4 of 10", { exact: true })).toBeVisible();
   await navigation.getByRole("link", { name: "Preferences" }).click();
   await expect(page.getByRole("heading", { name: "Appearance" })).toBeVisible();
-  controls.setValue(subscription({ usage: { projects: 5, areas: 2, resources: 30 } }));
+  controls.setValue(subscription({ usage: { projects: 5, areas: 2, resources: 30, storage_bytes: 0 } }));
   await navigation.getByRole("link", { name: "Plan & usage" }).click();
   await expect(page.getByText("5 of 10", { exact: true })).toBeVisible();
 });

@@ -57,7 +57,7 @@ async function mockArchives(page: Page, options: { delayMs?: number } = {}) {
     };
     else if (path === "/subscription") data = {
       plan: { slug: "free", name: "Free" }, grant_type: "free", expires_at: null, enforcement_enabled: true,
-      limits: { projects: 10, areas: 5, resources: 100 }, usage: { projects: 1, areas: 2, resources: 1 },
+      limits: { projects: 10, areas: 5, resources: 100, storage_bytes: 1073741824 }, usage: { projects: 1, areas: 2, resources: 1, storage_bytes: 0 },
     };
     else if (path === "/notifications") data = { current_page: 1, data: [], last_page: 1, per_page: 15, total: 0, next_page_url: null };
     else if (path === "/area") {

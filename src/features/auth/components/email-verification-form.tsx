@@ -2,7 +2,6 @@
 
 import { useRef, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 
@@ -15,12 +14,13 @@ import { AuthCard } from "./auth-card";
 import { AuthFormError } from "./auth-form-error";
 import { AuthInputField } from "./auth-input-field";
 import { OtpForm } from "./otp-form";
+import { VerificationSuccess } from "./verification-success";
 
 export function EmailVerificationForm() {
-  const router = useRouter();
   const send = useResendVerificationMutation();
   const verification = useVerifyEmailMutation();
   const [email, setEmail] = useState<string>();
+  const [verified, setVerified] = useState(false);
   const [message, setMessage] = useState("");
   const submitting = useRef(false);
   const form = useForm<EmailFormValues>({
@@ -46,19 +46,21 @@ export function EmailVerificationForm() {
 
   return (
     <AuthCard
-      title="Verify your email"
-      description={email ? `Enter the code for ${email}.` : "Finish setting up your Medasin account."}
-      footer={<Link href="/login" className="text-sm text-muted-foreground underline underline-offset-4">Back to sign in</Link>}
+      title={verified ? "Email verified" : "Verify your email"}
+      description={verified ? "Your Medasin account is ready." : email ? `Enter the code for ${email}.` : "Finish setting up your Medasin account."}
+      footer={verified ? undefined : <Link href="/login" className="text-sm text-muted-foreground underline underline-offset-4">Back to sign in</Link>}
     >
-      {email ? (
+      {verified ? (
+        <VerificationSuccess />
+      ) : email ? (
         <OtpForm
           description={message}
           codeLifetimeMinutes={60}
           isPending={verification.isPending}
           onVerify={async (otp) => {
-            await verification.mutateAsync({ email, otp });
+            await verification.mutateAsync({ email, otp, sign_in: false });
             verification.reset();
-            router.replace("/home");
+            setVerified(true);
           }}
           onResend={async () => {
             const response = await send.mutateAsync({ email });

@@ -28,7 +28,7 @@ const resource: Resource = {
 };
 const exhaustedSubscription = {
   plan: { slug: "free", name: "Free" }, grant_type: "free", expires_at: null, enforcement_enabled: true,
-  limits: { projects: 10, areas: 5, resources: 100 }, usage: { projects: 10, areas: 5, resources: 100 },
+  limits: { projects: 10, areas: 5, resources: 100, storage_bytes: 1073741824 }, usage: { projects: 10, areas: 5, resources: 100, storage_bytes: 0 },
 };
 type Feature = "projects" | "areas" | "resources";
 type Reply = { data?: unknown; status?: number; message?: string; code?: string; meta?: unknown; errors?: Record<string, string[]> };

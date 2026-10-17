@@ -42,8 +42,8 @@ async function mockResources(page: Page, options: { delayMs?: number } = {}) {
     };
     else if (path === "/subscription") data = {
       plan: { slug: "free", name: "Free" }, grant_type: "free", expires_at: null,
-      enforcement_enabled: true, limits: { projects: 10, areas: 5, resources: 100 },
-      usage: { projects: 0, areas: 0, resources: resources.length },
+      enforcement_enabled: true, limits: { projects: 10, areas: 5, resources: 100, storage_bytes: 1073741824 },
+      usage: { projects: 0, areas: 0, resources: resources.length, storage_bytes: 0 },
     };
     else if (path === "/resource/tags") data = tags;
     else if (["/area", "/project"].includes(path)) data = [];

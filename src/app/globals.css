@@ -6,6 +6,30 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* Viewport-height bands for screens that must fit without scrolling (auth panel).
+   The bands never overlap, so they never fight over the same property. */
+@custom-variant h-roomy (@media (min-width: 80rem) and (min-height: 861px));
+@custom-variant h-short (@media (min-height: 761px) and (max-height: 860px));
+@custom-variant h-shorter (@media (max-height: 760px));
+
+/* Fake caret for the shadcn InputOTP slots, and the toast countdown bar. */
+@theme {
+  --animate-caret-blink: caret-blink 1.25s ease-out infinite;
+
+  @keyframes caret-blink {
+    0%, 70%, 100% { opacity: 1; }
+    20%, 50% { opacity: 0; }
+  }
+
+  /* Toast countdown bar; each toast sets its own animation-duration. */
+  --animate-toast-countdown: toast-countdown linear forwards;
+
+  @keyframes toast-countdown {
+    from { transform: scaleX(1); }
+    to { transform: scaleX(0); }
+  }
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-app-content: var(--app-content);
