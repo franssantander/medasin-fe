@@ -47,6 +47,9 @@ import { notificationSchedule } from "./notification-time";
 import type { NotificationFilter, PlanNotification } from "./type";
 import { usePlanReminderEvents } from "./use-plan-reminder-events";
 
+const filterItemClass =
+  "h-full min-w-0 flex-1 text-foreground/60 hover:bg-transparent hover:text-foreground aria-pressed:bg-background aria-pressed:text-foreground aria-pressed:shadow-sm dark:text-muted-foreground dark:aria-pressed:bg-input/30 dark:aria-pressed:text-foreground";
+
 function subscribeViewport(onChange: () => void) {
   const media = window.matchMedia("(min-width: 768px)");
   media.addEventListener("change", onChange);
@@ -282,7 +285,7 @@ export function PlanNotifications({
             ref={triggerRef}
             size="icon-sm"
             variant="outline"
-            className="relative min-h-11 min-w-11 md:min-h-8 md:min-w-8"
+            className="relative before:absolute before:-inset-1.5 md:before:hidden"
             aria-label={
               count ? `Notifications, ${count} unread` : "Notifications"
             }
@@ -317,27 +320,16 @@ export function PlanNotifications({
           } as CSSProperties
         }
       >
-        <DrawerHeader className="p-4 group-data-[swipe-axis=y]/drawer-popup:text-left md:p-5">
-          <div className="flex items-start justify-between gap-3">
-            <div className="flex min-w-0 flex-col gap-1.5">
-              <DrawerTitle>Notifications</DrawerTitle>
-              <DrawerDescription>
-                {unreadQuery.data === undefined
-                  ? unreadQuery.isError
-                    ? "Your plan reminders, in one place."
-                    : "Checking your reminders…"
-                  : count
-                    ? `${count} unread notification${count === 1 ? "" : "s"}`
-                    : "You’re up to date."}
-              </DrawerDescription>
-            </div>
+        <DrawerHeader className="gap-1 px-4 pt-1 pb-4 group-data-[swipe-axis=y]/drawer-popup:text-left md:gap-1 md:p-5">
+          <div className="flex items-center justify-between gap-3">
+            <DrawerTitle className="text-base">Notifications</DrawerTitle>
             <DrawerClose
               render={
                 <Button
                   ref={closeRef}
                   size="icon-sm"
                   variant="ghost"
-                  className="-mt-1 -mr-1 min-h-11 min-w-11 md:min-h-8 md:min-w-8"
+                  className="-mr-1.5 before:absolute before:-inset-1.5 md:before:hidden"
                   aria-label="Close"
                 />
               }
@@ -345,26 +337,34 @@ export function PlanNotifications({
               <X aria-hidden="true" />
             </DrawerClose>
           </div>
+          <DrawerDescription>
+            {unreadQuery.data === undefined
+              ? unreadQuery.isError
+                ? "Your plan reminders, in one place."
+                : "Checking your reminders…"
+              : count
+                ? `${count} unread notification${count === 1 ? "" : "s"}`
+                : "You’re up to date."}
+          </DrawerDescription>
         </DrawerHeader>
         <div className="shrink-0 px-4 pb-4 md:px-5">
           <ToggleGroup
-            variant="outline"
             size="sm"
-            spacing={0}
+            spacing={0.5}
             value={[filter]}
             onValueChange={(values) => {
               if (values[0] === "all" || values[0] === "unread")
                 changeFilter(values[0]);
             }}
-            className="w-full"
+            className="h-9 w-full rounded-lg bg-muted p-[3px]"
             aria-label="Notification view"
           >
-            <ToggleGroupItem value="all" className="min-h-11 flex-1 md:min-h-8">
+            <ToggleGroupItem value="all" className={filterItemClass}>
               All
             </ToggleGroupItem>
             <ToggleGroupItem
               value="unread"
-              className="min-h-11 flex-1 md:min-h-8"
+              className={filterItemClass}
               aria-label="Unread"
             >
               Unread{" "}

@@ -6,7 +6,6 @@ import {
   ChartNoAxesCombined,
   CircleAlert,
   CirclePile,
-  Gem,
   HardDrive,
   Infinity as InfinityIcon,
   Layers,
@@ -28,6 +27,7 @@ import { useSubscriptionQuery } from "../queries/subscription-query";
 import { coreFeatureLabels, coreFeatures, type CoreFeature, type Subscription } from "../types";
 import { formatBytes, upgradeContactHref } from "../utils/plan-format";
 import { PlanComparison } from "./plan-comparison";
+import { PlanIcon } from "./plan-icon";
 
 const coreFeatureIcons: Record<CoreFeature, LucideIcon> = {
   projects: Target,
@@ -185,12 +185,7 @@ function PlanSummary({
   return (
     <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border bg-linear-to-br from-muted/80 via-card to-card p-4 sm:p-5">
       <div className="flex min-w-0 items-center gap-4">
-        <span
-          aria-hidden="true"
-          className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-background text-foreground shadow-xs ring-1 ring-foreground/10"
-        >
-          <Gem className="size-5" />
-        </span>
+        <PlanIcon slug={subscription.plan.slug} className="size-12 rounded-xl [&_svg]:size-5" />
         <div className="flex min-w-0 flex-col gap-0.5">
           <h3 className="text-xs font-medium text-muted-foreground">Current plan</h3>
           <p className="truncate text-xl font-semibold">{subscription.plan.name}</p>

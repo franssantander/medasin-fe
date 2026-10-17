@@ -106,6 +106,8 @@ for (const [name, limits] of [
     await page.goto("/settings/plan");
     const content = page.getByRole("region", { name: "Settings content" });
     await expect(content.getByText(name, { exact: true })).toBeVisible();
+    // The current plan's icon shows in the summary and on its Compare plans card.
+    await expect(content.locator(`[data-slot=plan-icon][data-plan=${name.toLowerCase()}]`)).toHaveCount(2);
     for (const [index, key] of (["projects", "areas", "resources"] as const).entries()) {
       const usage = [3, 2, 30][index];
       const limit = limits[key] === null ? "Unlimited" : limits[key].toLocaleString();
@@ -178,6 +180,9 @@ test("Compare plans lists the catalog with prices and hides the contact link whe
   await expect(compare.getByText("₱149 / month", { exact: true })).toBeVisible();
   await expect(compare.getByText("10 GB storage", { exact: true })).toBeVisible();
   await expect(compare.getByRole("listitem", { name: "Focus", exact: true })).toHaveAttribute("aria-current", "true");
+  for (const plan of catalog) {
+    await expect(compare.getByRole("listitem", { name: plan.name, exact: true }).locator("[data-slot=plan-icon]")).toHaveAttribute("data-plan", plan.slug);
+  }
   await expect(compare.getByText("Current plan", { exact: true })).toHaveCount(1);
   await expect(page.getByRole("link", { name: "Contact us to upgrade" })).toHaveCount(0);
 });

@@ -6,6 +6,7 @@ import Link from "next/link";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { PlanIcon } from "@/features/subscription/components/plan-icon";
 import { usePlanCatalogQuery } from "@/features/subscription/queries/plan-catalog-query";
 import { coreFeatureLabels, coreFeatures, type CatalogPlan } from "@/features/subscription/types";
 import { formatBytes, formatPlanPrice, upgradeContactHref } from "@/features/subscription/utils/plan-format";
@@ -131,10 +132,16 @@ export function PricingPlans() {
             variants={fadeUp}
             whileHover={{ y: -4 }}
             transition={{ type: "spring", stiffness: 300, damping: 24 }}
-            className="flex min-w-0 flex-col gap-6 rounded-xl border bg-card p-6 transition-shadow duration-300 hover:shadow-md"
+            className="group flex min-w-0 flex-col gap-6 rounded-xl border bg-card p-6 transition-shadow duration-300 hover:shadow-md"
           >
             <div className="flex flex-col gap-3">
-              <h3 className="font-spectral text-2xl font-semibold">{plan.name}</h3>
+              <div className="flex items-center gap-3">
+                <PlanIcon
+                  slug={plan.slug}
+                  className="transition-transform duration-300 group-hover:scale-105 motion-reduce:transition-none"
+                />
+                <h3 className="font-spectral text-2xl font-semibold">{plan.name}</h3>
+              </div>
               <p className="text-3xl font-semibold tracking-tight tabular-nums">{formatPlanPrice(plan)}</p>
               <p className="text-sm leading-6 text-muted-foreground">{plan.description}</p>
             </div>

@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
 import { usePlanCatalogQuery } from "../queries/plan-catalog-query";
 import type { CatalogPlan } from "../types";
 import { formatPlanPrice } from "../utils/plan-format";
+import { PlanIcon } from "./plan-icon";
 
 export function PlanComparison({
   currentSlug,
@@ -63,7 +64,10 @@ export function PlanComparison({
             >
               <div className="flex flex-col gap-2">
                 <div className="flex items-center justify-between gap-2">
-                  <h3 className="text-lg font-semibold">{plan.name}</h3>
+                  <div className="flex min-w-0 items-center gap-2.5">
+                    <PlanIcon slug={plan.slug} className="size-8" />
+                    <h3 className="truncate text-lg font-semibold">{plan.name}</h3>
+                  </div>
                   {current && <Badge variant="secondary">Current plan</Badge>}
                 </div>
                 <p className="text-2xl font-semibold tabular-nums">{formatPlanPrice(plan)}</p>

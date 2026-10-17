@@ -38,6 +38,9 @@ test("Landing pricing lists every plan from the catalog", async ({ page }, testI
   await expect(limits.getByRole("row", { name: /^Projects/ })).toHaveText(/Projects\s*10\s*50\s*Unlimited/);
   await expect(limits.getByRole("row", { name: /^Storage/ })).toHaveText(/Storage\s*1 GB\s*10 GB\s*100 GB/);
   await expect(pricing.getByRole("link", { name: "Get started free" })).toHaveAttribute("href", "/register");
+  for (const plan of catalog) {
+    await expect(pricing.getByRole("listitem", { name: plan.name, exact: true }).locator("[data-slot=plan-icon]")).toHaveAttribute("data-plan", plan.slug);
+  }
   await expect(pricing.getByText("Paid plans are coming soon.", { exact: true })).toHaveCount(2);
   await expect(pricing.getByRole("link", { name: "Contact us to upgrade" })).toHaveCount(0);
   await pricing.screenshot({ path: testInfo.outputPath("landing-pricing-desktop.png") });
