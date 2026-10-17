@@ -1,6 +1,7 @@
 "use client";
 
 import { LoadingRegion } from "@/components/shared/loading-region";
+import { PageHeaderSkeleton } from "@/components/shared/page-header-skeleton";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
@@ -121,6 +122,15 @@ export function ProjectListSkeleton({ view }: { view: ProjectView }) {
   );
 }
 
+export function ProjectsPageSkeleton() {
+  return (
+    <div data-page-skeleton="projects" className="grid gap-8">
+      <PageHeaderSkeleton titleWidth="w-24" descriptionWidth="w-[34rem]" actions={["w-28", "w-32"]} />
+      <ProjectListSkeleton view="grid" />
+    </div>
+  );
+}
+
 function TaskCardSkeleton({ index }: { index: number }) {
   return (
     <div className="grid gap-2.5 rounded-lg border bg-card p-3 shadow-xs">
@@ -139,16 +149,20 @@ function TaskCardSkeleton({ index }: { index: number }) {
 
 export function KanbanBoardSkeleton({
   label = "Loading board",
+  fill = false,
 }: {
   label?: string;
+  /** Stretch the columns to the container height, as the standalone board does. */
+  fill?: boolean;
 }) {
   return (
-    <LoadingRegion label={label} className={kanbanGridStyles}>
+    <LoadingRegion label={label} className={cn(kanbanGridStyles, fill && "h-full min-h-0")}>
       {stages.map((stage, stageIndex) => (
         <div
           key={stage.key}
           className={cn(
             "flex min-h-64 min-w-0 flex-col overflow-hidden rounded-xl border",
+            fill && "h-full min-h-80",
             stageColumnStyles[stage.key].column,
           )}
         >
@@ -184,7 +198,7 @@ export function KanbanBoardSkeleton({
   );
 }
 
-function KanbanToolbarSkeleton() {
+export function KanbanToolbarSkeleton() {
   return (
     <div className="flex flex-wrap items-center gap-2">
       <Skeleton className="h-6 w-40" />

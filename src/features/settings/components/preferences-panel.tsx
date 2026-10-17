@@ -161,7 +161,7 @@ export function PreferencesPanel() {
                 variant="outline"
                 value={[fontFamily]}
                 disabled={isPending}
-                className="grid w-full grid-cols-1 gap-3 @min-[36rem]:grid-cols-3"
+                className="grid w-full grid-cols-1 gap-3 @min-[36rem]:grid-cols-2 @min-[56rem]:grid-cols-4"
                 onValueChange={(values) => {
                   if (values[0]) selectFont(resolveFontFamily(values[0]));
                 }}
@@ -176,7 +176,7 @@ export function PreferencesPanel() {
                     <span className="flex items-center gap-2 px-0.5">
                       <span className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
                         <span className="font-semibold">{option.label}</span>
-                        {option.value === "manrope" && (
+                        {option.value === "geist" && (
                           <Badge variant="secondary">Default</Badge>
                         )}
                       </span>

@@ -53,7 +53,7 @@
 }
 
 :root {
-  --app-font-family: var(--font-manrope);
+  --app-font-family: var(--font-geist);
   --background: oklch(1 0 0);
   --app-content: #F9F9F9;
   --foreground: oklch(0.145 0 0);
@@ -89,8 +89,12 @@
   --sidebar-ring: oklch(0.708 0 0);
 }
 
-html[data-app-font="geist"] {
-  --app-font-family: var(--font-geist);
+html[data-app-font="manrope"] {
+  --app-font-family: var(--font-manrope);
+}
+
+html[data-app-font="newsreader"] {
+  --app-font-family: var(--font-newsreader);
 }
 
 html[data-app-font="inter"] {
@@ -427,15 +431,6 @@ html[data-app-font="inter"] {
     box-shadow: none;
   }
 
-  .note-rich-text
-    .bn-block-content:has(.ProseMirror-trailingBreak:only-child)::after {
-    position: absolute;
-    inset-block-start: 3px;
-    inset-inline: 0;
-    width: 100%;
-    margin-inline: 0;
-  }
-
   .note-rich-text .bn-inline-content {
     min-width: 0;
     width: 100%;
@@ -444,6 +439,47 @@ html[data-app-font="inter"] {
     overflow-wrap: anywhere;
     word-break: break-word;
   }
+}
+
+/* Editor typing hint (BlockNote placeholder). It flows right after the empty
+   text, so it starts after a toggle arrow, list marker, or checkbox instead of
+   covering them. Unlayered so it overrides BlockNote's italic default. */
+.note-rich-text
+  .bn-block-content:has(.ProseMirror-trailingBreak:only-child)
+  .bn-inline-content {
+  flex: 0 0 auto;
+  width: auto;
+}
+
+.note-rich-text .bn-block-content:has(.ProseMirror-trailingBreak:only-child)::after {
+  flex: 1 1 0%;
+  min-width: 0;
+  overflow: hidden;
+  color: color-mix(in oklab, var(--muted-foreground) 70%, transparent);
+  font-style: normal;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A heading-sized command hint is too loud; name the heading level instead. */
+.note-rich-text
+  .bn-block-content[data-content-type="heading"][data-is-empty-and-focused]:has(.ProseMirror-trailingBreak:only-child)::after {
+  content: "Heading";
+}
+
+.note-rich-text
+  .bn-block-content[data-content-type="heading"][data-level="1"][data-is-empty-and-focused]:has(.ProseMirror-trailingBreak:only-child)::after {
+  content: "Heading 1";
+}
+
+.note-rich-text
+  .bn-block-content[data-content-type="heading"][data-level="2"][data-is-empty-and-focused]:has(.ProseMirror-trailingBreak:only-child)::after {
+  content: "Heading 2";
+}
+
+.note-rich-text
+  .bn-block-content[data-content-type="heading"][data-level="3"][data-is-empty-and-focused]:has(.ProseMirror-trailingBreak:only-child)::after {
+  content: "Heading 3";
 }
 
 /* Resource notes follow the surrounding theme. Keep these scoped rules outside

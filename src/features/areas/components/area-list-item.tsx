@@ -9,7 +9,6 @@ import {
   ItemMedia,
   ItemTitle,
 } from "@/components/ui/item";
-import { Skeleton } from "@/components/ui/skeleton";
 import { formatAreaUpdatedAt } from "../area-list-utils";
 import type { Area } from "../type";
 import { AreaActionsMenu } from "./area-actions-menu";
@@ -53,18 +52,6 @@ export function AreaListItem({
         </span>
         <AreaActionsMenu area={area} onEdit={onEdit} />
       </ItemActions>
-    </Item>
-  );
-}
-
-export function AreaListItemSkeleton() {
-  return (
-    <Item variant="outline" className="flex-nowrap bg-card" aria-hidden="true">
-      <Skeleton className="size-10 shrink-0 rounded-lg" />
-      <div className="grid flex-1 gap-2">
-        <Skeleton className="h-4 w-1/4" />
-        <Skeleton className="h-3.5 w-2/3" />
-      </div>
     </Item>
   );
 }

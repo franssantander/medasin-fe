@@ -4,7 +4,7 @@ import type { AppFontFamily } from "./types";
 
 const appUrl = "http://127.0.0.1:3107";
 
-function preferenceStore(font: string | undefined = "manrope") {
+function preferenceStore(font: string | undefined = "geist") {
   return {
     activeUserId: 7,
     users: [
@@ -73,17 +73,17 @@ async function expectAppFont(page: Page, font: AppFontFamily) {
   await expect(page.getByRole("button", { name: "Open account menu for Test User" })).toHaveCSS("font-family", name);
 }
 
-test("font tiles preview each family and default to Manrope", async ({ page }, testInfo) => {
+test("font tiles preview each family and default to Geist", async ({ page }, testInfo) => {
   const store = preferenceStore();
   await mockPreferences(page.context(), store);
   await page.goto("/settings/preferences");
-  await expectAppFont(page, "manrope");
-  await expect(page.getByRole("button", { name: "Manrope", exact: true })).toHaveAttribute("aria-pressed", "true");
-  await expect(page.getByText("Default", { exact: true })).toBeVisible();
-  for (const font of ["Manrope", "Geist", "Inter"]) {
+  await expectAppFont(page, "geist");
+  await expect(page.getByRole("button", { name: "Geist", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("button", { name: "Geist", exact: true }).getByText("Default", { exact: true })).toBeVisible();
+  for (const font of ["Geist", "Newsreader", "Manrope", "Inter"]) {
     await expect(page.getByRole("button", { name: font, exact: true }).getByText("Plan your day with clarity.")).toHaveCSS("font-family", new RegExp(font, "i"));
   }
-  await page.getByRole("button", { name: "Manrope", exact: true }).click();
+  await page.getByRole("button", { name: "Geist", exact: true }).click();
   expect(store.saves).toHaveLength(0);
   await page.screenshot({ path: testInfo.outputPath("font-preferences-desktop.png") });
 });
@@ -93,19 +93,19 @@ test("fonts save immediately, survive navigation and reload, and load in a fresh
   await mockPreferences(page.context(), store);
   await page.goto("/settings/preferences");
   const release = deferSave(store);
-  await page.getByRole("button", { name: "Geist", exact: true }).click();
-  await expectAppFont(page, "geist");
+  await page.getByRole("button", { name: "Newsreader", exact: true }).click();
+  await expectAppFont(page, "newsreader");
   await expect(page.locator("#app-font-status")).toHaveText("Saving font…");
   await expect(page.getByRole("button", { name: "Inter", exact: true })).toBeDisabled();
   await page.getByRole("navigation", { name: "Settings navigation" }).getByRole("link", { name: "Trash" }).click();
-  await expect(page.getByRole("heading", { name: "Trash", exact: true })).toHaveCSS("font-family", /geist/i);
+  await expect(page.getByRole("heading", { name: "Trash", exact: true })).toHaveCSS("font-family", /newsreader/i);
   await page.getByRole("navigation", { name: "Settings navigation" }).getByRole("link", { name: "Preferences" }).click();
   await expect(page.getByRole("button", { name: "Inter", exact: true })).toBeDisabled();
   release();
   await expect(page.getByRole("button", { name: "Inter", exact: true })).toBeEnabled();
-  expect(store.saves).toEqual([{ userId: 7, font: "geist" }]);
+  expect(store.saves).toEqual([{ userId: 7, font: "newsreader" }]);
   await page.reload();
-  await expectAppFont(page, "geist");
+  await expectAppFont(page, "newsreader");
   await page.getByRole("button", { name: "Inter", exact: true }).click();
   await expect(page.locator("#app-font-status")).toHaveText("Saved to your account.");
   await expectAppFont(page, "inter");
@@ -126,17 +126,17 @@ test("fonts save immediately, survive navigation and reload, and load in a fresh
 });
 
 test("failed saves restore the previous font and allow retry", async ({ page }) => {
-  const store = preferenceStore("geist");
+  const store = preferenceStore("manrope");
   store.failSave = true;
   await mockPreferences(page.context(), store);
   await page.goto("/settings/preferences");
-  await expectAppFont(page, "geist");
+  await expectAppFont(page, "manrope");
   const release = deferSave(store);
   await page.getByRole("button", { name: "Inter", exact: true }).click();
   await expectAppFont(page, "inter");
   release();
   await expect(page.locator("#app-font-status")).toContainText("Your previous font was restored.");
-  await expectAppFont(page, "geist");
+  await expectAppFont(page, "manrope");
   await expect(page.getByRole("button", { name: "Inter", exact: true })).toBeEnabled();
   store.failSave = false;
   await page.getByRole("button", { name: "Inter", exact: true }).click();
@@ -148,16 +148,16 @@ test("font tiles support keyboard selection and keep the active selection", asyn
   const store = preferenceStore();
   await mockPreferences(page.context(), store);
   await page.goto("/settings/preferences");
-  await expectAppFont(page, "manrope");
-  const manrope = page.getByRole("button", { name: "Manrope", exact: true });
+  await expectAppFont(page, "geist");
   const geist = page.getByRole("button", { name: "Geist", exact: true });
-  await manrope.focus();
+  const newsreader = page.getByRole("button", { name: "Newsreader", exact: true });
+  await geist.focus();
   await page.keyboard.press("ArrowRight");
-  await expect(geist).toBeFocused();
+  await expect(newsreader).toBeFocused();
   await page.keyboard.press("Space");
   await expect(page.locator("#app-font-status")).toHaveText("Saved to your account.");
-  await geist.click();
-  await expect(geist).toHaveAttribute("aria-pressed", "true");
+  await newsreader.click();
+  await expect(newsreader).toHaveAttribute("aria-pressed", "true");
   expect(store.saves).toHaveLength(1);
 });
 
@@ -169,16 +169,16 @@ for (const failSave of [false, true]) {
     await page.goto("/home");
     await expect(page.getByRole("heading", { name: "Welcome, Test.", level: 1, exact: true })).toBeVisible();
     await page.goto("/settings/preferences");
-    await expectAppFont(page, "manrope");
-    const release = deferSave(store);
-    await page.getByRole("button", { name: "Geist", exact: true }).click();
     await expectAppFont(page, "geist");
+    const release = deferSave(store);
+    await page.getByRole("button", { name: "Newsreader", exact: true }).click();
+    await expectAppFont(page, "newsreader");
     await expect.poll(() => store.saves.length).toBe(1);
     await page.getByRole("button", { name: "Open account menu for Test User" }).click();
     await page.getByRole("menuitem", { name: "Log out" }).click();
     await expect(page).toHaveURL(/\/login$/);
     await expect(page.locator("html")).not.toHaveAttribute("data-app-font");
-    await expect(page.getByLabel("Username", { exact: true })).toHaveCSS("font-family", /manrope/i);
+    await expect(page.getByLabel("Username", { exact: true })).toHaveCSS("font-family", /geist/i);
     await page.getByLabel("Username", { exact: true }).fill("other");
     await page.getByLabel("Password", { exact: true }).fill("password");
     await page.getByRole("button", { name: "Sign in", exact: true }).click();
@@ -195,11 +195,11 @@ for (const failSave of [false, true]) {
   });
 }
 
-test("unsupported profile font values safely fall back to Manrope", async ({ page }) => {
+test("unsupported profile font values safely fall back to Geist", async ({ page }) => {
   const store = preferenceStore("unknown-font");
   await mockPreferences(page.context(), store);
   await page.goto("/settings/preferences");
-  await expectAppFont(page, "manrope");
+  await expectAppFont(page, "geist");
 });
 
 for (const viewport of [{ width: 320, height: 568 }, { width: 768, height: 700 }, { width: 1440, height: 600 }]) {

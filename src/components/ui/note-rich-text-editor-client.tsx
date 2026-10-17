@@ -7,6 +7,7 @@ import {
   selectedFragmentToHTML,
   type PartialBlock,
 } from "@blocknote/core";
+import { en } from "@blocknote/core/locales";
 import {
   filterSuggestionItems,
   insertOrUpdateBlockForSlashMenu,
@@ -471,6 +472,22 @@ const NoteLinkBlock = createReactBlockSpec(noteLinkConfig, {
   render: NoteLinkRenderer,
 });
 
+// BlockNote labels every empty list, toggle, and heading block with its type
+// ("List", "Toggle", "Heading"), even when the cursor is elsewhere. Keep only
+// the single hint on the block being typed in.
+const editorDictionary = {
+  ...en,
+  placeholders: {
+    ...en.placeholders,
+    default: "Type '/' for commands",
+    heading: undefined,
+    toggleListItem: undefined,
+    bulletListItem: undefined,
+    numberedListItem: undefined,
+    checkListItem: undefined,
+  },
+};
+
 const noteEditorSchema = BlockNoteSchema.create({
   blockSpecs: {
     ...defaultBlockSpecs,
@@ -803,6 +820,7 @@ export function NoteRichTextEditorClient({
   const editor = useCreateBlockNote(
     {
       schema: noteEditorSchema,
+      dictionary: editorDictionary,
       initialContent: initialContent.length ? initialContent : [{ type: "paragraph", content: "" }],
       uploadFile: (file) => onUploadFileRef.current(file),
       extensions: mode === "letter" || pageEditor ? [letterPageEditingExtension] : [],

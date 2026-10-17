@@ -16,7 +16,6 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
 import { browserTimezone, localDateKey } from "../plan-time";
 import {
   useCreatePlan,
@@ -28,6 +27,7 @@ import {
 import type { CalendarPlan, CalendarRange, PlanInput } from "../type";
 import { PlanDetailDialog } from "./plan-detail-dialog";
 import { PlanFormDialog } from "./plan-form-dialog";
+import { CalendarSkeleton, PlansPageSkeleton } from "./plans-skeletons";
 import { UpcomingPlans } from "./upcoming-plans";
 
 const PlansCalendar = dynamic(
@@ -47,20 +47,7 @@ type FormState = {
 
 export function PlansPage({ initialPlanUuid }: { initialPlanUuid?: string }) {
   const timezone = useSyncExternalStore(subscribeTimezone, browserTimezone, serverTimezone);
-  if (!timezone) {
-    return (
-      <div className="mx-auto grid w-full max-w-[110rem] gap-6">
-        <div className="grid gap-2">
-          <Skeleton className="h-6 w-24" />
-          <Skeleton className="h-4 w-72" />
-        </div>
-        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_19rem] xl:grid-cols-[minmax(0,1fr)_21rem]">
-          <CalendarSkeleton />
-          <Skeleton className="hidden h-72 rounded-xl lg:block" />
-        </div>
-      </div>
-    );
-  }
+  if (!timezone) return <PlansPageSkeleton />;
   return <PlansWorkspace key={timezone} timezone={timezone} initialPlanUuid={initialPlanUuid} />;
 }
 
@@ -194,18 +181,6 @@ function PlansWorkspace({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
-  );
-}
-
-function CalendarSkeleton() {
-  return (
-    <div className="overflow-hidden rounded-xl border bg-card" role="status" aria-label="Loading calendar">
-      <div className="flex items-center justify-between gap-3 border-b p-4">
-        <Skeleton className="h-8 w-56" />
-        <Skeleton className="hidden h-9 w-64 sm:block" />
-      </div>
-      <Skeleton className="m-4 h-[30rem] rounded-lg" />
     </div>
   );
 }

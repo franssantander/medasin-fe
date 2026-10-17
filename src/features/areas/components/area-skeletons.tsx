@@ -3,7 +3,7 @@
 import { LoadingRegion } from "@/components/shared/loading-region";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { NotePagesSkeleton } from "@/features/notes/components/note-workspace";
+import { NotePagesSkeleton } from "@/features/notes/components/note-skeletons";
 import { cn } from "@/lib/utils";
 import type { AreaTab } from "./area-detail-types";
 

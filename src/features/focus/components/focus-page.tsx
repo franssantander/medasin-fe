@@ -7,13 +7,13 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
 import { useFocusSession, useFocusView } from "../providers/focus-session-provider";
 import { useUpdateFocusSettingsMutation } from "../queries/focus-query";
 import type { AmbientSound } from "../type";
 import { AddFocusTaskDialog } from "./add-focus-task-dialog";
 import { FocusCompletionDialog } from "./focus-completion-dialog";
 import { FocusJournalLink } from "./focus-journal-link";
+import { FocusPageSkeleton } from "./focus-page-skeleton";
 import { FocusQuietView } from "./focus-quiet-view";
 import { FocusSettingsDialog } from "./focus-settings-dialog";
 import { FocusTaskPanel } from "./focus-task-panel";
@@ -32,29 +32,7 @@ export function FocusPage() {
   const resetOpen = Boolean(resetSessionUuid && activeSession?.uuid === resetSessionUuid);
   const [requestedSound, setRequestedSound] = useState<AmbientSound>("off");
 
-  if (dashboard.isLoading && !data) return (
-    <div className="grid w-full min-w-0 gap-5" role="status" aria-label="Loading Focus">
-      <div className="grid gap-2">
-        <Skeleton className="h-6 w-40" />
-        <Skeleton className="h-4 w-56" />
-      </div>
-      <div className="grid min-w-0 items-start gap-5 lg:grid-cols-[minmax(0,1fr)_20rem] xl:grid-cols-[minmax(0,1fr)_22rem]">
-        <div className="flex flex-col items-center gap-6 rounded-xl p-6 ring-1 ring-foreground/10">
-          <Skeleton className="h-8 w-full" />
-          <Skeleton className="h-11 w-full max-w-md rounded-lg" />
-          <Skeleton className="aspect-square w-full max-w-[min(15rem,42dvh)] rounded-full sm:max-w-[min(18rem,42dvh)]" />
-          <Skeleton className="h-6 w-56" />
-          <Skeleton className="h-9 w-36" />
-        </div>
-        <div className="flex flex-col gap-3 rounded-xl p-5 ring-1 ring-foreground/10">
-          <Skeleton className="h-6 w-32" />
-          <Skeleton className="h-9 w-full" />
-          <Skeleton className="h-16 w-full" />
-          <Skeleton className="h-16 w-full" />
-        </div>
-      </div>
-    </div>
-  );
+  if (dashboard.isLoading && !data) return <FocusPageSkeleton />;
   if (!data) return (
     <Card className="w-full min-w-0">
       <CardHeader className="justify-items-center">

@@ -36,11 +36,11 @@ import type {
 import { HabitCalendar } from "./habit-calendar";
 import { HabitCalendarFooter } from "./habit-calendar-footer";
 import {
-  HabitCalendarSkeleton,
   HabitFirstRun,
   HabitLoadError,
   HabitNoMatches,
 } from "./habit-empty-states";
+import { HabitCalendarSkeleton } from "./habit-skeletons";
 import { HabitFormDialog } from "./habit-form-dialog";
 import {
   getCalendarColumns,

@@ -29,6 +29,7 @@ import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useCurrentUserQuery } from "@/features/auth/queries/auth-query";
 import { HomeRecordIcon } from "@/features/home/components/home-record-icon";
+import { HomeMainSkeleton, HomeRailSkeleton } from "@/features/home/components/home-skeletons";
 import { TodayPanel } from "@/features/home/components/home-today";
 import { useHomeQuery } from "@/features/home/queries/home-query";
 import { cn } from "@/lib/utils";
@@ -174,7 +175,8 @@ function OverviewStats({ stats }: { stats: HomeStats }) {
     { label: "Habit streak", value: stats.habit_streak, icon: Flame },
   ];
   return (
-    <section aria-label="Overview">
+    <section aria-labelledby="home-overview" className="grid min-w-0 gap-3">
+      <SectionHeading id="home-overview" title="Overview" />
       <dl className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-2">
         {items.map((item) => {
           const Icon = item.icon;
@@ -457,41 +459,6 @@ function UtilitiesSection() {
   );
 }
 
-function MainSkeleton() {
-  return (
-    <div role="status" aria-label="Loading home" className="grid gap-6">
-      {[5, 4].map((rows, section) => (
-        <div key={section} className="grid gap-3">
-          <Skeleton className="h-4 w-20" />
-          <div className="grid gap-2">
-            {Array.from({ length: rows }, (_, row) => (
-              <Skeleton key={row} className="h-14 w-full rounded-xl" />
-            ))}
-          </div>
-        </div>
-      ))}
-      <span className="sr-only">Loading home…</span>
-    </div>
-  );
-}
-
-function RailSkeleton() {
-  return (
-    <div className="grid gap-6" aria-hidden="true">
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-2">
-        {[1, 2, 3, 4].map((item) => (
-          <Skeleton key={item} className="h-20 rounded-xl" />
-        ))}
-      </div>
-      <div className="grid gap-2">
-        {[1, 2, 3].map((item) => (
-          <Skeleton key={item} className="h-9 w-full" />
-        ))}
-      </div>
-    </div>
-  );
-}
-
 export function HomeOverviewPage() {
   const timezone = useSyncExternalStore(
     subscribeBrowser,
@@ -510,7 +477,7 @@ export function HomeOverviewPage() {
         <div className="grid min-w-0 gap-8">
           <TodayPanel timezone={timezone} />
           {loading ? (
-            <MainSkeleton />
+            <HomeMainSkeleton />
           ) : query.isError ? (
             <Card className="items-center py-10 text-center" role="alert">
               <CardHeader className="justify-items-center">
@@ -545,7 +512,7 @@ export function HomeOverviewPage() {
           ) : null}
         </div>
         <aside aria-label="Workspace summary" className="grid min-w-0 gap-8">
-          {loading ? <RailSkeleton /> : data ? <OverviewStats stats={data.stats} /> : null}
+          {loading ? <HomeRailSkeleton /> : data ? <OverviewStats stats={data.stats} /> : null}
           <UtilitiesSection />
           {data && (
             <>

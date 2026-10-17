@@ -33,6 +33,7 @@ import {
 } from "./journal-delete-dialog";
 import { JournalEntryEditor } from "./journal-entry-editor";
 import { JournalEntryList } from "./journal-entry-list";
+import { JournalPageSkeleton } from "./journal-skeletons";
 
 type JournalSelection =
   | { kind: "entry"; uuid: string }
@@ -154,11 +155,7 @@ export function JournalWorkspace({
   );
 
   if (entriesQuery.isLoading) {
-    return (
-      <JournalShell>
-        <JournalFrameSkeleton />
-      </JournalShell>
-    );
+    return <JournalPageSkeleton />;
   }
 
   if (entriesQuery.isError && !entriesQuery.data) {
@@ -373,37 +370,6 @@ function EditorStateFrame({
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto">
         <div className="journal-page-header">{children}</div>
-      </div>
-    </div>
-  );
-}
-
-function JournalFrameSkeleton() {
-  return (
-    <div className="grid h-full min-h-0 min-w-0 flex-1 grid-rows-[minmax(0,1fr)] overflow-hidden rounded-xl border bg-card md:grid-cols-[18rem_minmax(0,1fr)]">
-      <div className="hidden content-start gap-2 border-r bg-muted/40 p-3 md:grid dark:bg-muted/20">
-        <Skeleton className="mb-1 h-5 w-24" />
-        <Skeleton className="mb-3 h-8 w-full" />
-        {[1, 2, 3, 4].map((item) => (
-          <div key={item} className="flex items-start gap-3 py-1.5">
-            <Skeleton className="size-9 shrink-0 rounded-md" />
-            <div className="grid flex-1 gap-1.5">
-              <Skeleton className="h-3.5 w-3/4" />
-              <Skeleton className="h-3 w-full" />
-            </div>
-          </div>
-        ))}
-      </div>
-      <div className="flex min-h-0 flex-col">
-        <div className="flex h-12 shrink-0 items-center border-b px-3">
-          <h1 className="px-1 text-sm text-muted-foreground">Journal</h1>
-        </div>
-        <div className="journal-page-header grid content-start gap-3">
-          <Skeleton className="h-3 w-48" />
-          <Skeleton className="h-9 w-2/3" />
-          <Skeleton className="mt-4 h-4 w-1/2" />
-          <Skeleton className="h-4 w-1/3" />
-        </div>
       </div>
     </div>
   );

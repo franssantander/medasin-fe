@@ -426,7 +426,7 @@ test("home keeps its welcome and everyday tools available while the overview loa
   try {
     const loading = page.getByRole("status", { name: "Loading home" });
     await expect(loading).toBeVisible();
-    await expect(loading.locator('[data-slot="skeleton"]')).toHaveCount(11);
+    await expect(loading.locator('[data-slot="skeleton"]')).toHaveCount(33);
     await expect(loading.locator('[data-slot="skeleton"]').first()).toHaveCSS("animation-name", "none");
     await expect(page.getByRole("heading", { name: "Welcome, Test.", level: 1 })).toBeVisible();
     await expect(page.getByText("Friday, October 9", { exact: true })).toBeVisible();

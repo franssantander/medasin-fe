@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import { ArchiveRestore, CircleAlert } from "lucide-react";
 import { LoadingRegion } from "@/components/shared/loading-region";
+import { PageHeaderSkeleton } from "@/components/shared/page-header-skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -230,5 +231,40 @@ export function ArchiveGroup({
       )}
       {footer}
     </section>
+  );
+}
+
+export function ArchivesPageSkeleton() {
+  const groups = [
+    { label: "Loading archived areas", width: "w-12", meta: false },
+    { label: "Loading archived projects", width: "w-16", meta: true },
+    { label: "Loading archived resources", width: "w-20", meta: true },
+  ];
+
+  return (
+    <div data-page-skeleton="archives" className="grid gap-6">
+      <PageHeaderSkeleton titleWidth="w-24" descriptionWidth="w-[38rem]" />
+      <div className="grid gap-5">
+        <div className="flex flex-col-reverse gap-3 border-b sm:flex-row sm:items-end sm:justify-between">
+          <div className="flex gap-4 pb-2.5">
+            {["w-6", "w-12", "w-16", "w-20"].map((width, index) => (
+              <Skeleton key={index} className={cn("h-5", width)} />
+            ))}
+          </div>
+          <Skeleton className="mb-2 h-9 w-full sm:w-64" />
+        </div>
+        <div className="grid gap-8">
+          {groups.map((group) => (
+            <div key={group.label} className="grid gap-3">
+              <div className="flex h-5 items-center gap-2">
+                <Skeleton className={cn("h-3.5", group.width)} />
+                <Skeleton className="h-5 w-6 rounded-full" />
+              </div>
+              <ArchiveRowsSkeleton label={group.label} meta={group.meta} />
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
   );
 }

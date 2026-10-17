@@ -2,9 +2,9 @@
 
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
 import { ProjectKanbanToolbar } from "@/features/projects/components/project-kanban-toolbar";
 import { useStandaloneKanban } from "../hooks/use-standalone-kanban";
+import { BoardPageSkeleton } from "./board-skeletons";
 import { StandaloneKanbanBoard } from "./standalone-kanban-board";
 import { StandaloneKanbanDialogs } from "./standalone-kanban-dialogs";
 import PageHeader from "@/components/shared/page-header";
@@ -12,8 +12,7 @@ import PageHeader from "@/components/shared/page-header";
 export function StandaloneKanban() {
   const kanban = useStandaloneKanban();
 
-  if (kanban.boardsQuery.isLoading)
-    return <Skeleton className="h-[38rem] rounded-xl" />;
+  if (kanban.boardsQuery.isLoading) return <BoardPageSkeleton />;
   if (kanban.boardsQuery.isError) {
     return (
       <Card className="items-center py-14 text-center">

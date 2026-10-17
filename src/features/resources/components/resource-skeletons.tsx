@@ -1,4 +1,5 @@
 import { LoadingRegion } from "@/components/shared/loading-region";
+import { PageHeaderSkeleton } from "@/components/shared/page-header-skeleton";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
@@ -109,6 +110,58 @@ export function ResourceTagsSkeleton() {
         </div>
       ))}
     </LoadingRegion>
+  );
+}
+
+function ResourceFiltersSkeleton() {
+  return (
+    <div className="flex flex-col gap-4" aria-hidden="true">
+      <div className="grid gap-0.5">
+        <Skeleton className="mx-2.5 mb-2 h-3 w-12" />
+        {["w-16", "w-14", "w-12", "w-10", "w-14"].map((width, index) => (
+          <div key={index} className="flex h-8 items-center gap-2.5 px-2.5">
+            <Skeleton className="size-3.5 shrink-0" />
+            <Skeleton className={cn("h-3.5", width)} />
+          </div>
+        ))}
+      </div>
+      <div className="grid gap-1">
+        <Skeleton className="mx-2.5 mb-1 h-3 w-10" />
+        <Skeleton className="mb-1 h-8 w-full" />
+        <ResourceTagsSkeleton />
+      </div>
+    </div>
+  );
+}
+
+export function ResourcesPageSkeleton() {
+  return (
+    <div data-page-skeleton="resources" className="grid min-w-0 gap-6">
+      <PageHeaderSkeleton titleWidth="w-28" descriptionWidth="w-[30rem]" actions={["w-36"]} />
+      <div className="grid min-w-0 gap-6 lg:grid-cols-[14rem_minmax(0,1fr)] lg:items-start lg:gap-8">
+        <div className="hidden min-w-0 lg:block">
+          <ResourceFiltersSkeleton />
+        </div>
+        <div className="grid min-w-0 gap-5">
+          <div className="grid gap-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <Skeleton className="h-9 min-w-0 flex-1 basis-56 sm:max-w-sm" />
+              <Skeleton className="h-9 w-9 sm:w-24 lg:hidden" />
+              <Skeleton className="ml-auto h-9 w-[4.5rem]" />
+            </div>
+            <div className="flex gap-1.5 lg:hidden">
+              {["w-12", "w-16", "w-14", "w-12"].map((width, index) => (
+                <Skeleton key={index} className={cn("h-8 rounded-full", width)} />
+              ))}
+            </div>
+            <div className="flex h-6 items-center">
+              <Skeleton className="h-3.5 w-24" />
+            </div>
+          </div>
+          <ResourceListSkeleton view="grid" />
+        </div>
+      </div>
+    </div>
   );
 }
 

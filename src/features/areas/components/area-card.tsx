@@ -9,7 +9,6 @@ import {
   CardFooter,
   CardTitle,
 } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
 import { formatAreaUpdatedAt } from "../area-list-utils";
 import type { Area } from "../type";
 import { AreaActionsMenu } from "./area-actions-menu";
@@ -64,23 +63,6 @@ export function AreaCard({ area, onEdit }: { area: Area; onEdit: () => void }) {
           aria-hidden="true"
           className="size-4 shrink-0 transition-transform group-hover/area:-translate-y-0.5 group-hover/area:translate-x-0.5 group-hover/area:text-foreground"
         />
-      </CardFooter>
-    </Card>
-  );
-}
-
-export function AreaCardSkeleton() {
-  return (
-    <Card className="gap-0 py-0" aria-hidden="true">
-      <Skeleton className="aspect-16/7 rounded-none" />
-      <CardContent className="gap-2 px-5 pb-4">
-        <Skeleton className="relative z-1 -mt-6 mb-2 size-12 rounded-xl ring-4 ring-card" />
-        <Skeleton className="h-5 w-2/5" />
-        <Skeleton className="h-4 w-full" />
-        <Skeleton className="h-4 w-3/4" />
-      </CardContent>
-      <CardFooter className="border-t px-5 py-3">
-        <Skeleton className="h-3 w-28" />
       </CardFooter>
     </Card>
   );

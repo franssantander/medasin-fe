@@ -18,7 +18,6 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty";
-import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { PLAN_ACCENTS } from "../plan-accent";
 import {
@@ -32,6 +31,7 @@ import {
 } from "../plan-time";
 import { useUpcomingPlansQuery } from "../queries/plan-query";
 import type { CalendarPlan } from "../type";
+import { UpcomingPlansSkeleton } from "./plans-skeletons";
 
 export function UpcomingPlans({
   timezone,
@@ -73,15 +73,7 @@ export function UpcomingPlans({
       </CardHeader>
 
       {query.isLoading ? (
-        <div className="grid gap-4 p-4" role="status" aria-label="Loading upcoming plans">
-          {[0, 1].map((group) => (
-            <div key={group} className="grid gap-2">
-              <Skeleton className="h-3 w-16" />
-              <Skeleton className="h-12 rounded-lg" />
-              <Skeleton className="h-12 rounded-lg" />
-            </div>
-          ))}
-        </div>
+        <UpcomingPlansSkeleton />
       ) : query.isError ? (
         <div className="grid justify-items-start gap-3 p-4">
           <p className="text-sm text-destructive">Upcoming plans could not be loaded.</p>

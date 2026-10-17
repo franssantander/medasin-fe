@@ -1,12 +1,12 @@
 import { DndContext, DragOverlay, closestCorners } from "@dnd-kit/core";
 import { Button } from "@/components/ui/button";
 import { Card, CardTitle } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
 import {
   KanbanColumn,
   TaskCard,
 } from "@/features/projects/components/project-kanban-board";
 import { kanbanGridStyles } from "@/features/projects/components/project-kanban-utils";
+import { KanbanBoardSkeleton } from "@/features/projects/components/project-skeletons";
 import type { StandaloneKanbanController } from "../hooks/use-standalone-kanban";
 
 type BoardContentProps = Pick<
@@ -40,13 +40,7 @@ export function StandaloneKanbanBoard({
   taskDraft,
 }: BoardContentProps) {
   if (boardQuery.isLoading) {
-    return (
-      <div className={`${kanbanGridStyles} h-full min-h-0`}>
-        {[1, 2, 3, 4].map((item) => (
-          <Skeleton key={item} className="h-full min-h-80 rounded-xl" />
-        ))}
-      </div>
-    );
+    return <KanbanBoardSkeleton fill />;
   }
   if (boardQuery.isError || !board) {
     return (

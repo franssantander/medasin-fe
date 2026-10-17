@@ -1,12 +1,13 @@
 import type { Metadata } from "next";
-import { EB_Garamond, Geist, Inter, Spectral, Manrope } from "next/font/google";
+import { EB_Garamond, Geist, Inter, Manrope, Newsreader, Spectral } from "next/font/google";
 import "./globals.css";
 import { QueryProvider } from "@/providers/query-provider";
 import { ThemeProvider } from "@/providers/theme-provider";
 import { Toaster } from "@/components/ui/toast";
 
-const manrope = Manrope({ subsets: ["latin"], variable: "--font-manrope" });
-const geist = Geist({ subsets: ["latin"], variable: "--font-geist", preload: false });
+const newsreader = Newsreader({ subsets: ["latin"], variable: "--font-newsreader", axes: ["opsz"], preload: false });
+const manrope = Manrope({ subsets: ["latin"], variable: "--font-manrope", preload: false });
+const geist = Geist({ subsets: ["latin"], variable: "--font-geist" });
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter", preload: false });
 
 const ebGaramond = EB_Garamond({
@@ -45,7 +46,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${ebGaramond.variable} ${spectral.variable} ${manrope.variable} ${geist.variable} ${inter.variable}`}
+      className={`${ebGaramond.variable} ${spectral.variable} ${newsreader.variable} ${manrope.variable} ${geist.variable} ${inter.variable}`}
       suppressHydrationWarning
     >
       <body>

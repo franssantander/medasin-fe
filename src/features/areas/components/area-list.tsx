@@ -3,7 +3,6 @@
 import { CloudOff, Layers3, Plus, SearchX } from "lucide-react";
 import Link from "next/link";
 import PageHeader from "@/components/shared/page-header";
-import { LoadingRegion } from "@/components/shared/loading-region";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -21,13 +20,14 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useSubscriptionQuery } from "@/features/subscription/queries/subscription-query";
-import { searchAreas, sortAreas, type AreaView } from "../area-list-utils";
+import { searchAreas, sortAreas } from "../area-list-utils";
 import { useAreaFormDialog } from "../hooks/use-area-form-dialog";
 import { useAreaListView } from "../hooks/use-area-list-view";
 import { useAreasQuery } from "../queries/area-query";
-import { AreaCard, AreaCardSkeleton } from "./area-card";
+import { AreaCard } from "./area-card";
 import { AreaFormDialog } from "./area-form-dialog";
-import { AreaListItem, AreaListItemSkeleton } from "./area-list-item";
+import { AreaListItem } from "./area-list-item";
+import { AreaListSkeleton } from "./area-list-skeleton";
 import { AreaListToolbar } from "./area-list-toolbar";
 
 const AREA_EXAMPLES = "Health, Career, Finances, Relationships, Home";
@@ -217,28 +217,6 @@ export function AreaList() {
         onSubmit={areaForm.submit}
       />
     </div>
-  );
-}
-
-function AreaListSkeleton({ view }: { view: AreaView }) {
-  const items = [1, 2, 3, 4, 5, 6];
-
-  return (
-    <LoadingRegion label="Loading areas">
-      {view === "grid" ? (
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {items.map((item) => (
-            <AreaCardSkeleton key={item} />
-          ))}
-        </div>
-      ) : (
-        <div className="grid gap-2">
-          {items.map((item) => (
-            <AreaListItemSkeleton key={item} />
-          ))}
-        </div>
-      )}
-    </LoadingRegion>
   );
 }
 

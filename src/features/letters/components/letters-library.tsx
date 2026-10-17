@@ -27,7 +27,6 @@ import {
   InputGroupButton,
   InputGroupInput,
 } from "@/components/ui/input-group";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   useDeleteLetterMutation,
@@ -37,6 +36,7 @@ import {
 import type { LetterListFilter, LetterSummary } from "../type";
 import { LetterDeleteDialog } from "./letter-delete-dialog";
 import { LetterLibraryRow } from "./letter-library-row";
+import { LibrarySkeleton } from "./letters-skeletons";
 
 const filters: { value: LetterListFilter; label: string }[] = [
   { value: "all", label: "All" },
@@ -285,30 +285,6 @@ export function LettersLibrary() {
           await deleteMutation.mutateAsync(deleteTarget.uuid);
         }}
       />
-    </div>
-  );
-}
-
-function LibrarySkeleton() {
-  return (
-    <div className="grid gap-3" aria-label="Loading letters">
-      <div className="flex items-center justify-between gap-3">
-        <Skeleton className="h-8 w-56" />
-        <Skeleton className="hidden h-9 w-64 sm:block" />
-      </div>
-      <div className="divide-y rounded-xl border bg-card">
-        {[1, 2, 3, 4].map((item) => (
-          <div key={item} className="flex items-start gap-4 px-5 py-4">
-            <div className="grid flex-1 gap-2">
-              <Skeleton className="h-5 w-2/3" />
-              <Skeleton className="h-3.5 w-full" />
-              <Skeleton className="h-3.5 w-4/5" />
-              <Skeleton className="mt-1 h-3 w-1/3" />
-            </div>
-            <Skeleton className="hidden aspect-[4/3] w-24 rounded-md sm:block" />
-          </div>
-        ))}
-      </div>
     </div>
   );
 }
